@@ -325,16 +325,15 @@ button:focus-visible {
 .island-map-frame {
   position: absolute;
   z-index: 0;
-  top: 50%;
-  left: 50%;
-  width: min(100vw, 150dvh);
-  aspect-ratio: 1.599 / 1;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
 }
 
 .island-map-frame .scene-image {
   z-index: 0;
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center;
   filter: saturate(0.98) contrast(1.035) brightness(0.99);
 }
 
