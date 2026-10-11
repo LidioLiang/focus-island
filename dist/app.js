@@ -97,6 +97,7 @@ const state = {
   sessionStartedAt: null,
   sessionResult: null,
   companions: 6,
+  onlineIslanders: islandOnlineCount,
   focusedIslanders: 116,
   feedback: null,
   sounds: { ambient: true, presence: true, white: false },
@@ -137,7 +138,12 @@ function topbar({ back = null, right = true } = {}) {
   return `
     <header class="topbar">
       ${back ? `<button class="back-button" data-action="${back}" aria-label="返回">←</button>` : brand()}
-      ${right ? `<div class="glass-pill global-presence" title="全岛已启动专注计时的岛民"><span class="presence-dot"></span><span><strong class="global-focus-count">${state.focusedIslanders}</strong> 位岛民正在专注</span></div>` : ""}
+      ${right ? `<div class="glass-pill global-presence" title="全岛实时状态">
+        <span class="presence-dot"></span>
+        <span class="presence-stat"><strong class="global-online-count">${state.onlineIslanders}</strong><small>人在线</small></span>
+        <i class="presence-divider" aria-hidden="true"></i>
+        <span class="presence-stat"><strong class="global-focus-count">${state.focusedIslanders}</strong><small>人正在专注</small></span>
+      </div>` : ""}
     </header>`;
 }
 
@@ -186,13 +192,6 @@ function renderIsland() {
       <aside class="island-card">
         <h2>今天想在哪里专注？</h2>
         <p>每个区域都有不同的空间与环境声。先跟随感觉选择，不需要做复杂设置。</p>
-        <div class="island-live-stats">
-          <span><strong>${islandOnlineCount}</strong><small>当前在线</small></span>
-          <i aria-hidden="true"></i>
-          <span><strong class="global-focus-count">${state.focusedIslanders}</strong><small>正在专注</small></span>
-        </div>
-        <p class="island-stats-note">“在线”包含正在选择房间和休息的岛民；“正在专注”指已启动计时。</p>
-        <div class="island-card-meta"><span>3 个区域开放</span><span>9 个安静房间</span></div>
       </aside>
     </section>`;
 }
@@ -761,6 +760,11 @@ function showToast(message) {
 }
 
 function refreshPopulationDisplay() {
+  document.querySelectorAll(".global-online-count").forEach((element) => {
+    element.textContent = state.onlineIslanders;
+    element.classList.remove("count-updated");
+    requestAnimationFrame(() => element.classList.add("count-updated"));
+  });
   document.querySelectorAll(".global-focus-count").forEach((element) => {
     element.textContent = state.focusedIslanders;
     element.classList.remove("count-updated");
@@ -770,11 +774,15 @@ function refreshPopulationDisplay() {
 
 function schedulePopulationChange() {
   window.clearTimeout(populationTimer);
-  const delay = 6500 + Math.random() * 5500;
+  const delay = 4500 + Math.random() * 3000;
   populationTimer = window.setTimeout(() => {
-    const changes = [3, -1, 2, 3, 1, -2];
-    const delta = changes[Math.floor(Math.random() * changes.length)];
-    state.focusedIslanders = Math.max(108, Math.min(138, state.focusedIslanders + delta));
+    const focusChanges = [-3, -2, -1, 1, 2, 3];
+    const onlineChanges = [-3, -2, -1, 1, 2, 3];
+    const focusDelta = focusChanges[Math.floor(Math.random() * focusChanges.length)];
+    const onlineDelta = onlineChanges[Math.floor(Math.random() * onlineChanges.length)];
+    state.onlineIslanders = Math.max(124, Math.min(152, state.onlineIslanders + onlineDelta));
+    state.focusedIslanders = Math.max(106, Math.min(138, state.focusedIslanders + focusDelta));
+    state.focusedIslanders = Math.min(state.focusedIslanders, state.onlineIslanders - 8);
     refreshPopulationDisplay();
     schedulePopulationChange();
   }, delay);
