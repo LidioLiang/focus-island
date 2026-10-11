@@ -68,6 +68,11 @@ const scenes = {
 
 const islandImage = `${ASSET_BASE}20261011-focus-island-map.png`;
 
+const STORAGE_KEYS = {
+  activeSession: "focusIslandActiveSessionV1",
+  history: "focusIslandHistoryV1",
+};
+
 const state = {
   view: "welcome",
   sceneId: null,
@@ -79,6 +84,8 @@ const state = {
   elapsedSeconds: 0,
   isRunning: false,
   isTransitioning: false,
+  sessionStartedAt: null,
+  sessionResult: null,
   companions: 6,
   feedback: null,
   sounds: { ambient: true, presence: true, white: false },
@@ -86,6 +93,7 @@ const state = {
 
 let ticker = null;
 let lastTick = null;
+let lastPersistAt = 0;
 let audioContext = null;
 let noiseSource = null;
 let noiseGain = null;
@@ -132,7 +140,7 @@ function renderWelcome() {
           <span class="welcome-note">无需摄像头 · 没有聊天 · 一键开始</span>
         </div>
       </div>
-      <span class="prototype-tag">MVP 可交互原型 · v0.2</span>
+      <span class="prototype-tag">MVP 可交互原型 · v0.3</span>
     </section>`;
 }
 
@@ -356,6 +364,7 @@ function renderFocus() {
         <p class="focus-tip">这里没有消息，也不需要回应任何人。</p>
       </section>
     </section>`;
+  persistActiveSession();
   if (state.isRunning) startTicker();
 }
 
@@ -369,28 +378,67 @@ function soundButton(key, icon, label) {
 
 function renderSummary() {
   const scene = scenes[state.sceneId];
-  const minutes = Math.max(1, Math.round(state.elapsedSeconds / 60));
-  const sessions = Number(localStorage.getItem("focusIslandSessions") || 0) + 1;
-  localStorage.setItem("focusIslandSessions", String(sessions));
+  const result = state.sessionResult || buildSessionResult("ended_early");
+  const minutes = Math.floor(result.elapsedSeconds / 60);
+  const seconds = result.elapsedSeconds % 60;
+  const sessions = readHistory().filter((item) => item.elapsedSeconds > 0).length;
+  const summaryCopy = getSummaryCopy(result.status);
   app.innerHTML = `
     <section class="view summary">
       <div class="summary-card">
-        <div class="summary-symbol">✓</div>
-        <p class="eyebrow">一次安静的停留</p>
-        <h1>辛苦了，欢迎回来</h1>
-        <p>你在${scene.name}完成了一段专注。哪怕只有几分钟，也是在为自己守住注意力。</p>
+        <div class="summary-symbol ${result.status === "not_started" ? "quiet" : ""}">${summaryCopy.symbol}</div>
+        <p class="eyebrow">${summaryCopy.eyebrow}</p>
+        <h1>${summaryCopy.title}</h1>
+        <p>${summaryCopy.description.replace("{scene}", scene.name)}</p>
         <div class="summary-stats">
-          <div class="summary-stat"><strong>${minutes} 分钟</strong><span>本次专注</span></div>
+          <div class="summary-stat"><strong>${minutes > 0 ? `${minutes} 分钟` : `${seconds} 秒`}</strong><span>本次专注</span></div>
           <div class="summary-stat"><strong>${scene.shortName}</strong><span>停留场景</span></div>
-          <div class="summary-stat"><strong>${sessions} 次</strong><span>累计上岛</span></div>
+          <div class="summary-stat"><strong>${sessions} 次</strong><span>已记录专注</span></div>
         </div>
         <div class="feedback-title">刚才的氛围有没有让你更容易专注？</div>
         <div class="feedback-options">
           ${[["no", "😶", "没有"], ["some", "🙂", "有一点"], ["yes", "😌", "很明显"]].map(([value, icon, label]) => `<button class="feedback-button ${state.feedback === value ? "selected" : ""}" data-feedback="${value}" aria-label="${label}">${icon}</button>`).join("")}
         </div>
-        <button class="primary-button" data-action="return-island">回到海岛</button>
+        <div class="summary-actions">
+          <button class="primary-button" data-action="retry-session">再来一次</button>
+          <button class="secondary-button" data-action="return-room">返回房间</button>
+          <button class="text-button" data-action="return-island">回到海岛</button>
+        </div>
       </div>
     </section>`;
+}
+
+function getSummaryCopy(status) {
+  if (status === "completed") {
+    return {
+      symbol: "✓",
+      eyebrow: "目标完成",
+      title: "这一段专注，完成了",
+      description: "你在{scene}守住了计划中的时间。休息一下，准备好时再回来。",
+    };
+  }
+  if (status === "free_completed") {
+    return {
+      symbol: "✓",
+      eyebrow: "自由专注完成",
+      title: "辛苦了，欢迎回来",
+      description: "你在{scene}完成了一段自由专注，每一分钟都已经被记录。",
+    };
+  }
+  if (status === "not_started") {
+    return {
+      symbol: "·",
+      eyebrow: "还没有开始计时",
+      title: "没关系，座位还在",
+      description: "这次还没有形成专注记录。你可以返回{scene}重新开始。",
+    };
+  }
+  return {
+    symbol: "↗",
+    eyebrow: "本次先到这里",
+    title: "已经专注了一会儿",
+    description: "你在{scene}停留的时间已经保存。提前结束也不等于没有收获。",
+  };
 }
 
 function formatTime() {
@@ -406,18 +454,25 @@ function setTimerMode(mode) {
   state.durationSeconds = mode * 60;
   state.remainingSeconds = mode * 60;
   state.elapsedSeconds = 0;
+  state.sessionStartedAt = null;
+  state.sessionResult = null;
   renderFocus();
 }
 
 function toggleTimer() {
-  state.isRunning = !state.isRunning;
   if (state.isRunning) {
+    syncTimerFromClock();
+    state.isRunning = false;
+    stopTicker();
+    suspendAudio();
+    persistActiveSession(true);
+  } else {
+    state.isRunning = true;
+    state.sessionStartedAt = state.sessionStartedAt || Date.now();
     lastTick = Date.now();
     startTicker();
     updateAudio();
-  } else {
-    stopTicker();
-    suspendAudio();
+    persistActiveSession(true);
   }
   const button = document.querySelector('[data-action="toggle-timer"]');
   if (button) button.textContent = state.isRunning ? "暂停一下" : "继续专注";
@@ -426,19 +481,9 @@ function toggleTimer() {
 
 function startTicker() {
   if (ticker) return;
-  lastTick = Date.now();
+  lastTick = lastTick || Date.now();
   ticker = window.setInterval(() => {
-    const now = Date.now();
-    const delta = Math.max(1, Math.round((now - lastTick) / 1000));
-    lastTick = now;
-    state.elapsedSeconds += delta;
-    if (state.timerMode > 0) {
-      state.remainingSeconds = Math.max(0, state.remainingSeconds - delta);
-      if (state.remainingSeconds === 0) {
-        finishSession();
-        return;
-      }
-    }
+    if (syncTimerFromClock()) return;
     const timerElement = document.querySelector("#timer");
     if (timerElement) timerElement.textContent = formatTime();
     if (state.elapsedSeconds > 0 && state.elapsedSeconds % 17 === 0) {
@@ -446,7 +491,26 @@ function startTicker() {
       const presence = document.querySelector("#presence-copy");
       if (presence) presence.textContent = `还有 ${state.companions} 个位置正在专注`;
     }
+    if (Date.now() - lastPersistAt >= 5000) persistActiveSession();
   }, 1000);
+}
+
+function syncTimerFromClock() {
+  if (!state.isRunning || !lastTick) return false;
+  const now = Date.now();
+  const delta = Math.floor((now - lastTick) / 1000);
+  if (delta < 1) return false;
+  lastTick += delta * 1000;
+  const appliedDelta = state.timerMode > 0 ? Math.min(delta, state.remainingSeconds) : delta;
+  state.elapsedSeconds += appliedDelta;
+  if (state.timerMode > 0) {
+    state.remainingSeconds = Math.max(0, state.remainingSeconds - appliedDelta);
+    if (state.remainingSeconds === 0) {
+      finishSession("completed");
+      return true;
+    }
+  }
+  return false;
 }
 
 function stopTicker() {
@@ -458,24 +522,141 @@ function stopTickerIfNeeded() {
   if (state.view !== "focus") stopTicker();
 }
 
-function finishSession() {
+function finishSession(forcedStatus = null) {
+  if (state.isRunning && !forcedStatus && syncTimerFromClock()) return;
   state.isRunning = false;
   stopTicker();
   stopAudio();
+  const status = forcedStatus || (state.elapsedSeconds === 0 ? "not_started" : state.timerMode === 0 ? "free_completed" : "ended_early");
+  state.sessionResult = buildSessionResult(status);
+  if (state.elapsedSeconds > 0) saveSessionResult(state.sessionResult);
+  localStorage.removeItem(STORAGE_KEYS.activeSession);
   state.view = "summary";
   render();
 }
 
+function buildSessionResult(status) {
+  return {
+    id: `${state.sessionStartedAt || Date.now()}-${state.sceneId}-${state.roomId}`,
+    sceneId: state.sceneId,
+    roomId: state.roomId,
+    seat: state.selectedSeat,
+    timerMode: state.timerMode,
+    targetSeconds: state.durationSeconds,
+    elapsedSeconds: state.elapsedSeconds,
+    remainingSeconds: state.remainingSeconds,
+    startedAt: state.sessionStartedAt,
+    endedAt: Date.now(),
+    status,
+    sounds: { ...state.sounds },
+    feedback: state.feedback,
+  };
+}
+
+function saveSessionResult(result) {
+  const history = readHistory().filter((item) => item.id !== result.id);
+  history.unshift(result);
+  localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history.slice(0, 100)));
+}
+
+function readHistory() {
+  try {
+    const history = JSON.parse(localStorage.getItem(STORAGE_KEYS.history) || "[]");
+    return Array.isArray(history) ? history : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function persistActiveSession(force = false) {
+  if (state.view !== "focus" || !state.sceneId || state.selectedSeat === null) return;
+  const now = Date.now();
+  if (!force && now - lastPersistAt < 1000) return;
+  localStorage.setItem(STORAGE_KEYS.activeSession, JSON.stringify({
+    sceneId: state.sceneId,
+    roomId: state.roomId,
+    selectedSeat: state.selectedSeat,
+    timerMode: state.timerMode,
+    durationSeconds: state.durationSeconds,
+    remainingSeconds: state.remainingSeconds,
+    elapsedSeconds: state.elapsedSeconds,
+    isRunning: state.isRunning,
+    sessionStartedAt: state.sessionStartedAt,
+    companions: state.companions,
+    sounds: state.sounds,
+    savedAt: now,
+  }));
+  lastPersistAt = now;
+}
+
+function restoreActiveSession() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.activeSession) || "null");
+    if (!saved || !scenes[saved.sceneId] || saved.selectedSeat === null) return;
+    Object.assign(state, {
+      view: "focus",
+      sceneId: saved.sceneId,
+      roomId: saved.roomId,
+      selectedSeat: saved.selectedSeat,
+      timerMode: saved.timerMode,
+      durationSeconds: saved.durationSeconds,
+      remainingSeconds: saved.remainingSeconds,
+      elapsedSeconds: saved.elapsedSeconds,
+      isRunning: Boolean(saved.isRunning),
+      sessionStartedAt: saved.sessionStartedAt,
+      companions: saved.companions || 6,
+      sounds: { ...state.sounds, ...saved.sounds },
+    });
+    if (state.isRunning) {
+      const offlineSeconds = Math.max(0, Math.floor((Date.now() - saved.savedAt) / 1000));
+      const appliedOfflineSeconds = state.timerMode > 0 ? Math.min(offlineSeconds, state.remainingSeconds) : offlineSeconds;
+      state.elapsedSeconds += appliedOfflineSeconds;
+      if (state.timerMode > 0) {
+        state.remainingSeconds = Math.max(0, state.remainingSeconds - appliedOfflineSeconds);
+        if (state.remainingSeconds === 0) {
+          state.isRunning = false;
+          state.sessionResult = buildSessionResult("completed");
+          saveSessionResult(state.sessionResult);
+          localStorage.removeItem(STORAGE_KEYS.activeSession);
+          state.view = "summary";
+        }
+      }
+    }
+  } catch (_) {
+    localStorage.removeItem(STORAGE_KEYS.activeSession);
+  }
+}
+
+function resetTimerState({ keepMode = true } = {}) {
+  state.isRunning = false;
+  state.timerMode = keepMode ? state.timerMode : 25;
+  state.durationSeconds = state.timerMode * 60;
+  state.remainingSeconds = state.timerMode * 60;
+  state.elapsedSeconds = 0;
+  state.sessionStartedAt = null;
+  state.sessionResult = null;
+  state.feedback = null;
+  lastTick = null;
+  localStorage.removeItem(STORAGE_KEYS.activeSession);
+}
+
+function retrySession() {
+  resetTimerState();
+  state.view = "focus";
+  render();
+}
+
+function returnRoom() {
+  resetTimerState();
+  state.view = "room";
+  render();
+}
+
 function returnIsland() {
+  resetTimerState({ keepMode: false });
   state.view = "island";
   state.roomId = null;
   state.selectedSeat = null;
-  state.feedback = null;
-  state.isRunning = false;
-  state.timerMode = 25;
-  state.durationSeconds = 25 * 60;
-  state.remainingSeconds = 25 * 60;
-  state.elapsedSeconds = 0;
   render();
 }
 
@@ -581,12 +762,17 @@ document.addEventListener("click", (event) => {
     state.sounds[key] = !state.sounds[key];
     soundButtonElement.classList.toggle("on", state.sounds[key]);
     if (state.isRunning) updateAudio();
+    persistActiveSession(true);
     return;
   }
 
   const feedbackButton = event.target.closest("[data-feedback]");
   if (feedbackButton) {
     state.feedback = feedbackButton.dataset.feedback;
+    if (state.sessionResult && state.sessionResult.elapsedSeconds > 0) {
+      state.sessionResult.feedback = state.feedback;
+      saveSessionResult(state.sessionResult);
+    }
     document.querySelectorAll("[data-feedback]").forEach((button) => button.classList.toggle("selected", button === feedbackButton));
     showToast("谢谢，你的感受已经记下了");
     return;
@@ -615,10 +801,30 @@ document.addEventListener("click", (event) => {
   }
   if (action === "toggle-timer") toggleTimer();
   if (action === "finish-session") finishSession();
+  if (action === "retry-session") retrySession();
+  if (action === "return-room") returnRoom();
   if (action === "return-island") returnIsland();
   if (action === "locked") showToast("这个区域还在建设中，内测后会根据投票决定优先开放顺序");
 });
 
-window.addEventListener("beforeunload", stopAudio);
+document.addEventListener("visibilitychange", () => {
+  if (state.view !== "focus" || !state.isRunning) return;
+  if (syncTimerFromClock()) return;
+  persistActiveSession(true);
+  if (!document.hidden) {
+    const timerElement = document.querySelector("#timer");
+    if (timerElement) timerElement.textContent = formatTime();
+  }
+});
 
+window.addEventListener("pagehide", () => {
+  if (state.view === "focus" && state.isRunning) syncTimerFromClock();
+  persistActiveSession(true);
+});
+window.addEventListener("beforeunload", () => {
+  persistActiveSession(true);
+  stopAudio();
+});
+
+restoreActiveSession();
 render();

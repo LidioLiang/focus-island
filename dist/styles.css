@@ -1109,6 +1109,12 @@ button:focus-visible {
   font-size: 27px;
 }
 
+.summary-symbol.quiet {
+  color: var(--sage-dark);
+  background: #e1e5d9;
+  box-shadow: 0 0 0 9px #edf0e7;
+}
+
 .summary-card h1 {
   margin: 0 0 10px;
   font-family: Georgia, "Songti SC", serif;
@@ -1183,8 +1189,35 @@ button:focus-visible {
   background: #f2dfbf;
 }
 
-.summary-card .primary-button {
+.summary-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.summary-actions .primary-button,
+.summary-actions .secondary-button {
   width: 100%;
+}
+
+.summary-actions .secondary-button {
+  border-color: rgba(27, 59, 50, 0.2);
+  color: var(--ink);
+  background: #ebeade;
+}
+
+.summary-actions .text-button {
+  grid-column: 1 / -1;
+  padding: 7px 10px;
+  border: 0;
+  color: var(--ink-soft);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.summary-actions .text-button:hover {
+  color: var(--ink);
 }
 
 .toast {
