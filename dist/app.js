@@ -6,15 +6,22 @@ const scenes = {
     name: "雨巷咖啡馆",
     shortName: "咖啡厅",
     islandLabel: "城市区",
-    icon: "☕",
+    icon: "city",
+    online: 49,
     image: `${ASSET_BASE}20261011-cafe-focus-room.png`,
+    focusViews: {
+      1: `${ASSET_BASE}20261012-cafe-bar-focus-view.png`,
+      3: `${ASSET_BASE}20261012-cafe-bar-focus-view.png`,
+      6: `${ASSET_BASE}20261012-cafe-window-focus-view.png`,
+      9: `${ASSET_BASE}20261012-cafe-lounge-focus-view.png`,
+    },
     description: "雨落在窗上，咖啡机偶尔轻响。选一张熟悉的桌子，和岛民们安静地做自己的事。",
     sounds: ["细雨", "咖啡馆底噪", "偶尔杯碟声"],
     filter: 620,
     rooms: [
-      { id: "cafe-rain", name: "临窗雨声", mood: "雨声更清晰，适合写作与深度工作", occupied: 7 },
-      { id: "cafe-morning", name: "晨光吧台", mood: "温暖、明亮，适合开始一天", occupied: 5 },
-      { id: "cafe-night", name: "深夜角落", mood: "灯光更暗，适合晚间学习", occupied: 8 },
+      { id: "cafe-rain", name: "临窗雨声", mood: "雨声更清晰，适合写作与深度工作", occupied: 18 },
+      { id: "cafe-morning", name: "晨光吧台", mood: "温暖、明亮，适合开始一天", occupied: 16 },
+      { id: "cafe-night", name: "深夜角落", mood: "灯光更暗，适合晚间学习", occupied: 15 },
     ],
     seats: [
       [20, 43, true], [28, 40, false], [37, 37, true], [46, 34, false],
@@ -27,15 +34,16 @@ const scenes = {
     name: "穹顶图书馆",
     shortName: "图书馆",
     islandLabel: "学院区",
-    icon: "⌂",
+    icon: "academy",
+    online: 45,
     image: `${ASSET_BASE}20261011-library-focus-room.png`,
     description: "高窗把光铺在木桌上，翻页声很轻。这里适合阅读、备考，也适合把难题慢慢做完。",
     sounds: ["静谧室内", "轻微翻页", "壁炉声"],
     filter: 430,
     rooms: [
-      { id: "library-sun", name: "高窗阅览室", mood: "自然光充足，适合阅读和整理", occupied: 6 },
-      { id: "library-fire", name: "壁炉长桌", mood: "温暖稳定，适合长时间专注", occupied: 8 },
-      { id: "library-carrel", name: "独立书阁", mood: "更少视觉干扰，适合备考", occupied: 4 },
+      { id: "library-sun", name: "高窗阅览室", mood: "自然光充足，适合阅读和整理", occupied: 15 },
+      { id: "library-fire", name: "壁炉长桌", mood: "温暖稳定，适合长时间专注", occupied: 17 },
+      { id: "library-carrel", name: "独立书阁", mood: "更少视觉干扰，适合备考", occupied: 13 },
     ],
     seats: [
       [29, 43, true], [37, 45, true], [46, 45, false], [54, 44, true],
@@ -48,15 +56,16 @@ const scenes = {
     name: "苔溪森林",
     shortName: "森林溪流",
     islandLabel: "森林区",
-    icon: "♧",
+    icon: "forest",
+    online: 39,
     image: `${ASSET_BASE}20261011-forest-creek-focus-room.png`,
     description: "溪流绕过苔石，风穿过树叶。把屏幕变成林间的一张桌子，让呼吸先慢下来。",
     sounds: ["溪流", "林间风", "远处鸟鸣"],
     filter: 820,
     rooms: [
-      { id: "forest-creek", name: "溪桥木台", mood: "水声清晰，适合平复情绪后工作", occupied: 6 },
-      { id: "forest-canopy", name: "树冠小屋", mood: "遮蔽感更强，适合独处式专注", occupied: 5 },
-      { id: "forest-falls", name: "远瀑石阶", mood: "更有自然能量，适合创作", occupied: 7 },
+      { id: "forest-creek", name: "溪桥木台", mood: "水声清晰，适合平复情绪后工作", occupied: 14 },
+      { id: "forest-canopy", name: "树冠小屋", mood: "遮蔽感更强，适合独处式专注", occupied: 13 },
+      { id: "forest-falls", name: "远瀑石阶", mood: "更有自然能量，适合创作", occupied: 12 },
     ],
     seats: [
       [17, 28, true], [30, 37, false], [48, 27, true], [80, 27, true],
@@ -66,7 +75,8 @@ const scenes = {
   },
 };
 
-const islandImage = `${ASSET_BASE}20261011-focus-island-map.png`;
+const islandImage = `${ASSET_BASE}20261012-focus-island-map-detailed.png`;
+const islandOnlineCount = Object.values(scenes).reduce((total, scene) => total + scene.online, 0);
 
 const STORAGE_KEYS = {
   activeSession: "focusIslandActiveSessionV1",
@@ -87,6 +97,7 @@ const state = {
   sessionStartedAt: null,
   sessionResult: null,
   companions: 6,
+  focusedIslanders: 116,
   feedback: null,
   sounds: { ambient: true, presence: true, white: false },
 };
@@ -98,6 +109,7 @@ let audioContext = null;
 let noiseSource = null;
 let noiseGain = null;
 let noiseFilter = null;
+let populationTimer = null;
 
 const app = document.querySelector("#app");
 
@@ -109,11 +121,23 @@ function brand() {
     </div>`;
 }
 
+function regionIcon(type, className = "") {
+  const icons = {
+    city: `<path d="M4 19V9l5-4 5 4v10M14 12l3-2 3 2v7M7 12h4M7 15h4"/>`,
+    academy: `<path d="M3.5 6.5c3.6-.9 6.1.1 8.5 2.3v10c-2.4-2.2-4.9-3.2-8.5-2.3zM20.5 6.5c-3.6-.9-6.1.1-8.5 2.3v10c2.4-2.2 4.9-3.2 8.5-2.3z"/>`,
+    forest: `<path d="m12 3-5 7h3l-5 7h6v4h2v-4h6l-5-7h3z"/>`,
+    lake: `<path d="M3 15c2.2-1.7 4.5-1.7 6.7 0s4.5 1.7 6.7 0 3.7-1.7 4.6-1.2M4 19c2.2-1.7 4.5-1.7 6.7 0s4.5 1.7 6.7 0 2.7-1.4 3.6-1M12 13V5m0 0c-3.2 0-5 1.4-5.7 4.2C9.2 9.4 11 8 12 5Zm0 0c3.2 0 5 1.4 5.7 4.2C14.8 9.4 13 8 12 5Z"/>`,
+    coast: `<path d="M4 20h16M7 20l2-9h6l2 9M10 11V5h4v6M11 8h2M5 16c-1.2-.7-2.1-.7-3 0M22 16c-1.2-.7-2.1-.7-3 0"/>`,
+    mountain: `<path d="m3 19 6.2-10 2.5 4 2.8-6L21 19zM7.4 12h3.1M13.5 10h2.2"/>`,
+  };
+  return `<svg class="region-icon ${className}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icons[type] || icons.city}</svg>`;
+}
+
 function topbar({ back = null, right = true } = {}) {
   return `
     <header class="topbar">
       ${back ? `<button class="back-button" data-action="${back}" aria-label="返回">←</button>` : brand()}
-      ${right ? `<div class="glass-pill"><span class="presence-dot"></span><span>28 位岛民正在专注</span></div>` : ""}
+      ${right ? `<div class="glass-pill global-presence" title="全岛已启动专注计时的岛民"><span class="presence-dot"></span><span><strong class="global-focus-count">${state.focusedIslanders}</strong> 位岛民正在专注</span></div>` : ""}
     </header>`;
 }
 
@@ -132,7 +156,7 @@ function renderWelcome() {
     <section class="view welcome">
       <img class="scene-image" src="${islandImage}" alt="一座有城市、图书馆、森林、湖泊与雪山的宁静海岛" />
       <div class="welcome-content">
-        <div class="welcome-kicker"><span class="presence-dot"></span>此刻，28 位岛民正安静地做自己的事</div>
+        <div class="welcome-kicker"><span class="presence-dot"></span>此刻，<strong class="global-focus-count">${state.focusedIslanders}</strong> 位岛民正安静地做自己的事</div>
         <h1>换一个地方，<br />开始专注。</h1>
         <p class="welcome-subtitle">像进入游戏一样，去咖啡馆、图书馆或森林里找个位置坐下。有人陪伴，互不打扰。</p>
         <div class="welcome-actions">
@@ -140,27 +164,34 @@ function renderWelcome() {
           <span class="welcome-note">无需摄像头 · 没有聊天 · 一键开始</span>
         </div>
       </div>
-      <span class="prototype-tag">MVP 可交互原型 · v0.3</span>
+      <span class="prototype-tag">MVP 可交互原型 · v0.4</span>
     </section>`;
 }
 
 function renderIsland() {
   app.innerHTML = `
     <section class="view island">
-      <img class="scene-image" src="${islandImage}" alt="专注岛地图" />
+      <div class="island-map-frame">
+        <img class="scene-image" src="${islandImage}" alt="专注岛地图" />
+        ${islandHotspot("cafe", 26, 51)}
+        ${islandHotspot("library", 43, 25)}
+        ${islandHotspot("forest", 75, 48)}
+        ${lockedHotspot("湖畔区", "即将开放", 52, 56, "lake")}
+        ${lockedHotspot("海滨区", "即将开放", 72, 75, "coast")}
+        ${lockedHotspot("雪山营地", "即将开放", 73, 17, "mountain")}
+      </div>
       ${topbar()}
       <div class="island-hint">选择今天想去的地方</div>
-
-      ${islandHotspot("cafe", 26, 51)}
-      ${islandHotspot("library", 43, 25)}
-      ${islandHotspot("forest", 75, 48)}
-      ${lockedHotspot("湖畔区", "即将开放", 52, 56, "≈")}
-      ${lockedHotspot("海滨区", "即将开放", 72, 75, "⌁")}
-      ${lockedHotspot("雪山营地", "即将开放", 71, 18, "△")}
 
       <aside class="island-card">
         <h2>今天想在哪里专注？</h2>
         <p>每个区域都有不同的空间与环境声。先跟随感觉选择，不需要做复杂设置。</p>
+        <div class="island-live-stats">
+          <span><strong>${islandOnlineCount}</strong><small>当前在线</small></span>
+          <i aria-hidden="true"></i>
+          <span><strong class="global-focus-count">${state.focusedIslanders}</strong><small>正在专注</small></span>
+        </div>
+        <p class="island-stats-note">“在线”包含正在选择房间和休息的岛民；“正在专注”指已启动计时。</p>
         <div class="island-card-meta"><span>3 个区域开放</span><span>9 个安静房间</span></div>
       </aside>
     </section>`;
@@ -170,15 +201,15 @@ function islandHotspot(sceneId, x, y) {
   const scene = scenes[sceneId];
   return `
     <button class="hotspot" style="left:${x}%; top:${y}%" data-scene="${sceneId}" aria-label="进入${scene.islandLabel}${scene.shortName}">
-      <span class="hotspot-pin"><span>${scene.icon}</span></span>
-      <span class="hotspot-label"><strong>${scene.islandLabel}</strong><small>${scene.shortName} · ${scene.rooms[0].occupied} 人在线</small></span>
+      <span class="hotspot-pin"><span class="hotspot-symbol">${regionIcon(scene.icon)}</span></span>
+      <span class="hotspot-label"><strong>${scene.islandLabel}</strong><small>${scene.shortName} · ${scene.online} 人在线</small></span>
     </button>`;
 }
 
 function lockedHotspot(name, note, x, y, icon) {
   return `
     <button class="hotspot locked" style="left:${x}%; top:${y}%" data-action="locked" aria-label="${name}${note}">
-      <span class="hotspot-pin"><span>${icon}</span></span>
+      <span class="hotspot-pin"><span class="hotspot-symbol">${regionIcon(icon)}</span></span>
       <span class="hotspot-label"><strong>${name}</strong><small>🔒 ${note}</small></span>
     </button>`;
 }
@@ -211,7 +242,7 @@ function roomCard(scene, room) {
   return `
     <button class="room-card" data-room="${room.id}">
       <span class="room-card-copy"><strong>${room.name}</strong><span>${room.mood}</span></span>
-      <span class="occupancy"><strong>${room.occupied}/10</strong><small>正在专注</small></span>
+      <span class="occupancy"><strong>${room.occupied}/24</strong><small>当前在线</small></span>
     </button>`;
 }
 
@@ -224,7 +255,7 @@ function renderRoom() {
     <section class="view room ${animatedCafe ? "animated-room" : ""}">
       <img class="scene-image" src="${scene.image}" alt="${room.name}房间内部" />
       ${topbar({ back: "back-rooms" })}
-      <div class="room-title">${scene.icon} ${room.name} · 保持安静</div>
+      <div class="room-title">${regionIcon(scene.icon, "room-region-icon")}<span>${room.name} · 保持安静</span></div>
       <div class="seat-layer" aria-label="座位区域">
         ${scene.seats.map((seat, index) => renderSeat(seat, index, scene.id)).join("")}
         ${animatedCafe ? renderPlayerAvatar() : ""}
@@ -248,8 +279,7 @@ function renderSeat(seat, index, sceneId) {
       const activity = activities[index % activities.length];
       return `
         <span class="seat occupied animated-npc activity-${activity}" style="left:${x}%; top:${y}%; --avatar:${colors[index % colors.length]}; --delay:-${index * 1.7}s" title="这位岛民正在${activityLabel(activity)}" aria-label="一位正在${activityLabel(activity)}的岛民">
-          ${renderAvatarFigure(index)}
-          <span class="work-prop" aria-hidden="true"></span>
+          <span class="patron-sprite patron-${index % 4}" aria-hidden="true"></span>
         </span>`;
     }
     return `<span class="seat occupied" style="left:${x}%; top:${y}%; --avatar:${colors[index % colors.length]}" title="这个位置上的岛民正在专注" aria-label="已有人专注的位置">${["⌁", "◒", "△", "◇"][index % 4]}</span>`;
@@ -276,8 +306,8 @@ function renderAvatarFigure(index, player = false) {
 
 function renderPlayerAvatar() {
   return `
-    <span class="player-avatar" id="player-avatar" style="left:7%; top:79%; --avatar:#c98658" aria-label="你的角色正在咖啡厅入口等待">
-      ${renderAvatarFigure(2, true)}
+    <span class="player-avatar" id="player-avatar" style="left:50%; top:89%" aria-label="你的角色正在咖啡厅入口等待">
+      <img class="walking-avatar-image" src="${ASSET_BASE}20261012-cafe-walking-avatar.png" alt="" />
       <span class="player-badge">你</span>
     </span>`;
 }
@@ -310,16 +340,21 @@ async function animatePlayerToSeat() {
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (avatar && !reduceMotion) {
     const [targetX, targetY] = selected;
-    const routeY = targetY > 61 ? 76 : 69;
-    const approachX = targetX > 55 ? Math.max(39, targetX - 16) : Math.min(24, targetX + 4);
+    const routes = {
+      1: [[50, 89], [51, 75], [52, 60], [48, 49], [36, 47], [28, 43]],
+      3: [[50, 89], [51, 74], [52, 60], [51, 48], [46, 37]],
+      6: [[50, 89], [54, 77], [64, 69], [72, 59], [76, 49], [78, 44]],
+      9: [[50, 89], [55, 82], [63, 77], [68, 72], [72, 70]],
+    };
+    const route = routes[state.selectedSeat] || [[50, 89], [52, 72], [targetX, targetY + 2]];
+    const keyframes = route.map(([left, top], index) => ({
+      left: `${left}%`,
+      top: `${top}%`,
+      offset: index / (route.length - 1),
+    }));
     avatar.classList.add("walking");
-    const journey = avatar.animate([
-      { left: "7%", top: "79%", offset: 0 },
-      { left: "18%", top: `${routeY}%`, offset: 0.3 },
-      { left: `${approachX}%`, top: `${routeY}%`, offset: 0.68 },
-      { left: `${targetX}%`, top: `${targetY + 2}%`, offset: 1 },
-    ], {
-      duration: 2500,
+    const journey = avatar.animate(keyframes, {
+      duration: 3900,
       easing: "cubic-bezier(.42,0,.2,1)",
       fill: "forwards",
     });
@@ -341,27 +376,28 @@ async function animatePlayerToSeat() {
 function renderFocus() {
   const scene = scenes[state.sceneId];
   const room = scene.rooms.find((item) => item.id === state.roomId) || scene.rooms[0];
+  const focusImage = scene.focusViews?.[state.selectedSeat] || scene.image;
   app.innerHTML = `
     <section class="view focus">
-      <img class="scene-image" src="${scene.image}" alt="虚化的${scene.name}背景" />
+      <img class="scene-image" src="${focusImage}" alt="坐在${room.name}${state.selectedSeat + 1}号座位看到的沉浸式工作视角" />
       ${topbar({ back: "finish-session", right: false })}
       <section class="focus-stage" aria-label="专注计时器">
-        <p class="focus-presence"><span class="presence-dot"></span><span id="presence-copy">还有 ${state.companions} 个位置正在专注</span></p>
         <div class="timer" id="timer">${formatTime()}</div>
+        <p class="focus-presence"><span class="presence-dot"></span><span id="presence-copy">${state.companions} 位岛民陪伴中</span></p>
         <div class="focus-label">${scene.name} · ${room.name} · ${state.selectedSeat + 1} 号座位</div>
         <div class="timer-modes" aria-label="专注时长">
           ${modeButton(25, "25 分钟")}${modeButton(50, "50 分钟")}${modeButton(0, "自由专注")}
         </div>
         <div class="focus-controls">
-          <button class="primary-button" data-action="toggle-timer">${state.isRunning ? "暂停一下" : state.elapsedSeconds > 0 ? "继续专注" : "开始专注"}</button>
-          <button class="secondary-button" data-action="finish-session">结束本次</button>
+          <button class="primary-button" data-action="toggle-timer">${state.isRunning ? "暂停" : state.elapsedSeconds > 0 ? "继续" : "开始"}</button>
+          <button class="secondary-button" data-action="finish-session">结束</button>
         </div>
         <div class="sound-controls" aria-label="环境声音">
           ${soundButton("ambient", "♫", "环境声")}
           ${soundButton("presence", "◌", "陪伴感")}
           ${soundButton("white", "≈", "柔和底噪")}
         </div>
-        <p class="focus-tip">这里没有消息，也不需要回应任何人。</p>
+        <p class="focus-tip">轻触控制区调整计时与声音</p>
       </section>
     </section>`;
   persistActiveSession();
@@ -475,7 +511,7 @@ function toggleTimer() {
     persistActiveSession(true);
   }
   const button = document.querySelector('[data-action="toggle-timer"]');
-  if (button) button.textContent = state.isRunning ? "暂停一下" : "继续专注";
+  if (button) button.textContent = state.isRunning ? "暂停" : "继续";
   document.querySelectorAll("[data-mode]").forEach((element) => { element.disabled = state.isRunning; });
 }
 
@@ -724,6 +760,26 @@ function showToast(message) {
   window.setTimeout(() => toast.classList.remove("show"), 1800);
 }
 
+function refreshPopulationDisplay() {
+  document.querySelectorAll(".global-focus-count").forEach((element) => {
+    element.textContent = state.focusedIslanders;
+    element.classList.remove("count-updated");
+    requestAnimationFrame(() => element.classList.add("count-updated"));
+  });
+}
+
+function schedulePopulationChange() {
+  window.clearTimeout(populationTimer);
+  const delay = 6500 + Math.random() * 5500;
+  populationTimer = window.setTimeout(() => {
+    const changes = [3, -1, 2, 3, 1, -2];
+    const delta = changes[Math.floor(Math.random() * changes.length)];
+    state.focusedIslanders = Math.max(108, Math.min(138, state.focusedIslanders + delta));
+    refreshPopulationDisplay();
+    schedulePopulationChange();
+  }, delay);
+}
+
 document.addEventListener("click", (event) => {
   const sceneButton = event.target.closest("[data-scene]");
   if (sceneButton) {
@@ -822,9 +878,11 @@ window.addEventListener("pagehide", () => {
   persistActiveSession(true);
 });
 window.addEventListener("beforeunload", () => {
+  window.clearTimeout(populationTimer);
   persistActiveSession(true);
   stopAudio();
 });
 
 restoreActiveSession();
 render();
+schedulePopulationChange();

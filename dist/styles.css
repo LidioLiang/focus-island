@@ -149,6 +149,16 @@ button:focus-visible {
   box-shadow: 0 0 0 5px rgba(167, 223, 166, 0.16);
 }
 
+.global-focus-count {
+  display: inline-block;
+  min-width: 2.35em;
+  font-variant-numeric: tabular-nums;
+}
+
+.global-focus-count.count-updated {
+  animation: count-pop 520ms cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+
 .back-button,
 .icon-button {
   display: inline-grid;
@@ -303,13 +313,34 @@ button:focus-visible {
 }
 
 /* Island */
+.island {
+  background: #aec4c1;
+}
+
 .island::before {
+  z-index: 1;
   background: linear-gradient(180deg, rgba(8, 29, 29, 0.32) 0%, transparent 22%, transparent 68%, rgba(6, 22, 22, 0.48) 100%);
+}
+
+.island-map-frame {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: min(100vw, 150dvh);
+  aspect-ratio: 1.599 / 1;
+  transform: translate(-50%, -50%);
+}
+
+.island-map-frame .scene-image {
+  z-index: 0;
+  object-fit: contain;
+  filter: saturate(0.98) contrast(1.035) brightness(0.99);
 }
 
 .island-hint {
   position: absolute;
-  z-index: 3;
+  z-index: 6;
   top: 94px;
   left: 50%;
   padding: 9px 16px;
@@ -352,9 +383,15 @@ button:focus-visible {
   transition: transform 180ms ease;
 }
 
-.hotspot-pin span {
+.hotspot-symbol {
+  display: grid;
+  place-items: center;
   transform: rotate(45deg);
-  font-size: 19px;
+}
+
+.region-icon {
+  width: 23px;
+  height: 23px;
 }
 
 .hotspot-label {
@@ -394,6 +431,11 @@ button:focus-visible {
   background: rgba(240, 238, 223, 0.88);
 }
 
+.hotspot.locked .region-icon {
+  width: 19px;
+  height: 19px;
+}
+
 .hotspot.locked .hotspot-label {
   padding: 7px 10px;
 }
@@ -403,7 +445,7 @@ button:focus-visible {
   z-index: 4;
   left: 28px;
   bottom: 28px;
-  width: min(370px, 34vw);
+  width: min(390px, 36vw);
   padding: 19px 21px;
   border: 1px solid rgba(255, 255, 255, 0.44);
   border-radius: var(--radius-lg);
@@ -425,6 +467,47 @@ button:focus-visible {
   color: var(--ink-soft);
   font-size: 13px;
   line-height: 1.6;
+}
+
+.island-live-stats {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(52, 91, 76, 0.13);
+  border-radius: 14px;
+  background: rgba(238, 242, 228, 0.72);
+}
+
+.island-live-stats span {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.island-live-stats strong {
+  color: #2f5c4b;
+  font-size: 21px;
+  font-variant-numeric: tabular-nums;
+}
+
+.island-live-stats small {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.island-live-stats i {
+  width: 1px;
+  height: 24px;
+  background: rgba(52, 91, 76, 0.18);
+}
+
+.island-card .island-stats-note {
+  margin-top: 8px;
+  color: rgba(45, 70, 62, 0.72);
+  font-size: 10px;
+  line-height: 1.5;
 }
 
 .island-card-meta {
@@ -611,6 +694,14 @@ button:focus-visible {
   font-family: Georgia, "Songti SC", serif;
   font-size: 16px;
   box-shadow: 0 10px 28px rgba(7, 23, 20, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-region-icon {
+  width: 19px;
+  height: 19px;
 }
 
 .seat-layer {
@@ -669,8 +760,8 @@ button:focus-visible {
 /* Cafe character prototype */
 .seat.occupied.animated-npc {
   z-index: 4;
-  width: 56px;
-  height: 72px;
+  width: clamp(70px, 7.2vw, 108px);
+  height: clamp(82px, 8.6vw, 128px);
   overflow: visible;
   border: 0;
   border-radius: 20px;
@@ -681,26 +772,37 @@ button:focus-visible {
 }
 
 .seat.occupied.animated-npc::before {
-  content: "";
-  position: absolute;
-  right: 5px;
-  bottom: 3px;
-  left: 5px;
-  height: 17px;
-  border-radius: 50%;
-  background: rgba(9, 32, 27, 0.24);
-  filter: blur(4px);
+  display: none;
 }
 
 .seat.occupied.animated-npc::after {
-  right: 5px;
-  bottom: 7px;
-  left: auto;
-  width: 7px;
-  height: 7px;
-  transform: none;
-  border-width: 1.5px;
-  box-shadow: 0 0 0 3px rgba(154, 211, 153, 0.15);
+  display: none;
+}
+
+.patron-sprite {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background-image: url("./assets/20261012-cafe-seated-patrons-sprite.png");
+  background-repeat: no-repeat;
+  background-position: 0 50%;
+  background-size: 400% 100%;
+  filter: drop-shadow(0 8px 6px rgba(6, 25, 21, 0.24));
+  transform-origin: 50% 88%;
+  animation: patron-breathe 5.5s ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+.patron-1 { background-position: 33.333% 50%; }
+.patron-2 { background-position: 66.666% 50%; }
+.patron-3 { background-position: 100% 50%; }
+
+.seat.occupied.animated-npc:nth-child(-n + 4) {
+  transform: translate(-50%, -48%) scale(0.82);
+}
+
+.seat.occupied.animated-npc:nth-child(n + 7) {
+  transform: translate(-50%, -52%) scale(1.06);
 }
 
 .avatar-figure {
@@ -831,10 +933,17 @@ button:focus-visible {
 .player-avatar {
   position: absolute;
   z-index: 8;
-  width: 54px;
-  height: 76px;
-  transform: translate(-50%, -50%);
+  width: clamp(48px, 4.8vw, 72px);
+  height: clamp(82px, 8.4vw, 126px);
+  transform: translate(-50%, -82%);
   filter: drop-shadow(0 8px 6px rgba(6, 25, 21, 0.28));
+}
+
+.walking-avatar-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .player-avatar .avatar-figure {
@@ -862,21 +971,13 @@ button:focus-visible {
   font-weight: 900;
 }
 
-.player-avatar.walking .avatar-figure { animation: player-bob 0.42s ease-in-out infinite; }
-.player-avatar.walking .arm-left { animation: walk-arm-left 0.5s ease-in-out infinite; }
-.player-avatar.walking .arm-right { animation: walk-arm-right 0.5s ease-in-out infinite; }
-.player-avatar.walking .leg-left { animation: walk-leg-left 0.5s ease-in-out infinite; }
-.player-avatar.walking .leg-right { animation: walk-leg-right 0.5s ease-in-out infinite; }
+.player-avatar.walking { animation: player-step 0.52s ease-in-out infinite; }
 
-.player-avatar.sitting .avatar-figure {
-  top: 10px;
-  transform: translateX(-50%) scaleY(0.9);
-  transition: top 240ms ease, transform 240ms ease;
+.player-avatar.sitting {
+  opacity: 0;
+  transform: translate(-50%, -66%) scale(0.82);
+  transition: opacity 420ms ease, transform 420ms ease;
 }
-
-.player-avatar.sitting .avatar-leg { top: 23px; height: 12px; transform: rotate(76deg); }
-.player-avatar.sitting .leg-left { left: 2px; }
-.player-avatar.sitting .leg-right { right: 2px; transform: rotate(-76deg); }
 
 .animated-room button.seat:disabled { cursor: wait; }
 
@@ -926,13 +1027,14 @@ button:focus-visible {
 
 /* Focus */
 .focus .scene-image {
-  transform: scale(1.08);
-  filter: blur(7px) saturate(0.72) brightness(0.68);
+  transform: none;
+  filter: saturate(1.03) contrast(1.02);
+  object-position: center;
 }
 
 .focus::before {
-  z-index: -1;
-  background: radial-gradient(circle at center, rgba(9, 31, 27, 0.08), rgba(6, 21, 19, 0.56));
+  z-index: -2;
+  background: linear-gradient(180deg, rgba(5, 20, 18, 0.24), transparent 18%, transparent 73%, rgba(5, 20, 18, 0.18));
 }
 
 .focus .topbar {
@@ -941,30 +1043,36 @@ button:focus-visible {
 
 .focus-stage {
   position: absolute;
-  z-index: 3;
-  top: 50%;
-  left: 50%;
+  z-index: 11;
+  top: 18px;
+  right: 20px;
   display: grid;
-  width: min(650px, calc(100vw - 64px));
-  max-height: calc(100vh - 120px);
-  justify-items: center;
-  padding: clamp(24px, 4vw, 42px) clamp(26px, 5vw, 58px);
-  transform: translate(-50%, -48%);
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  border-radius: 34px;
+  grid-template-columns: auto auto auto;
+  grid-template-areas:
+    "timer presence controls"
+    "modes sounds sounds";
+  align-items: center;
+  gap: 8px 12px;
+  width: auto;
+  max-width: calc(100vw - 96px);
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 17px;
   color: #fffaf0;
-  background: rgba(15, 42, 37, 0.88);
-  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.35);
-  overflow: auto;
+  background: rgba(11, 34, 30, 0.62);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(14px) saturate(1.08);
 }
 
 .focus-presence {
+  grid-area: presence;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   margin: 0;
-  color: rgba(255, 250, 240, 0.74);
-  font-size: 12px;
+  color: rgba(255, 250, 240, 0.78);
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .focus-presence .presence-dot {
@@ -972,39 +1080,39 @@ button:focus-visible {
 }
 
 .timer {
-  margin: 18px 0 8px;
+  grid-area: timer;
+  margin: 0;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(66px, 9vw, 112px);
+  font-size: 24px;
   font-variant-numeric: tabular-nums;
   font-weight: 400;
   line-height: 1;
-  letter-spacing: -0.04em;
-  text-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  letter-spacing: -0.02em;
+  text-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
 }
 
 .focus-label {
-  margin-bottom: 18px;
-  color: rgba(255, 250, 240, 0.66);
-  font-family: Georgia, "Songti SC", serif;
-  font-size: 14px;
+  display: none;
 }
 
 .timer-modes {
+  grid-area: modes;
   display: flex;
-  gap: 7px;
-  padding: 5px;
+  gap: 3px;
+  padding: 3px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 999px;
   background: rgba(5, 26, 22, 0.32);
 }
 
 .mode-button {
-  padding: 8px 14px;
+  padding: 5px 8px;
   border: 0;
   border-radius: 999px;
   color: rgba(255, 255, 255, 0.66);
   background: transparent;
   cursor: pointer;
+  font-size: 10px;
 }
 
 .mode-button.active {
@@ -1014,14 +1122,22 @@ button:focus-visible {
 }
 
 .focus-controls {
+  grid-area: controls;
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 18px 0;
+  gap: 6px;
+  margin: 0;
 }
 
 .focus-controls .primary-button {
-  min-width: 138px;
+  min-width: 0;
+}
+
+.focus-controls .primary-button,
+.focus-controls .secondary-button {
+  min-height: 30px;
+  padding: 0 11px;
+  font-size: 10px;
 }
 
 .focus-controls .secondary-button {
@@ -1031,18 +1147,19 @@ button:focus-visible {
 }
 
 .sound-controls {
+  grid-area: sounds;
   display: flex;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  margin-top: 3px;
+  justify-content: flex-start;
+  gap: 5px;
+  width: auto;
+  margin: 0;
 }
 
 .sound-toggle {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px 12px;
+  gap: 5px;
+  padding: 5px 8px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
   color: rgba(255, 255, 255, 0.65);
@@ -1061,10 +1178,7 @@ button:focus-visible {
 }
 
 .focus-tip {
-  margin: 20px 0 0;
-  color: rgba(255, 255, 255, 0.48);
-  font-size: 10px;
-  letter-spacing: 0.06em;
+  display: none;
 }
 
 /* Summary */
@@ -1322,6 +1436,22 @@ button:focus-visible {
   50% { transform: rotate(22deg); }
 }
 
+@keyframes patron-breathe {
+  0%, 100% { transform: translateY(0) rotate(-0.25deg); }
+  50% { transform: translateY(-1.5px) rotate(0.25deg); }
+}
+
+@keyframes count-pop {
+  0% { transform: translateY(0); color: inherit; }
+  38% { transform: translateY(-3px) scale(1.08); color: #d9a14e; }
+  100% { transform: translateY(0) scale(1); color: inherit; }
+}
+
+@keyframes player-step {
+  0%, 100% { transform: translate(-50%, -82%) rotate(-1deg); }
+  50% { transform: translate(-50%, -85%) rotate(1deg); }
+}
+
 @media (max-width: 950px) {
   .topbar {
     min-height: 64px;
@@ -1366,6 +1496,18 @@ button:focus-visible {
 
   .hotspot {
     min-width: 110px;
+  }
+
+  .focus-stage {
+    grid-template-columns: auto auto;
+    grid-template-areas:
+      "timer controls"
+      "modes sounds";
+    gap: 7px 9px;
+  }
+
+  .focus-presence {
+    display: none;
   }
 }
 
