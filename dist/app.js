@@ -78,6 +78,7 @@ const state = {
   remainingSeconds: 25 * 60,
   elapsedSeconds: 0,
   isRunning: false,
+  isTransitioning: false,
   companions: 6,
   feedback: null,
   sounds: { ambient: true, presence: true, white: false },
@@ -131,7 +132,7 @@ function renderWelcome() {
           <span class="welcome-note">无需摄像头 · 没有聊天 · 一键开始</span>
         </div>
       </div>
-      <span class="prototype-tag">MVP 可交互原型 · v0.1</span>
+      <span class="prototype-tag">MVP 可交互原型 · v0.2</span>
     </section>`;
 }
 
@@ -210,31 +211,123 @@ function renderRoom() {
   const scene = scenes[state.sceneId];
   const room = scene.rooms.find((item) => item.id === state.roomId) || scene.rooms[0];
   const openSeats = scene.seats.filter((seat) => !seat[2]).length;
+  const animatedCafe = scene.id === "cafe";
   app.innerHTML = `
-    <section class="view room">
+    <section class="view room ${animatedCafe ? "animated-room" : ""}">
       <img class="scene-image" src="${scene.image}" alt="${room.name}房间内部" />
       ${topbar({ back: "back-rooms" })}
       <div class="room-title">${scene.icon} ${room.name} · 保持安静</div>
       <div class="seat-layer" aria-label="座位区域">
-        ${scene.seats.map((seat, index) => renderSeat(seat, index)).join("")}
+        ${scene.seats.map((seat, index) => renderSeat(seat, index, scene.id)).join("")}
+        ${animatedCafe ? renderPlayerAvatar() : ""}
       </div>
       <div class="room-footer">
         <div class="room-footer-copy">
           <strong>${state.selectedSeat === null ? "找一个喜欢的位置坐下" : `已选择 ${state.selectedSeat + 1} 号座位`}</strong>
-          <span>${state.selectedSeat === null ? `亮起的座位可选 · 还剩 ${openSeats} 个空位` : "坐下后会进入沉浸式桌面，你仍能感受到大家的陪伴"}</span>
+          <span>${state.selectedSeat === null ? `亮起的座位可选 · 还剩 ${openSeats} 个空位` : animatedCafe ? "准备好后，你的角色会从入口走到这里坐下" : "坐下后会进入沉浸式桌面，你仍能感受到大家的陪伴"}</span>
         </div>
         <button class="primary-button" data-action="sit-down" ${state.selectedSeat === null ? "disabled" : ""}>坐下，准备专注</button>
       </div>
     </section>`;
 }
 
-function renderSeat(seat, index) {
+function renderSeat(seat, index, sceneId) {
   const [x, y, occupied] = seat;
   if (occupied) {
     const colors = ["#708b7d", "#a4755b", "#7b7f9b", "#9a855c", "#6a8f96", "#967078"];
+    if (sceneId === "cafe") {
+      const activities = ["typing", "reading", "writing", "sip"];
+      const activity = activities[index % activities.length];
+      return `
+        <span class="seat occupied animated-npc activity-${activity}" style="left:${x}%; top:${y}%; --avatar:${colors[index % colors.length]}; --delay:-${index * 1.7}s" title="这位岛民正在${activityLabel(activity)}" aria-label="一位正在${activityLabel(activity)}的岛民">
+          ${renderAvatarFigure(index)}
+          <span class="work-prop" aria-hidden="true"></span>
+        </span>`;
+    }
     return `<span class="seat occupied" style="left:${x}%; top:${y}%; --avatar:${colors[index % colors.length]}" title="这个位置上的岛民正在专注" aria-label="已有人专注的位置">${["⌁", "◒", "△", "◇"][index % 4]}</span>`;
   }
   return `<button class="seat ${state.selectedSeat === index ? "selected" : ""}" style="left:${x}%; top:${y}%" data-seat="${index}" aria-label="选择 ${index + 1} 号空位"><span class="seat-number">${index + 1}</span></button>`;
+}
+
+function activityLabel(activity) {
+  return ({ typing: "敲键盘", reading: "阅读", writing: "写字", sip: "喝咖啡" })[activity] || "专注";
+}
+
+function renderAvatarFigure(index, player = false) {
+  return `
+    <span class="avatar-figure ${player ? "player-figure" : ""}" aria-hidden="true">
+      <span class="avatar-head"><span class="avatar-hair hair-${index % 4}"></span></span>
+      <span class="avatar-body">
+        <span class="avatar-arm arm-left"></span>
+        <span class="avatar-arm arm-right"></span>
+        <span class="avatar-leg leg-left"></span>
+        <span class="avatar-leg leg-right"></span>
+      </span>
+    </span>`;
+}
+
+function renderPlayerAvatar() {
+  return `
+    <span class="player-avatar" id="player-avatar" style="left:7%; top:79%; --avatar:#c98658" aria-label="你的角色正在咖啡厅入口等待">
+      ${renderAvatarFigure(2, true)}
+      <span class="player-badge">你</span>
+    </span>`;
+}
+
+async function animatePlayerToSeat() {
+  if (state.isTransitioning || state.selectedSeat === null) return;
+  const scene = scenes[state.sceneId];
+  if (scene.id !== "cafe") {
+    state.view = "focus";
+    render();
+    return;
+  }
+
+  state.isTransitioning = true;
+  const selected = scene.seats[state.selectedSeat];
+  const avatar = document.querySelector("#player-avatar");
+  const footerTitle = document.querySelector(".room-footer-copy strong");
+  const footerNote = document.querySelector(".room-footer-copy span");
+  const sitButton = document.querySelector('[data-action="sit-down"]');
+  const backButton = document.querySelector('[data-action="back-rooms"]');
+  document.querySelectorAll("button.seat").forEach((button) => { button.disabled = true; });
+  if (sitButton) {
+    sitButton.disabled = true;
+    sitButton.textContent = "正在走向座位…";
+  }
+  if (backButton) backButton.disabled = true;
+  if (footerTitle) footerTitle.textContent = `正在前往 ${state.selectedSeat + 1} 号座位`;
+  if (footerNote) footerNote.textContent = "不用着急，其他岛民仍在安静地做自己的事";
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (avatar && !reduceMotion) {
+    const [targetX, targetY] = selected;
+    const routeY = targetY > 61 ? 76 : 69;
+    const approachX = targetX > 55 ? Math.max(39, targetX - 16) : Math.min(24, targetX + 4);
+    avatar.classList.add("walking");
+    const journey = avatar.animate([
+      { left: "7%", top: "79%", offset: 0 },
+      { left: "18%", top: `${routeY}%`, offset: 0.3 },
+      { left: `${approachX}%`, top: `${routeY}%`, offset: 0.68 },
+      { left: `${targetX}%`, top: `${targetY + 2}%`, offset: 1 },
+    ], {
+      duration: 2500,
+      easing: "cubic-bezier(.42,0,.2,1)",
+      fill: "forwards",
+    });
+    try { await journey.finished; } catch (_) { /* animation cancelled by navigation */ }
+    avatar.style.left = `${targetX}%`;
+    avatar.style.top = `${targetY + 2}%`;
+    avatar.classList.remove("walking");
+    avatar.classList.add("sitting");
+    await new Promise((resolve) => window.setTimeout(resolve, 720));
+  } else {
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+  }
+
+  state.isTransitioning = false;
+  state.view = "focus";
+  render();
 }
 
 function renderFocus() {
@@ -512,13 +605,13 @@ document.addEventListener("click", (event) => {
     render();
   }
   if (action === "back-rooms") {
+    state.isTransitioning = false;
     state.view = "rooms";
     state.selectedSeat = null;
     render();
   }
   if (action === "sit-down" && state.selectedSeat !== null) {
-    state.view = "focus";
-    render();
+    animatePlayerToSeat();
   }
   if (action === "toggle-timer") toggleTimer();
   if (action === "finish-session") finishSession();
