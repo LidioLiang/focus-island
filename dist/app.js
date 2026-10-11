@@ -149,17 +149,17 @@ function regionIcon(type, className = "") {
   return `<svg class="region-icon ${className}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icons[type] || icons.city}</svg>`;
 }
 
-function topbar({ back = null, right = true } = {}) {
+function topbar({ back = null, right = true, showPresence = true } = {}) {
   return `
     <header class="topbar">
       ${back ? `<button class="back-button" data-action="${back}" aria-label="返回">←</button>` : brand()}
       ${right ? `<div class="topbar-actions">
-        <div class="glass-pill global-presence" title="全岛实时状态">
+        ${showPresence ? `<div class="glass-pill global-presence" title="全岛实时状态">
           <span class="presence-dot"></span>
           <span class="presence-stat"><strong class="global-online-count">${state.onlineIslanders}</strong><small>人在线</small></span>
           <i class="presence-divider" aria-hidden="true"></i>
           <span class="presence-stat"><strong class="global-focus-count">${state.focusedIslanders}</strong><small>人正在专注</small></span>
-        </div>
+        </div>` : ""}
         <button class="icon-button profile-button" data-action="profile" aria-label="个人中心，即将开放" title="个人中心 · 即将开放">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.8 19c.7-3.5 2.8-5.3 6.2-5.3s5.5 1.8 6.2 5.3"/></svg>
         </button>
@@ -237,7 +237,7 @@ function renderRooms() {
   app.innerHTML = `
     <section class="view rooms">
       <img class="scene-image" src="${scene.image}" alt="${scene.name}" />
-      ${topbar({ back: "back-island" })}
+      ${topbar({ back: "back-island", showPresence: false })}
       <div class="rooms-layout">
         <div class="scene-intro">
           <p class="eyebrow">${scene.islandLabel}</p>
@@ -272,7 +272,7 @@ function renderRoom() {
   app.innerHTML = `
     <section class="view room ${animatedCafe ? "animated-room" : ""}">
       <img class="scene-image" src="${scene.image}" alt="${room.name}房间内部" />
-      ${topbar({ back: "back-rooms" })}
+      ${topbar({ back: "back-rooms", showPresence: false })}
       <div class="room-title">${regionIcon(scene.icon, "room-region-icon")}<span>${room.name} · 保持安静</span></div>
       <div class="seat-layer" aria-label="座位区域">
         ${scene.seats.map((seat, index) => renderSeat(seat, index, scene.id)).join("")}
@@ -422,7 +422,7 @@ function renderFocus() {
   app.innerHTML = `
     <section class="view focus">
       <img class="scene-image" src="${focusImage}" alt="坐在${room.name}${state.selectedSeat + 1}号座位看到的沉浸式工作视角" />
-      ${topbar({ back: "finish-session", right: false })}
+      ${topbar({ back: "finish-session", showPresence: false })}
       <section class="focus-stage" aria-label="专注计时器">
         <div class="timer" id="timer">${formatTime()}</div>
         <p class="focus-presence"><span class="presence-dot"></span><span id="presence-copy">${state.companions} 位岛民陪伴中</span></p>
