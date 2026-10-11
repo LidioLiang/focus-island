@@ -1,0 +1,1102 @@
+:root {
+  --ink: #18312e;
+  --ink-soft: #51625d;
+  --paper: #f5f0e4;
+  --paper-strong: #fffaf0;
+  --sage: #688b76;
+  --sage-dark: #345b4c;
+  --amber: #d99a48;
+  --terracotta: #b96345;
+  --line: rgba(36, 65, 58, 0.18);
+  --shadow: 0 18px 60px rgba(12, 35, 31, 0.2);
+  --shadow-deep: 0 28px 90px rgba(7, 20, 18, 0.38);
+  --radius-xl: 28px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #102824;
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+}
+
+button:focus-visible {
+  outline: 3px solid #f1c67b;
+  outline-offset: 3px;
+}
+
+#app,
+.view {
+  width: 100vw;
+  height: 100dvh;
+}
+
+.view {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.scene-image {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+}
+
+.topbar {
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 76px;
+  padding: 18px 28px;
+  pointer-events: none;
+}
+
+.topbar > * {
+  pointer-events: auto;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--paper-strong);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35);
+}
+
+.brand-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.46);
+  border-radius: 50%;
+  background: rgba(15, 48, 41, 0.48);
+  box-shadow: inset 0 0 0 5px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px);
+  font-size: 21px;
+}
+
+.brand-copy {
+  display: grid;
+  gap: 1px;
+}
+
+.brand-copy strong {
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 19px;
+  letter-spacing: 0.16em;
+}
+
+.brand-copy small {
+  opacity: 0.78;
+  font-size: 9px;
+  letter-spacing: 0.28em;
+}
+
+.glass-pill,
+.icon-button,
+.back-button {
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  color: white;
+  background: rgba(16, 40, 36, 0.54);
+  box-shadow: 0 10px 28px rgba(7, 23, 20, 0.18);
+  backdrop-filter: blur(14px) saturate(1.1);
+}
+
+.glass-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.presence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #a7dfa6;
+  box-shadow: 0 0 0 5px rgba(167, 223, 166, 0.16);
+}
+
+.back-button,
+.icon-button {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.back-button {
+  font-size: 21px;
+}
+
+.primary-button,
+.secondary-button,
+.quiet-button {
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.primary-button {
+  min-height: 52px;
+  padding: 0 25px;
+  color: #fffdf6;
+  background: linear-gradient(135deg, #b66b42, #d59a51);
+  box-shadow: 0 14px 34px rgba(123, 69, 37, 0.28);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.primary-button:hover,
+.secondary-button:hover,
+.quiet-button:hover {
+  transform: translateY(-2px);
+}
+
+.primary-button:active,
+.secondary-button:active,
+.quiet-button:active {
+  transform: translateY(0);
+}
+
+.secondary-button {
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: rgba(255, 250, 240, 0.92);
+  font-weight: 650;
+}
+
+.quiet-button {
+  padding: 10px 16px;
+  color: inherit;
+  background: transparent;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: var(--terracotta);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/* Welcome */
+.welcome::before,
+.island::before,
+.rooms::before,
+.room::before,
+.focus::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+}
+
+.welcome::before {
+  background: linear-gradient(90deg, rgba(8, 27, 24, 0.88) 0%, rgba(8, 27, 24, 0.62) 38%, rgba(8, 27, 24, 0.12) 72%, rgba(8, 27, 24, 0.3) 100%);
+}
+
+.welcome .scene-image {
+  transform: scale(1.05);
+  animation: slow-drift 18s ease-in-out infinite alternate;
+}
+
+.welcome-content {
+  position: absolute;
+  top: 50%;
+  left: clamp(34px, 7vw, 108px);
+  width: min(540px, 54vw);
+  transform: translateY(-46%);
+  color: #fffaf0;
+}
+
+.welcome-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 22px;
+  padding: 8px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 999px;
+  background: rgba(21, 55, 47, 0.28);
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+.welcome h1 {
+  max-width: 520px;
+  margin: 0;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: clamp(42px, 5.4vw, 76px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: 0.02em;
+  text-wrap: balance;
+}
+
+.welcome-subtitle {
+  max-width: 470px;
+  margin: 25px 0 30px;
+  color: rgba(255, 250, 240, 0.8);
+  font-size: clamp(15px, 1.45vw, 19px);
+  line-height: 1.8;
+}
+
+.welcome-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.welcome-note {
+  color: rgba(255, 250, 240, 0.66);
+  font-size: 12px;
+}
+
+.prototype-tag {
+  position: absolute;
+  right: 24px;
+  bottom: 20px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+/* Island */
+.island::before {
+  background: linear-gradient(180deg, rgba(8, 29, 29, 0.32) 0%, transparent 22%, transparent 68%, rgba(6, 22, 22, 0.48) 100%);
+}
+
+.island-hint {
+  position: absolute;
+  z-index: 3;
+  top: 94px;
+  left: 50%;
+  padding: 9px 16px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(17, 47, 42, 0.44);
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.hotspot {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  min-width: 126px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 0;
+  color: white;
+  background: transparent;
+  cursor: pointer;
+  filter: drop-shadow(0 8px 18px rgba(7, 28, 24, 0.3));
+}
+
+.hotspot-pin {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin: 0 auto -5px;
+  place-items: center;
+  border: 2px solid rgba(255, 255, 255, 0.76);
+  border-radius: 50% 50% 50% 10%;
+  transform: rotate(-45deg);
+  color: var(--ink);
+  background: #fff8e9;
+  box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.16);
+  transition: transform 180ms ease;
+}
+
+.hotspot-pin span {
+  transform: rotate(45deg);
+  font-size: 19px;
+}
+
+.hotspot-label {
+  display: grid;
+  gap: 2px;
+  padding: 9px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 13px;
+  background: rgba(17, 48, 41, 0.76);
+  backdrop-filter: blur(12px);
+}
+
+.hotspot-label strong {
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.hotspot-label small {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+}
+
+.hotspot:hover .hotspot-pin {
+  transform: rotate(-45deg) translate(3px, -3px) scale(1.08);
+}
+
+.hotspot.locked {
+  min-width: auto;
+  opacity: 0.82;
+  cursor: not-allowed;
+}
+
+.hotspot.locked .hotspot-pin {
+  width: 36px;
+  height: 36px;
+  background: rgba(240, 238, 223, 0.88);
+}
+
+.hotspot.locked .hotspot-label {
+  padding: 7px 10px;
+}
+
+.island-card {
+  position: absolute;
+  z-index: 4;
+  left: 28px;
+  bottom: 28px;
+  width: min(370px, 34vw);
+  padding: 19px 21px;
+  border: 1px solid rgba(255, 255, 255, 0.44);
+  border-radius: var(--radius-lg);
+  color: var(--ink);
+  background: rgba(255, 250, 240, 0.9);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px) saturate(1.05);
+}
+
+.island-card h2 {
+  margin: 0 0 7px;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.island-card p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.island-card-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 13px;
+  color: var(--sage-dark);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Rooms */
+.rooms::before {
+  background: linear-gradient(90deg, rgba(9, 28, 25, 0.78) 0%, rgba(9, 28, 25, 0.4) 42%, rgba(9, 28, 25, 0.18) 100%);
+}
+
+.rooms .scene-image {
+  filter: saturate(0.85);
+  transform: scale(1.03);
+}
+
+.rooms-layout {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(300px, 0.82fr) minmax(380px, 1.18fr);
+  gap: clamp(22px, 4vw, 66px);
+  height: 100%;
+  padding: 104px clamp(32px, 6vw, 96px) 44px;
+}
+
+.scene-intro {
+  align-self: center;
+  color: white;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.32);
+}
+
+.scene-intro h1 {
+  margin: 0;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: clamp(42px, 5vw, 72px);
+  font-weight: 500;
+}
+
+.scene-intro p {
+  max-width: 440px;
+  margin: 19px 0 24px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.scene-soundscape {
+  display: inline-flex;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.sound-tag {
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 999px;
+  background: rgba(17, 47, 42, 0.4);
+  backdrop-filter: blur(8px);
+  font-size: 11px;
+}
+
+.room-panel {
+  align-self: center;
+  max-height: calc(100vh - 150px);
+  padding: clamp(21px, 3vw, 34px);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: var(--radius-xl);
+  background: rgba(250, 247, 237, 0.94);
+  box-shadow: var(--shadow-deep);
+  backdrop-filter: blur(18px);
+  overflow: auto;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.panel-heading h2 {
+  margin: 0;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 25px;
+  font-weight: 600;
+}
+
+.panel-heading small {
+  color: var(--ink-soft);
+}
+
+.room-list {
+  display: grid;
+  gap: 12px;
+}
+
+.room-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  width: 100%;
+  padding: 17px 18px;
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  color: inherit;
+  text-align: left;
+  background: rgba(255, 253, 247, 0.84);
+  cursor: pointer;
+  transition: border-color 180ms ease, transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.room-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(113, 136, 108, 0.52);
+  background: white;
+  box-shadow: 0 14px 30px rgba(35, 63, 55, 0.1);
+}
+
+.room-card-copy strong {
+  display: block;
+  margin-bottom: 6px;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 18px;
+}
+
+.room-card-copy span {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.occupancy {
+  display: grid;
+  place-content: center;
+  min-width: 72px;
+  padding: 8px 10px;
+  border-radius: 13px;
+  color: var(--sage-dark);
+  background: #e8eee6;
+  text-align: center;
+}
+
+.occupancy strong {
+  font-size: 18px;
+}
+
+.occupancy small {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.room-guideline {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 17px 2px 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+/* Room and seats */
+.room::before {
+  background: linear-gradient(180deg, rgba(10, 29, 25, 0.28) 0%, transparent 28%, transparent 62%, rgba(7, 25, 22, 0.62) 100%);
+}
+
+.room-title {
+  position: absolute;
+  z-index: 3;
+  top: 94px;
+  left: 50%;
+  padding: 10px 18px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 999px;
+  color: white;
+  background: rgba(15, 42, 37, 0.54);
+  backdrop-filter: blur(12px);
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 16px;
+  box-shadow: 0 10px 28px rgba(7, 23, 20, 0.2);
+}
+
+.seat-layer {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+}
+
+.seat {
+  position: absolute;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  color: white;
+  background: rgba(18, 52, 45, 0.66);
+  box-shadow: 0 8px 22px rgba(4, 19, 16, 0.35), 0 0 0 7px rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.seat:hover,
+.seat.selected {
+  transform: translate(-50%, -50%) scale(1.16);
+  color: var(--ink);
+  background: #fff7e5;
+  box-shadow: 0 10px 26px rgba(4, 19, 16, 0.38), 0 0 0 9px rgba(246, 207, 133, 0.45);
+}
+
+.seat.occupied {
+  width: 40px;
+  height: 40px;
+  border: 2px solid rgba(255, 255, 255, 0.58);
+  background: var(--avatar, #738a7e);
+  box-shadow: 0 8px 22px rgba(4, 19, 16, 0.32), 0 0 0 6px rgba(255, 255, 255, 0.12);
+  cursor: default;
+}
+
+.seat.occupied::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  transform: translateX(-50%);
+  border: 2px solid white;
+  border-radius: 50%;
+  background: #9ad399;
+}
+
+.seat-number {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.room-footer {
+  position: absolute;
+  z-index: 6;
+  right: 50%;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(680px, calc(100% - 48px));
+  min-height: 74px;
+  padding: 13px 14px 13px 20px;
+  transform: translateX(50%);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 22px;
+  color: var(--ink);
+  background: rgba(255, 250, 240, 0.92);
+  box-shadow: var(--shadow-deep);
+  backdrop-filter: blur(16px);
+}
+
+.room-footer-copy strong {
+  display: block;
+  margin-bottom: 4px;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 16px;
+}
+
+.room-footer-copy span {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.room-footer .primary-button[disabled] {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Focus */
+.focus .scene-image {
+  transform: scale(1.08);
+  filter: blur(7px) saturate(0.72) brightness(0.68);
+}
+
+.focus::before {
+  z-index: -1;
+  background: radial-gradient(circle at center, rgba(9, 31, 27, 0.08), rgba(6, 21, 19, 0.56));
+}
+
+.focus .topbar {
+  opacity: 0.84;
+}
+
+.focus-stage {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: min(650px, calc(100vw - 64px));
+  max-height: calc(100vh - 120px);
+  justify-items: center;
+  padding: clamp(24px, 4vw, 42px) clamp(26px, 5vw, 58px);
+  transform: translate(-50%, -48%);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 34px;
+  color: #fffaf0;
+  background: rgba(15, 42, 37, 0.88);
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.35);
+  overflow: auto;
+}
+
+.focus-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: rgba(255, 250, 240, 0.74);
+  font-size: 12px;
+}
+
+.focus-presence .presence-dot {
+  animation: breathe 2.8s ease-in-out infinite;
+}
+
+.timer {
+  margin: 18px 0 8px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(66px, 9vw, 112px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.focus-label {
+  margin-bottom: 18px;
+  color: rgba(255, 250, 240, 0.66);
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 14px;
+}
+
+.timer-modes {
+  display: flex;
+  gap: 7px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  background: rgba(5, 26, 22, 0.32);
+}
+
+.mode-button {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.66);
+  background: transparent;
+  cursor: pointer;
+}
+
+.mode-button.active {
+  color: var(--ink);
+  background: #f3e8ce;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.18);
+}
+
+.focus-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.focus-controls .primary-button {
+  min-width: 138px;
+}
+
+.focus-controls .secondary-button {
+  border-color: rgba(255, 255, 255, 0.24);
+  color: white;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sound-controls {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 3px;
+}
+
+.sound-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.65);
+  background: rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+
+.sound-toggle.on {
+  border-color: rgba(185, 222, 177, 0.36);
+  color: #f7f3e6;
+  background: rgba(111, 155, 117, 0.28);
+}
+
+.sound-toggle small {
+  font-size: 10px;
+}
+
+.focus-tip {
+  margin: 20px 0 0;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+/* Summary */
+.summary {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 30%, #335c4d, #102a25 70%);
+}
+
+.summary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle at 16% 18%, rgba(249, 216, 155, 0.18) 0 1px, transparent 2px), radial-gradient(circle at 72% 28%, rgba(249, 216, 155, 0.16) 0 1px, transparent 2px);
+  background-size: 90px 90px, 125px 125px;
+  opacity: 0.55;
+}
+
+.summary-card {
+  position: relative;
+  z-index: 1;
+  width: min(560px, calc(100vw - 48px));
+  padding: clamp(28px, 5vw, 54px);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 32px;
+  background: #f8f2e5;
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.32);
+  text-align: center;
+}
+
+.summary-symbol {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  margin: 0 auto 18px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff8e9;
+  background: var(--sage-dark);
+  box-shadow: 0 0 0 9px #e3e9de;
+  font-size: 27px;
+}
+
+.summary-card h1 {
+  margin: 0 0 10px;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 34px;
+  font-weight: 500;
+}
+
+.summary-card > p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 24px 0;
+}
+
+.summary-stat {
+  padding: 15px 8px;
+  border-radius: 15px;
+  background: #ebeade;
+}
+
+.summary-stat strong,
+.summary-stat span {
+  display: block;
+}
+
+.summary-stat strong {
+  margin-bottom: 4px;
+  color: var(--sage-dark);
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 19px;
+}
+
+.summary-stat span {
+  color: var(--ink-soft);
+  font-size: 10px;
+}
+
+.feedback-title {
+  margin: 24px 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.feedback-options {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.feedback-button {
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  font-size: 20px;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.feedback-button:hover,
+.feedback-button.selected {
+  transform: translateY(-3px);
+  border-color: #a77649;
+  background: #f2dfbf;
+}
+
+.summary-card .primary-button {
+  width: 100%;
+}
+
+.toast {
+  position: fixed;
+  z-index: 40;
+  left: 50%;
+  bottom: 26px;
+  padding: 11px 17px;
+  transform: translate(-50%, 20px);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  color: white;
+  background: rgba(13, 40, 35, 0.92);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transition: opacity 180ms ease, transform 180ms ease;
+  pointer-events: none;
+  font-size: 12px;
+}
+
+.toast.show {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
+.rotate-notice {
+  display: none;
+}
+
+@keyframes slow-drift {
+  from { transform: scale(1.05) translate3d(-0.4%, 0, 0); }
+  to { transform: scale(1.1) translate3d(0.6%, -0.4%, 0); }
+}
+
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(167, 223, 166, 0.12); }
+  50% { box-shadow: 0 0 0 8px rgba(167, 223, 166, 0.2); }
+}
+
+@media (max-width: 950px) {
+  .topbar {
+    min-height: 64px;
+    padding: 13px 18px;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+  }
+
+  .rooms-layout {
+    padding: 82px 30px 28px;
+    gap: 24px;
+  }
+
+  .scene-intro h1 {
+    font-size: 44px;
+  }
+
+  .scene-intro p {
+    font-size: 13px;
+  }
+
+  .room-panel {
+    padding: 20px;
+  }
+
+  .room-card {
+    padding: 13px 14px;
+  }
+
+  .welcome-content {
+    width: min(560px, 64vw);
+  }
+
+  .island-card {
+    left: 18px;
+    bottom: 18px;
+    width: 330px;
+  }
+
+  .hotspot {
+    min-width: 110px;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  #app {
+    filter: blur(10px) brightness(0.45);
+    pointer-events: none;
+  }
+
+  .rotate-notice {
+    position: fixed;
+    z-index: 99;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    gap: 10px;
+    padding: 40px;
+    color: white;
+    background: rgba(11, 37, 32, 0.68);
+    text-align: center;
+  }
+
+  .rotate-icon {
+    font-size: 52px;
+  }
+
+  .rotate-notice strong {
+    font-family: Georgia, "Songti SC", serif;
+    font-size: 25px;
+  }
+
+  .rotate-notice small {
+    color: rgba(255, 255, 255, 0.68);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
