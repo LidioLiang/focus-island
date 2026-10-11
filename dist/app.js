@@ -8,7 +8,7 @@ const scenes = {
     islandLabel: "城市区",
     icon: "city",
     online: 49,
-    image: `${ASSET_BASE}20261011-cafe-focus-room.png`,
+    image: `${ASSET_BASE}20261012-cafe-room-integrated-patrons.png`,
     focusViews: {
       1: `${ASSET_BASE}20261012-cafe-bar-focus-view.png`,
       3: `${ASSET_BASE}20261012-cafe-bar-focus-view.png`,
@@ -24,9 +24,9 @@ const scenes = {
       { id: "cafe-night", name: "深夜角落", mood: "灯光更暗，适合晚间学习", occupied: 15 },
     ],
     seats: [
-      [20, 43, true], [28, 40, false], [37, 37, true], [46, 34, false],
-      [59, 35, true], [68, 38, true], [78, 42, false], [88, 47, true],
-      [35, 65, true], [72, 68, false],
+      [18, 46, true], [28, 40, false], [36, 42, true], [42, 35, false],
+      [60, 41, true], [71, 43, true], [80, 43, false], [92, 49, true],
+      [37, 66, true], [65, 68, false],
     ],
   },
   library: {
@@ -77,6 +77,15 @@ const scenes = {
 
 const islandImage = `${ASSET_BASE}20261012-focus-island-map-detailed.png`;
 const islandOnlineCount = Object.values(scenes).reduce((total, scene) => total + scene.online, 0);
+
+const cafePatrons = {
+  0: { name: "Mika", minutes: 42, activity: "正在整理今日计划", focus: "深度专注" },
+  2: { name: "Noah", minutes: 27, activity: "正在阅读研究资料", focus: "安静阅读" },
+  4: { name: "Lina", minutes: 58, activity: "正在写作", focus: "沉浸创作" },
+  5: { name: "Theo", minutes: 35, activity: "正在处理工作任务", focus: "深度工作" },
+  7: { name: "Ari", minutes: 19, activity: "正在阅读", focus: "轻度专注" },
+  8: { name: "June", minutes: 46, activity: "正在整理笔记", focus: "稳定专注" },
+};
 
 const STORAGE_KEYS = {
   activeSession: "focusIslandActiveSessionV1",
@@ -181,7 +190,7 @@ function renderWelcome() {
           <span class="welcome-note">无需摄像头 · 没有聊天 · 一键开始</span>
         </div>
       </div>
-      <span class="prototype-tag">MVP 可交互原型 · v0.4</span>
+      <span class="prototype-tag">MVP 可交互原型 · v0.5</span>
     </section>`;
 }
 
@@ -284,11 +293,16 @@ function renderSeat(seat, index, sceneId) {
   if (occupied) {
     const colors = ["#708b7d", "#a4755b", "#7b7f9b", "#9a855c", "#6a8f96", "#967078"];
     if (sceneId === "cafe") {
-      const activities = ["typing", "reading", "writing", "sip"];
-      const activity = activities[index % activities.length];
+      const patron = cafePatrons[index];
       return `
-        <span class="seat occupied animated-npc activity-${activity}" style="left:${x}%; top:${y}%; --avatar:${colors[index % colors.length]}; --delay:-${index * 1.7}s" title="这位岛民正在${activityLabel(activity)}" aria-label="一位正在${activityLabel(activity)}的岛民">
-          <span class="patron-sprite patron-${index % 4}" aria-hidden="true"></span>
+        <span class="seat occupied cafe-seat-status" style="left:${x}%; top:${y}%; --avatar:${colors[index % colors.length]}" tabindex="0" aria-label="${index + 1}号座位已占用，${patron.name}已专注${patron.minutes}分钟，${patron.activity}">
+          <span class="occupied-seat-icon" aria-hidden="true">●</span>
+          <span class="seat-number">${index + 1}</span>
+          <span class="seat-popover" role="tooltip">
+            <strong>${patron.name} · 已专注 ${patron.minutes} 分钟</strong>
+            <small>${patron.activity}</small>
+            <em><i></i>${patron.focus}</em>
+          </span>
         </span>`;
     }
     return `<span class="seat occupied" style="left:${x}%; top:${y}%; --avatar:${colors[index % colors.length]}" title="这个位置上的岛民正在专注" aria-label="已有人专注的位置">${["⌁", "◒", "△", "◇"][index % 4]}</span>`;
@@ -315,10 +329,22 @@ function renderAvatarFigure(index, player = false) {
 
 function renderPlayerAvatar() {
   return `
-    <span class="player-avatar" id="player-avatar" style="left:50%; top:89%" aria-label="你的角色正在咖啡厅入口等待">
-      <img class="walking-avatar-image" src="${ASSET_BASE}20261012-cafe-walking-avatar.png" alt="" />
+    <span class="player-avatar facing-up" id="player-avatar" style="left:50%; top:89%; --player-scale:1" aria-label="你的角色正在咖啡厅入口等待">
+      <span class="player-sprite" aria-hidden="true"></span>
       <span class="player-badge">你</span>
     </span>`;
+}
+
+function setAvatarFacing(avatar, dx, dy) {
+  const direction = Math.abs(dx) > Math.abs(dy)
+    ? (dx > 0 ? "right" : "left")
+    : (dy > 0 ? "down" : "up");
+  avatar.classList.remove("facing-up", "facing-right", "facing-down", "facing-left");
+  avatar.classList.add(`facing-${direction}`);
+}
+
+function playerScaleForY(y) {
+  return Math.max(0.76, Math.min(1.05, 0.7 + y / 285));
 }
 
 async function animatePlayerToSeat() {
@@ -350,29 +376,36 @@ async function animatePlayerToSeat() {
   if (avatar && !reduceMotion) {
     const [targetX, targetY] = selected;
     const routes = {
-      1: [[50, 89], [51, 75], [52, 60], [48, 49], [36, 47], [28, 43]],
-      3: [[50, 89], [51, 74], [52, 60], [51, 48], [46, 37]],
-      6: [[50, 89], [54, 77], [64, 69], [72, 59], [76, 49], [78, 44]],
-      9: [[50, 89], [55, 82], [63, 77], [68, 72], [72, 70]],
+      1: [[50, 89], [50, 78], [48, 67], [45, 57], [40, 49], [33, 45], [28, 42]],
+      3: [[50, 89], [50, 76], [50, 62], [49, 51], [45, 43], [42, 37]],
+      6: [[50, 89], [54, 79], [61, 70], [68, 62], [74, 54], [78, 48], [80, 45]],
+      9: [[50, 89], [54, 82], [59, 76], [63, 71], [65, 69]],
     };
     const route = routes[state.selectedSeat] || [[50, 89], [52, 72], [targetX, targetY + 2]];
-    const keyframes = route.map(([left, top], index) => ({
-      left: `${left}%`,
-      top: `${top}%`,
-      offset: index / (route.length - 1),
-    }));
     avatar.classList.add("walking");
-    const journey = avatar.animate(keyframes, {
-      duration: 3900,
-      easing: "cubic-bezier(.42,0,.2,1)",
-      fill: "forwards",
-    });
-    try { await journey.finished; } catch (_) { /* animation cancelled by navigation */ }
+    for (let index = 1; index < route.length; index += 1) {
+      const [fromX, fromY] = route[index - 1];
+      const [toX, toY] = route[index];
+      setAvatarFacing(avatar, toX - fromX, toY - fromY);
+      const distance = Math.hypot(toX - fromX, toY - fromY);
+      const segment = avatar.animate([
+        { left: `${fromX}%`, top: `${fromY}%`, transform: `translate(-50%, -78%) scale(${playerScaleForY(fromY)})` },
+        { left: `${toX}%`, top: `${toY}%`, transform: `translate(-50%, -78%) scale(${playerScaleForY(toY)})` },
+      ], {
+        duration: Math.max(340, distance * 64),
+        easing: "linear",
+        fill: "forwards",
+      });
+      try { await segment.finished; } catch (_) { break; }
+      avatar.style.left = `${toX}%`;
+      avatar.style.top = `${toY}%`;
+      avatar.style.transform = `translate(-50%, -78%) scale(${playerScaleForY(toY)})`;
+    }
     avatar.style.left = `${targetX}%`;
-    avatar.style.top = `${targetY + 2}%`;
+    avatar.style.top = `${targetY}%`;
     avatar.classList.remove("walking");
-    avatar.classList.add("sitting");
-    await new Promise((resolve) => window.setTimeout(resolve, 720));
+    avatar.classList.add("arriving");
+    await new Promise((resolve) => window.setTimeout(resolve, 520));
   } else {
     await new Promise((resolve) => window.setTimeout(resolve, 180));
   }

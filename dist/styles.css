@@ -739,6 +739,113 @@ button:focus-visible {
   background: #9ad399;
 }
 
+.cafe-seat-status {
+  z-index: 7;
+  display: grid;
+  grid-template-columns: auto auto;
+  width: auto !important;
+  min-width: 42px;
+  height: 28px !important;
+  padding: 0 8px;
+  gap: 5px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 255, 255, 0.72) !important;
+  border-radius: 999px !important;
+  color: #fffdf7;
+  background: rgba(24, 49, 44, 0.78) !important;
+  box-shadow: 0 6px 16px rgba(4, 19, 16, 0.28) !important;
+  backdrop-filter: blur(9px) !important;
+  pointer-events: auto;
+  cursor: help;
+}
+
+.cafe-seat-status::after {
+  display: none;
+}
+
+.occupied-seat-icon {
+  color: #9fdaa2;
+  font-size: 8px;
+  filter: drop-shadow(0 0 4px rgba(159, 218, 162, 0.62));
+}
+
+.cafe-seat-status .seat-number {
+  font-size: 10px;
+}
+
+.seat-popover {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  display: grid;
+  width: 190px;
+  gap: 5px;
+  padding: 12px 13px;
+  transform: translate(-50%, 5px);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 14px;
+  color: #243f39;
+  background: rgba(255, 250, 240, 0.97);
+  box-shadow: 0 14px 34px rgba(5, 24, 20, 0.28);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  text-align: left;
+  transition: opacity 150ms ease, transform 150ms ease, visibility 150ms ease;
+}
+
+.seat-popover::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -5px) rotate(45deg);
+  background: rgba(255, 250, 240, 0.97);
+}
+
+.seat-popover strong {
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 12px;
+}
+
+.seat-popover small {
+  color: #66746f;
+  font-size: 10px;
+}
+
+.seat-popover em {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #53705f;
+  font-size: 9px;
+  font-style: normal;
+}
+
+.seat-popover em i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #83bc89;
+}
+
+.cafe-seat-status:hover,
+.cafe-seat-status:focus-visible {
+  z-index: 18;
+  transform: translate(-50%, -50%) scale(1.05);
+  outline: none;
+}
+
+.cafe-seat-status:hover .seat-popover,
+.cafe-seat-status:focus-visible .seat-popover {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  visibility: visible;
+}
+
 /* Cafe character prototype */
 .seat.occupied.animated-npc {
   z-index: 4;
@@ -915,18 +1022,28 @@ button:focus-visible {
 .player-avatar {
   position: absolute;
   z-index: 8;
-  width: clamp(48px, 4.8vw, 72px);
-  height: clamp(82px, 8.4vw, 126px);
-  transform: translate(-50%, -82%);
+  width: clamp(78px, 8.6vw, 118px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -78%) scale(var(--player-scale, 1));
   filter: drop-shadow(0 8px 6px rgba(6, 25, 21, 0.28));
+  will-change: left, top, transform;
 }
 
-.walking-avatar-image {
+.player-sprite {
+  position: absolute;
+  inset: 0;
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+  background-image: url("./assets/20261012-cafe-player-walk-sprites.png");
+  background-repeat: no-repeat;
+  background-size: 300% 400%;
+  background-position: 0 0;
+  transform-origin: 50% 80%;
 }
+
+.player-avatar.facing-up .player-sprite { background-position-y: 0%; }
+.player-avatar.facing-right .player-sprite { background-position-y: 33.333%; }
+.player-avatar.facing-down .player-sprite { background-position-y: 66.666%; }
+.player-avatar.facing-left .player-sprite { background-position-y: 100%; }
 
 .player-avatar .avatar-figure {
   top: 4px;
@@ -953,11 +1070,13 @@ button:focus-visible {
   font-weight: 900;
 }
 
-.player-avatar.walking { animation: player-step 0.52s ease-in-out infinite; }
+.player-avatar.walking .player-sprite {
+  animation: sprite-walk 0.48s steps(2, end) infinite;
+}
 
-.player-avatar.sitting {
+.player-avatar.arriving {
   opacity: 0;
-  transform: translate(-50%, -66%) scale(0.82);
+  transform: translate(-50%, -66%) scale(0.7) !important;
   transition: opacity 420ms ease, transform 420ms ease;
 }
 
@@ -1432,6 +1551,11 @@ button:focus-visible {
 @keyframes player-step {
   0%, 100% { transform: translate(-50%, -82%) rotate(-1deg); }
   50% { transform: translate(-50%, -85%) rotate(1deg); }
+}
+
+@keyframes sprite-walk {
+  from { background-position-x: 0%; }
+  to { background-position-x: 100%; }
 }
 
 @media (max-width: 950px) {
