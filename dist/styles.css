@@ -99,10 +99,16 @@ button:focus-visible {
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.46);
   border-radius: 50%;
-  background: rgba(15, 48, 41, 0.48);
+  color: #fff7df;
+  background: rgba(15, 48, 41, 0.58);
   box-shadow: inset 0 0 0 5px rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(10px);
-  font-size: 21px;
+}
+
+.brand-logo {
+  width: 25px;
+  height: 25px;
+  stroke-width: 1.55;
 }
 
 .brand-copy {
@@ -163,6 +169,21 @@ button:focus-visible {
 
 .global-presence {
   gap: 10px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-button svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
 }
 
 .presence-stat {
@@ -363,22 +384,6 @@ button:focus-visible {
   object-fit: cover;
   object-position: center;
   filter: saturate(0.98) contrast(1.035) brightness(0.99);
-}
-
-.island-hint {
-  position: absolute;
-  z-index: 6;
-  top: 94px;
-  left: 50%;
-  padding: 9px 16px;
-  transform: translateX(-50%);
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 999px;
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(17, 47, 42, 0.44);
-  backdrop-filter: blur(10px);
-  font-size: 12px;
-  letter-spacing: 0.08em;
 }
 
 .hotspot {

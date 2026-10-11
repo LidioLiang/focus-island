@@ -117,7 +117,13 @@ const app = document.querySelector("#app");
 function brand() {
   return `
     <div class="brand" aria-label="专注岛">
-      <span class="brand-mark" aria-hidden="true">◒</span>
+      <span class="brand-mark" aria-hidden="true">
+        <svg class="brand-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="7" r="2.2" fill="currentColor" stroke="none" />
+          <path d="M4.5 16.2c2.1-3.1 4.6-4.7 7.5-4.7s5.4 1.6 7.5 4.7" />
+          <path d="M3.5 18.7c2.7-1.1 5.5-1.1 8.3 0s5.7 1.1 8.7-.1" />
+        </svg>
+      </span>
       <span class="brand-copy"><strong>专注岛</strong><small>FOCUS ISLE</small></span>
     </div>`;
 }
@@ -138,11 +144,16 @@ function topbar({ back = null, right = true } = {}) {
   return `
     <header class="topbar">
       ${back ? `<button class="back-button" data-action="${back}" aria-label="返回">←</button>` : brand()}
-      ${right ? `<div class="glass-pill global-presence" title="全岛实时状态">
-        <span class="presence-dot"></span>
-        <span class="presence-stat"><strong class="global-online-count">${state.onlineIslanders}</strong><small>人在线</small></span>
-        <i class="presence-divider" aria-hidden="true"></i>
-        <span class="presence-stat"><strong class="global-focus-count">${state.focusedIslanders}</strong><small>人正在专注</small></span>
+      ${right ? `<div class="topbar-actions">
+        <div class="glass-pill global-presence" title="全岛实时状态">
+          <span class="presence-dot"></span>
+          <span class="presence-stat"><strong class="global-online-count">${state.onlineIslanders}</strong><small>人在线</small></span>
+          <i class="presence-divider" aria-hidden="true"></i>
+          <span class="presence-stat"><strong class="global-focus-count">${state.focusedIslanders}</strong><small>人正在专注</small></span>
+        </div>
+        <button class="icon-button profile-button" data-action="profile" aria-label="个人中心，即将开放" title="个人中心 · 即将开放">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.8 19c.7-3.5 2.8-5.3 6.2-5.3s5.5 1.8 6.2 5.3"/></svg>
+        </button>
       </div>` : ""}
     </header>`;
 }
@@ -187,7 +198,6 @@ function renderIsland() {
         ${lockedHotspot("雪山营地", "即将开放", 73, 17, "mountain")}
       </div>
       ${topbar()}
-      <div class="island-hint">选择今天想去的地方</div>
 
       <aside class="island-card">
         <h2>今天想在哪里专注？</h2>
@@ -868,6 +878,7 @@ document.addEventListener("click", (event) => {
   if (action === "retry-session") retrySession();
   if (action === "return-room") returnRoom();
   if (action === "return-island") returnIsland();
+  if (action === "profile") showToast("个人中心将用于设置、偏好与语言切换，后续开放");
   if (action === "locked") showToast("这个区域还在建设中，内测后会根据投票决定优先开放顺序");
 });
 
