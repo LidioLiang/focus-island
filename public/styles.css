@@ -329,11 +329,12 @@ button:focus-visible {
 .welcome h1 {
   max-width: 520px;
   margin: 0;
-  font-family: Georgia, "Songti SC", serif;
+  font-family: "Kaiti SC", "STKaiti", "KaiTi", "FangSong", Georgia, serif;
   font-size: clamp(42px, 5.4vw, 76px);
-  font-weight: 500;
-  line-height: 1.08;
-  letter-spacing: 0.02em;
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: 0.055em;
+  text-shadow: 0 5px 28px rgba(4, 22, 19, 0.28);
   text-wrap: balance;
 }
 
