@@ -1,4 +1,6 @@
 const ASSET_BASE = "./assets/";
+// 填入正式问卷地址后，页面底部的反馈入口会自动启用。
+const FEEDBACK_FORM_URL = "";
 
 const scenes = {
   cafe: {
@@ -169,6 +171,9 @@ function topbar({ back = null, right = true, showPresence = true } = {}) {
 
 function render() {
   stopTickerIfNeeded();
+  const isLanding = state.view === "welcome";
+  document.body.classList.toggle("landing-mode", isLanding);
+  app.dataset.view = state.view;
   if (state.view === "welcome") renderWelcome();
   if (state.view === "island") renderIsland();
   if (state.view === "rooms") renderRooms();
@@ -178,20 +183,203 @@ function render() {
 }
 
 function renderWelcome() {
+  const feedbackAction = FEEDBACK_FORM_URL
+    ? `<a class="feedback-link" href="${FEEDBACK_FORM_URL}" target="_blank" rel="noopener noreferrer">去填写反馈&nbsp; ↗</a>`
+    : `<button class="feedback-link is-disabled" type="button" disabled>反馈通道准备中</button>`;
+
   app.innerHTML = `
-    <section class="view welcome">
-      <img class="scene-image" src="${islandImage}" alt="一座有城市、图书馆、森林、湖泊与雪山的宁静海岛" />
-      <div class="welcome-content">
-        <div class="welcome-kicker"><span class="presence-dot"></span>此刻，<strong class="global-focus-count">${state.focusedIslanders}</strong> 位岛民正安静地做自己的事</div>
-        <h1>换一个地方，<br />开始专注。</h1>
-        <p class="welcome-subtitle">像进入游戏一样，去咖啡馆、图书馆或森林里找个位置坐下。有人陪伴，互不打扰。</p>
-        <div class="welcome-actions">
-          <button class="primary-button" data-action="enter-island">进入专注岛&nbsp; →</button>
-          <span class="welcome-note">无需摄像头 · 没有聊天 · 一键开始</span>
+    <div class="landing-page">
+      <section class="view welcome welcome-hero" aria-labelledby="welcome-title">
+        <img class="scene-image" src="${islandImage}" alt="一座有城市、图书馆、森林、湖泊与雪山的宁静海岛" />
+        <div class="welcome-content">
+          <div class="welcome-kicker"><span class="presence-dot"></span>此刻，<strong class="global-focus-count">${state.focusedIslanders}</strong> 位岛民正安静地做自己的事</div>
+          <h1 id="welcome-title">换一个地方，<br />开始专注。</h1>
+          <p class="welcome-subtitle">像进入游戏一样，去咖啡馆、图书馆或森林里找个位置坐下。有人陪伴，互不打扰。</p>
+          <div class="welcome-actions">
+            <button class="primary-button" data-action="enter-island">进入专注岛&nbsp; →</button>
+            <span class="welcome-note">无需摄像头 · 没有聊天 · 一键开始</span>
+          </div>
         </div>
-      </div>
-      <span class="prototype-tag">MVP 可交互原型 · v0.5</span>
-    </section>`;
+        <button class="scroll-cue" data-action="scroll-story" aria-label="向下了解专注岛">
+          <span>向下了解专注岛</span><i aria-hidden="true">↓</i>
+        </button>
+        <span class="prototype-tag">MVP 可交互原型 · v0.6</span>
+      </section>
+
+      <section class="landing-section problem-section" id="story" aria-labelledby="problem-title">
+        <div class="section-shell problem-grid">
+          <div class="section-heading">
+            <p class="landing-eyebrow">WHY FOCUS ISLE</p>
+            <h2 id="problem-title">你缺少的也许不是<br />另一个计时器。</h2>
+          </div>
+          <div class="problem-copy">
+            <p class="lead-copy">真正困难的，往往不是专注多久，而是如何开始。</p>
+            <p>在家工作或独自学习时，生活和任务之间没有清晰的边界。不是你不够自律，只是少了一个让身体和注意力都知道“现在要开始了”的地方。</p>
+            <p>专注岛想做的，就是把这段最难的切换，变成一次轻松的出发。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-section journey-section" aria-labelledby="journey-title">
+        <div class="section-shell">
+          <div class="center-heading">
+            <p class="landing-eyebrow">WHAT IT IS</p>
+            <h2 id="journey-title">一个不用开摄像头，<br />也不用和陌生人聊天的虚拟专注空间。</h2>
+            <p>从选择一个地方，到真正坐下来开始，只需要跟着感觉往前走。</p>
+          </div>
+          <div class="journey-track" aria-label="进入专注岛的四个步骤">
+            <figure class="journey-shot journey-shot-map">
+              <img src="${islandImage}" alt="专注岛地图，可选择不同的专注区域" loading="lazy" />
+              <figcaption><span>01</span><strong>选一个地方</strong><small>今天想去咖啡馆、图书馆，还是森林？</small></figcaption>
+            </figure>
+            <figure class="journey-shot journey-shot-room">
+              <img src="${scenes.cafe.image}" alt="雨巷咖啡馆房间内的座位与安静专注的岛民" loading="lazy" />
+              <figcaption><span>02</span><strong>走进一间房</strong><small>听听环境声，看看这里是不是今天需要的氛围。</small></figcaption>
+            </figure>
+            <figure class="journey-shot journey-shot-seat">
+              <img src="${ASSET_BASE}20261011-library-focus-room.png" alt="穹顶图书馆里的阅读座位" loading="lazy" />
+              <figcaption><span>03</span><strong>找个位置坐下</strong><small>看见有人也在认真做事，但不需要打招呼。</small></figcaption>
+            </figure>
+            <figure class="journey-shot journey-shot-focus">
+              <img src="${ASSET_BASE}20261012-cafe-window-focus-view.png" alt="咖啡馆临窗座位的沉浸式专注近景" loading="lazy" />
+              <figcaption><span>04</span><strong>开始专注</strong><small>画面安静下来，只留下计时、声音和正在做的事。</small></figcaption>
+            </figure>
+          </div>
+          <div class="section-action">
+            <button class="primary-button" data-action="enter-island">去岛上看看&nbsp; →</button>
+            <span>不用注册，先体验一次完整的专注旅程</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-section scenes-section" aria-labelledby="scenes-title">
+        <div class="section-shell">
+          <div class="section-heading scenes-heading">
+            <p class="landing-eyebrow">THREE PLACES, THREE MOODS</p>
+            <h2 id="scenes-title">今天的你，<br />适合哪一种地方？</h2>
+            <p>场景不是装饰。不同的光线、声音和空间感，会给开始这件事带来不同的阻力与节奏。</p>
+          </div>
+
+          <article class="scene-story scene-story-cafe">
+            <div class="scene-story-visual">
+              <img src="${scenes.cafe.image}" alt="暖色灯光与雨窗环绕的雨巷咖啡馆" loading="lazy" />
+              <span class="scene-index">01 / CITY</span>
+            </div>
+            <div class="scene-story-copy">
+              <span class="scene-icon">${regionIcon("city")}</span>
+              <p class="landing-eyebrow">雨巷咖啡馆</p>
+              <h3>让生活的声音，<br />陪你轻轻开始。</h3>
+              <p>窗外下着雨，咖啡机偶尔轻响。这里有一点温度，也有一点日常的流动感，适合写作、邮件和不需要太大启动压力的任务。</p>
+              <div class="sound-line"><span>环境声</span><strong>细雨 · 咖啡馆底噪 · 偶尔杯碟声</strong></div>
+            </div>
+          </article>
+
+          <article class="scene-story scene-story-library">
+            <div class="scene-story-visual">
+              <img src="${scenes.library.image}" alt="高窗与长桌构成的穹顶图书馆" loading="lazy" />
+              <span class="scene-index">02 / ACADEMY</span>
+            </div>
+            <div class="scene-story-copy">
+              <span class="scene-icon">${regionIcon("academy")}</span>
+              <p class="landing-eyebrow">穹顶图书馆</p>
+              <h3>当你需要秩序，<br />就来一张安静的长桌。</h3>
+              <p>高窗把光铺在木桌上，翻页声很轻。明确、克制的空间感，适合阅读、备考、研究和那些需要慢慢做完的难题。</p>
+              <div class="sound-line"><span>环境声</span><strong>静谧室内 · 轻微翻页 · 壁炉声</strong></div>
+            </div>
+          </article>
+
+          <article class="scene-story scene-story-forest">
+            <div class="scene-story-visual">
+              <img src="${scenes.forest.image}" alt="溪流、苔石与树木环绕的苔溪森林" loading="lazy" />
+              <span class="scene-index">03 / FOREST</span>
+            </div>
+            <div class="scene-story-copy">
+              <span class="scene-icon">${regionIcon("forest")}</span>
+              <p class="landing-eyebrow">苔溪森林</p>
+              <h3>先让呼吸慢下来，<br />再让想法慢慢出现。</h3>
+              <p>溪流绕过苔石，风穿过树叶。自然、低压力的氛围，适合创作、思考、复盘和长时间的独立工作。</p>
+              <div class="sound-line"><span>环境声</span><strong>溪流 · 林间风 · 远处鸟鸣</strong></div>
+            </div>
+          </article>
+
+          <p class="future-note">湖畔、海滨与雪山还在岛屿的远处。未来先去哪里，会听取岛民的真实感受。</p>
+        </div>
+      </section>
+
+      <section class="landing-section philosophy-section" aria-labelledby="philosophy-title">
+        <div class="philosophy-glow" aria-hidden="true"></div>
+        <div class="section-shell philosophy-shell">
+          <div class="philosophy-heading">
+            <p class="landing-eyebrow">PRESENCE WITHOUT PRESSURE</p>
+            <h2 id="philosophy-title">有人陪伴，<br />互不打扰。</h2>
+            <p>我们想保留共同在场的安心感，同时拿走被看见、被回应和必须社交的压力。</p>
+          </div>
+          <div class="principle-list">
+            <article><span>01</span><div><h3>不打开摄像头</h3><p>不用整理自己，也不用承担持续被注视的压力。</p></div></article>
+            <article><span>02</span><div><h3>没有聊天与私信</h3><p>不需要认识任何人，也没有必须及时回应的信息。</p></div></article>
+            <article><span>03</span><div><h3>少一点设置</h3><p>先选地方、找位置坐下，再让注意力自然安静下来。</p></div></article>
+          </div>
+          <div class="design-flow" aria-label="专注岛的体验设计逻辑">
+            <div><span>进入仪式</span><strong>像进入游戏一样出发</strong></div>
+            <i aria-hidden="true">→</i>
+            <div><span>共同在场</span><strong>看见大家安静做事</strong></div>
+            <i aria-hidden="true">→</i>
+            <div><span>沉浸桌面</span><strong>界面主动退到身后</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-section value-section" aria-labelledby="value-title">
+        <div class="section-shell value-shell">
+          <div class="value-visual">
+            <img src="${ASSET_BASE}20261012-cafe-lounge-focus-view.png" alt="咖啡馆安静角落里的沉浸式专注桌面" loading="lazy" />
+            <p>“不需要努力变成另一个人。<br />只是换一个地方，重新开始。”</p>
+          </div>
+          <div class="value-copy">
+            <p class="landing-eyebrow">WHAT WE HOPE YOU FEEL</p>
+            <h2 id="value-title">我们希望你在这里，<br />获得三件很轻的事。</h2>
+            <ol>
+              <li><span>01</span><div><strong>开始变得容易一点</strong><p>不用先把一切准备完美，先坐下，再做眼前的一小步。</p></div></li>
+              <li><span>02</span><div><strong>独处不再那么空</strong><p>你仍然拥有自己的空间，同时知道此刻有人也在认真生活。</p></div></li>
+              <li><span>03</span><div><strong>陪伴不成为打扰</strong><p>没有消息、表演或社交任务，注意力可以留给真正想完成的事。</p></div></li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="landing-section final-cta-section" aria-labelledby="final-cta-title">
+        <img src="${islandImage}" alt="" aria-hidden="true" loading="lazy" />
+        <div class="final-cta-overlay"></div>
+        <div class="final-cta-content">
+          <span class="free-badge">目前内测完全免费</span>
+          <h2 id="final-cta-title">今天，去岛上<br />找个位置坐下。</h2>
+          <p>不需要准备好一整天。只要从下一段专注开始。</p>
+          <button class="primary-button" data-action="enter-island">免费进入专注岛&nbsp; →</button>
+        </div>
+      </section>
+
+      <section class="feedback-section" aria-labelledby="feedback-heading">
+        <div class="section-shell feedback-shell">
+          <div>
+            <p class="landing-eyebrow">BUILD THE ISLAND WITH US</p>
+            <h2 id="feedback-heading">帮我们把这座岛建得更好。</h2>
+            <p>欢迎告诉我们：哪个场景让你更容易进入状态、哪一步还不够顺，以及你还想去怎样的空间。</p>
+          </div>
+          <div class="feedback-action">
+            ${feedbackAction}
+            <small>${FEEDBACK_FORM_URL ? "将在新标签页打开反馈表单" : "正式反馈表单正在准备，开放后会在这里出现"}</small>
+          </div>
+        </div>
+      </section>
+
+      <footer class="landing-footer">
+        <div class="section-shell">
+          ${brand()}
+          <p>一个有人陪伴、互不打扰的沉浸式专注空间。</p>
+          <button class="footer-enter" data-action="enter-island">进入专注岛&nbsp; →</button>
+        </div>
+      </footer>
+    </div>`;
 }
 
 function renderIsland() {
@@ -291,12 +479,11 @@ function renderRoom() {
 function renderSeat(seat, index, sceneId) {
   const [x, y, occupied] = seat;
   if (occupied) {
-    const colors = ["#708b7d", "#a4755b", "#7b7f9b", "#9a855c", "#6a8f96", "#967078"];
     if (sceneId === "cafe") {
       const patron = cafePatrons[index];
       return `
-        <span class="seat occupied cafe-seat-status" style="left:${x}%; top:${y}%; --avatar:${colors[index % colors.length]}" tabindex="0" aria-label="${index + 1}号座位已占用，${patron.name}已专注${patron.minutes}分钟，${patron.activity}">
-          <span class="occupied-seat-icon" aria-hidden="true">●</span>
+        <span class="seat occupied cafe-seat-status" style="left:${x}%; top:${y}%" tabindex="0" aria-label="${index + 1}号座位已占用，${patron.name}已专注${patron.minutes}分钟，${patron.activity}">
+          <span class="seat-status-dot busy" aria-hidden="true"></span>
           <span class="seat-number">${index + 1}</span>
           <span class="seat-popover" role="tooltip">
             <strong>${patron.name} · 已专注 ${patron.minutes} 分钟</strong>
@@ -305,9 +492,9 @@ function renderSeat(seat, index, sceneId) {
           </span>
         </span>`;
     }
-    return `<span class="seat occupied" style="left:${x}%; top:${y}%; --avatar:${colors[index % colors.length]}" title="这个位置上的岛民正在专注" aria-label="已有人专注的位置">${["⌁", "◒", "△", "◇"][index % 4]}</span>`;
+    return `<span class="seat occupied" style="left:${x}%; top:${y}%" title="${index + 1}号座位已占用" aria-label="${index + 1}号座位已占用"><span class="seat-status-dot busy" aria-hidden="true"></span><span class="seat-number">${index + 1}</span></span>`;
   }
-  return `<button class="seat ${state.selectedSeat === index ? "selected" : ""}" style="left:${x}%; top:${y}%" data-seat="${index}" aria-label="选择 ${index + 1} 号空位"><span class="seat-number">${index + 1}</span></button>`;
+  return `<button class="seat available ${state.selectedSeat === index ? "selected" : ""}" style="left:${x}%; top:${y}%" data-seat="${index}" aria-label="选择 ${index + 1} 号空位"><span class="seat-status-dot free" aria-hidden="true"></span><span class="seat-number">${index + 1}</span></button>`;
 }
 
 function activityLabel(activity) {
@@ -890,8 +1077,12 @@ document.addEventListener("click", (event) => {
   const action = actionElement.dataset.action;
 
   if (action === "enter-island") {
+    window.scrollTo({ top: 0, behavior: "auto" });
     state.view = "island";
     render();
+  }
+  if (action === "scroll-story") {
+    document.querySelector("#story")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   if (action === "back-island") {
     state.view = "island";
