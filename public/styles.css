@@ -1384,6 +1384,26 @@ body.landing-mode #app {
   inset: 0;
 }
 
+.seat-markers {
+  position: absolute;
+  z-index: 60;
+  inset: 0;
+  pointer-events: none;
+}
+
+.seat-markers .seat {
+  pointer-events: auto;
+}
+
+.cafe-character-canvas {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none;
+}
+
 .seat {
   position: absolute;
   z-index: 7;
@@ -1771,6 +1791,26 @@ body.landing-mode #app {
   font-weight: 800;
 }
 
+.seat-free-label {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  padding: 3px 7px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  color: #fffaf0;
+  background: rgba(15, 43, 37, 0.76);
+  box-shadow: 0 5px 14px rgba(5, 24, 20, 0.24);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cafe-seat-status.is-mine {
+  border-color: #f3ce84 !important;
+  background: rgba(124, 79, 42, 0.86) !important;
+}
+
 .room-footer {
   position: absolute;
   z-index: 6;
@@ -1803,6 +1843,28 @@ body.landing-mode #app {
   font-size: 11px;
 }
 
+.room-sync-label {
+  margin-left: auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  color: #527063;
+  background: rgba(104, 139, 118, 0.12);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.room-card.is-locked {
+  opacity: 0.58;
+}
+
+.view.room.entering-focus {
+  animation: room-to-focus 760ms cubic-bezier(0.35, 0, 0.22, 1) forwards;
+}
+
+@keyframes room-to-focus {
+  to { opacity: 0; transform: scale(1.045); filter: blur(2px); }
+}
+
 .room-footer .primary-button[disabled] {
   opacity: 0.48;
   cursor: not-allowed;
@@ -1829,7 +1891,7 @@ body.landing-mode #app {
 .focus-stage {
   position: absolute;
   z-index: 11;
-  top: 18px;
+  top: 82px;
   right: 20px;
   display: grid;
   grid-template-columns: auto auto auto;
