@@ -1,6 +1,12 @@
 const ASSET_BASE = "./assets/";
 // 填入正式问卷地址后，页面底部的反馈入口会自动启用。
 const FEEDBACK_FORM_URL = "";
+const CAFE_OCCUPANT_IMAGES = Array.from(
+  { length: 10 },
+  (_, index) => `${ASSET_BASE}20261012-cafe-seat-${String(index + 1).padStart(2, "0")}-occupant.webp`,
+);
+const CAFE_OCCUPANT_FADE_MS = 400;
+const CAFE_OCCUPANT_CONFIRM_MS = 800;
 
 const scenes = {
   cafe: {
@@ -126,6 +132,7 @@ let populationTimer = null;
 let roomSyncTimer = null;
 let heartbeatTimer = null;
 let roomSyncInFlight = false;
+let cafeOccupantPreload = null;
 
 const identity = getOrCreateIdentity();
 
@@ -195,7 +202,34 @@ function stopRoomPresence() {
   roomSyncTimer = null;
   heartbeatTimer = null;
   roomSyncInFlight = false;
-  window.FocusRoomEngine?.destroy();
+}
+
+function preloadCafeOccupants() {
+  if (cafeOccupantPreload) return cafeOccupantPreload;
+  cafeOccupantPreload = Promise.all(CAFE_OCCUPANT_IMAGES.map((source) => new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => image.decode?.().catch(() => {}).finally(resolve) || resolve();
+    image.onerror = resolve;
+    image.src = source;
+  })));
+  return cafeOccupantPreload;
+}
+
+function renderCafeOccupantLayers() {
+  const occupiedSeats = new Set(state.roomPresence.leases.map((lease) => Number(lease.seatId)));
+  return `
+    <div class="cafe-occupant-layer" aria-hidden="true">
+      ${CAFE_OCCUPANT_IMAGES.map((source, index) => `
+        <img class="cafe-occupant-image ${occupiedSeats.has(index + 1) ? "is-visible" : ""}"
+          data-occupant-seat="${index + 1}" src="${source}" alt="" draggable="false" />`).join("")}
+    </div>`;
+}
+
+function syncCafeOccupantLayers(leases = state.roomPresence.leases) {
+  const occupiedSeats = new Set(leases.map((lease) => Number(lease.seatId)));
+  document.querySelectorAll("[data-occupant-seat]").forEach((image) => {
+    image.classList.toggle("is-visible", occupiedSeats.has(Number(image.dataset.occupantSeat)));
+  });
 }
 
 async function syncCafeState({ refreshMarkers = true } = {}) {
@@ -209,7 +243,7 @@ async function syncCafeState({ refreshMarkers = true } = {}) {
     const room = scenes.cafe.rooms.find((item) => item.id === "cafe-rain");
     if (room) room.occupied = presence.leases.length;
     scenes.cafe.online = presence.leases.length;
-    window.FocusRoomEngine?.setOccupants(presence.leases);
+    syncCafeOccupantLayers(presence.leases);
     if (refreshMarkers && state.view === "room") refreshCafeSeatMarkers();
   } catch (_) {
     const syncLabel = document.querySelector(".room-sync-label");
@@ -223,6 +257,7 @@ function refreshCafeSeatMarkers() {
   const markerLayer = document.querySelector(".seat-markers");
   if (!markerLayer || state.sceneId !== "cafe") return;
   markerLayer.innerHTML = scenes.cafe.seats.map((seat, index) => renderSeat(seat, index, "cafe")).join("");
+  syncCafeOccupantLayers();
   const openSeats = Math.max(0, 10 - state.roomPresence.leases.length);
   const note = document.querySelector(".room-footer-copy span");
   if (note && state.selectedSeat === null) note.textContent = `所有座位都来自实时状态 · 还剩 ${openSeats} 个空位`;
@@ -238,7 +273,7 @@ function updateCafeSeatSelection() {
   const note = document.querySelector(".room-footer-copy span");
   const action = document.querySelector('[data-action="sit-down"]');
   if (title) title.textContent = state.selectedSeat === null ? "找一个喜欢的位置坐下" : `已选择 ${state.selectedSeat + 1} 号座位`;
-  if (note && state.selectedSeat !== null) note.textContent = state.currentSeatId ? "将从当前座位起身，沿通道走到新位置" : "准备好后，你的角色会从入口沿通道走到这里";
+  if (note && state.selectedSeat !== null) note.textContent = state.currentSeatId ? "确认后，你会在新座位上安静浮现" : "确认后，你会在这个座位上安静浮现";
   if (action) {
     action.disabled = state.selectedSeat === null;
     action.textContent = state.currentSeatId ? "起身并换座" : "坐下，准备专注";
@@ -250,14 +285,9 @@ async function startCafePresence() {
   stopRoomPresence();
   const layer = document.querySelector(".seat-layer");
   if (!layer) return;
-  if (window.FocusRoomEngine) {
-    await window.FocusRoomEngine.mount(layer, identity);
-  } else {
-    await new Promise((resolve) => window.addEventListener("focus-room-engine-ready", resolve, { once: true }));
-    if (state.view !== "room") return;
-    await window.FocusRoomEngine?.mount(layer, identity);
-  }
+  const preload = preloadCafeOccupants();
   await syncCafeState();
+  await preload;
   roomSyncTimer = window.setInterval(() => syncCafeState(), 2000);
   heartbeatTimer = window.setInterval(sendHeartbeat, 15000);
 }
@@ -627,12 +657,13 @@ function renderRoom() {
       ${topbar({ back: "back-rooms", showPresence: false })}
       <div class="room-title">${regionIcon(scene.icon, "room-region-icon")}<span>${room.name} · 保持安静</span></div>
       <div class="seat-layer" aria-label="座位区域">
+        ${animatedCafe ? renderCafeOccupantLayers() : ""}
         <div class="seat-markers">${scene.seats.map((seat, index) => renderSeat(seat, index, scene.id)).join("")}</div>
       </div>
       <div class="room-footer">
         <div class="room-footer-copy">
           <strong>${state.selectedSeat === null ? "找一个喜欢的位置坐下" : `已选择 ${state.selectedSeat + 1} 号座位`}</strong>
-          <span>${state.selectedSeat === null ? `${animatedCafe ? "所有座位都来自实时状态" : "亮起的座位可选"} · 还剩 ${openSeats} 个空位` : animatedCafe ? (state.currentSeatId ? "将从当前座位起身，沿通道走到新位置" : "准备好后，你的角色会从入口沿通道走到这里") : "坐下后会进入沉浸式桌面，你仍能感受到大家的陪伴"}</span>
+          <span>${state.selectedSeat === null ? `${animatedCafe ? "所有座位都来自实时状态" : "亮起的座位可选"} · 还剩 ${openSeats} 个空位` : animatedCafe ? (state.currentSeatId ? "确认后，你会在新座位上安静浮现" : "确认后，你会在这个座位上安静浮现") : "坐下后会进入沉浸式桌面，你仍能感受到大家的陪伴"}</span>
         </div>
         ${animatedCafe ? `<span class="room-sync-label">正在同步真实座位…</span>` : ""}
         <button class="primary-button" data-action="sit-down" ${state.selectedSeat === null ? "disabled" : ""}>${state.currentSeatId ? "起身并换座" : "坐下，准备专注"}</button>
@@ -649,7 +680,7 @@ function renderSeat(seat, index, sceneId) {
     if (sceneId === "cafe") {
       const mine = lease.sessionId === identity.sessionId;
       const minutes = focusedMinutes(lease);
-      const status = lease.state === "occupied" ? (minutes > 0 ? `已专注 ${minutes} 分钟` : "刚刚坐下") : lease.state === "moving" ? "正在换座" : "正在走来";
+      const status = minutes > 0 ? `已专注 ${minutes} 分钟` : "刚刚坐下";
       return `
         <span class="seat occupied cafe-seat-status ${mine ? "is-mine" : ""}" style="left:${x}%; top:${y}%" tabindex="0" aria-label="${index + 1}号座位已占用，${lease.displayName}${status}">
           <span class="seat-status-dot busy" aria-hidden="true"></span>
@@ -657,7 +688,7 @@ function renderSeat(seat, index, sceneId) {
           <span class="seat-popover" role="tooltip">
             <strong>${mine ? `${identity.displayName}（你）` : lease.displayName}</strong>
             <small>${status} · ${lease.activity || "安静专注"}</small>
-            <em><i></i>${lease.state === "occupied" ? "正在专注" : "正在入座"}</em>
+            <em><i></i>正在专注</em>
           </span>
         </span>`;
     }
@@ -666,44 +697,7 @@ function renderSeat(seat, index, sceneId) {
   return `<button class="seat available ${state.selectedSeat === index ? "selected" : ""}" style="left:${x}%; top:${y}%" data-seat="${index}" aria-label="选择 ${index + 1} 号空位"><span class="seat-status-dot free" aria-hidden="true"></span><span class="seat-number">${index + 1}</span><span class="seat-free-label">空位</span></button>`;
 }
 
-function activityLabel(activity) {
-  return ({ typing: "敲键盘", reading: "阅读", writing: "写字", sip: "喝咖啡" })[activity] || "专注";
-}
-
-function renderAvatarFigure(index, player = false) {
-  return `
-    <span class="avatar-figure ${player ? "player-figure" : ""}" aria-hidden="true">
-      <span class="avatar-head"><span class="avatar-hair hair-${index % 4}"></span></span>
-      <span class="avatar-body">
-        <span class="avatar-arm arm-left"></span>
-        <span class="avatar-arm arm-right"></span>
-        <span class="avatar-leg leg-left"></span>
-        <span class="avatar-leg leg-right"></span>
-      </span>
-    </span>`;
-}
-
-function renderPlayerAvatar() {
-  return `
-    <span class="player-avatar facing-up" id="player-avatar" style="left:50%; top:89%; --player-scale:1" aria-label="你的角色正在咖啡厅入口等待">
-      <span class="player-sprite" aria-hidden="true"></span>
-      <span class="player-badge">你</span>
-    </span>`;
-}
-
-function setAvatarFacing(avatar, dx, dy) {
-  const direction = Math.abs(dx) > Math.abs(dy)
-    ? (dx > 0 ? "right" : "left")
-    : (dy > 0 ? "down" : "up");
-  avatar.classList.remove("facing-up", "facing-right", "facing-down", "facing-left");
-  avatar.classList.add(`facing-${direction}`);
-}
-
-function playerScaleForY(y) {
-  return Math.max(0.76, Math.min(1.05, 0.7 + y / 285));
-}
-
-async function animatePlayerToSeat() {
+async function occupySelectedSeat() {
   if (state.isTransitioning || state.selectedSeat === null) return;
   const scene = scenes[state.sceneId];
   if (scene.id !== "cafe") {
@@ -722,11 +716,11 @@ async function animatePlayerToSeat() {
   document.querySelectorAll("button.seat").forEach((button) => { button.disabled = true; });
   if (sitButton) {
     sitButton.disabled = true;
-    sitButton.textContent = "正在走向座位…";
+    sitButton.textContent = "正在为你留座…";
   }
   if (backButton) backButton.disabled = true;
-  if (footerTitle) footerTitle.textContent = fromSeatId ? `正在从 ${fromSeatId} 号换到 ${targetSeatId} 号座位` : `正在前往 ${targetSeatId} 号座位`;
-  if (footerNote) footerNote.textContent = "路线会沿咖啡厅通道行走，不穿过桌椅";
+  if (footerTitle) footerTitle.textContent = fromSeatId ? `正在换到 ${targetSeatId} 号座位` : `正在确认 ${targetSeatId} 号座位`;
+  if (footerNote) footerNote.textContent = "座位确认后，你会在画面中安静浮现";
 
   try {
     if (fromSeatId) {
@@ -741,9 +735,6 @@ async function animatePlayerToSeat() {
         body: JSON.stringify(identityBody()),
       });
     }
-    await syncCafeState();
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!reduceMotion) await window.FocusRoomEngine?.walkLocal(fromSeatId, targetSeatId);
     await api(`/api/sessions/${identity.sessionId}/occupy`, {
       method: "POST",
       body: JSON.stringify({ roomId: currentRoomApiId(), seatId: targetSeatId }),
@@ -751,9 +742,14 @@ async function animatePlayerToSeat() {
     state.currentSeatId = targetSeatId;
     state.switchingFromSeatId = null;
     await syncCafeState({ refreshMarkers: false });
+    syncCafeOccupantLayers();
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduceMotion) {
+      await new Promise((resolve) => window.setTimeout(resolve, CAFE_OCCUPANT_FADE_MS + CAFE_OCCUPANT_CONFIRM_MS));
+    }
     const roomView = document.querySelector(".view.room");
     roomView?.classList.add("entering-focus");
-    await new Promise((resolve) => window.setTimeout(resolve, 760));
+    if (!reduceMotion) await new Promise((resolve) => window.setTimeout(resolve, 760));
     state.view = "focus";
     render();
   } catch (error) {
@@ -773,7 +769,6 @@ async function animatePlayerToSeat() {
 function renderFocus() {
   window.clearInterval(roomSyncTimer);
   roomSyncTimer = null;
-  window.FocusRoomEngine?.destroy();
   const scene = scenes[state.sceneId];
   const room = scene.rooms.find((item) => item.id === state.roomId) || scene.rooms[0];
   const focusImage = scene.focusViews?.[state.selectedSeat + 1] || scene.image;
@@ -1277,7 +1272,7 @@ document.addEventListener("click", (event) => {
     render();
   }
   if (action === "sit-down" && state.selectedSeat !== null) {
-    animatePlayerToSeat();
+    occupySelectedSeat();
   }
   if (action === "toggle-timer") toggleTimer();
   if (action === "switch-seat") {
