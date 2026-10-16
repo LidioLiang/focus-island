@@ -1,46 +1,83 @@
 const ASSET_BASE = "./assets/";
 // 填入正式问卷地址后，页面底部的反馈入口会自动启用。
 const FEEDBACK_FORM_URL = "";
-const CAFE_OCCUPANT_IMAGES = Array.from(
-  { length: 10 },
-  (_, index) => `${ASSET_BASE}20261012-cafe-seat-${String(index + 1).padStart(2, "0")}-occupant.webp`,
-);
-const CAFE_OCCUPANT_FADE_MS = 400;
-const CAFE_OCCUPANT_CONFIRM_MS = 800;
-
+const CAFE_STATE_LAYER_SETTLE_MS = 800;
+const CAFE_IMMERSIVE_AUTO_ENTER_MS = 30000;
 const scenes = {
   cafe: {
     id: "cafe",
-    name: "雨巷咖啡馆",
+    name: "四时咖啡馆",
     shortName: "咖啡厅",
-    islandLabel: "城市区",
+    islandLabel: "四时咖啡厅",
     icon: "city",
     online: 0,
-    image: `${ASSET_BASE}20261011-cafe-focus-room.png`,
+    image: `${ASSET_BASE}20261015-cafe-room-aligned-sun.png`,
+    debugImage: `${ASSET_BASE}20261015-cafe-room-empty-stage-wide.png`,
     focusViews: {
-      1: `${ASSET_BASE}20261012-cafe-bar-focus-view.png`,
-      2: `${ASSET_BASE}20261012-cafe-bar-focus-view.png`,
-      3: `${ASSET_BASE}20261012-cafe-bar-focus-view.png`,
-      4: `${ASSET_BASE}20261012-cafe-bar-focus-view.png`,
-      5: `${ASSET_BASE}20261012-cafe-window-focus-view.png`,
-      6: `${ASSET_BASE}20261012-cafe-window-focus-view.png`,
-      7: `${ASSET_BASE}20261012-cafe-window-focus-view.png`,
-      8: `${ASSET_BASE}20261012-cafe-window-focus-view.png`,
-      9: `${ASSET_BASE}20261012-cafe-lounge-focus-view.png`,
-      10: `${ASSET_BASE}20261012-cafe-lounge-focus-view.png`,
+      1: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
+      2: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
+      3: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
+      4: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
+      5: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`,
+      6: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`,
     },
-    description: "雨落在窗上，咖啡机偶尔轻响。选一张熟悉的桌子，和岛民们安静地做自己的事。",
-    sounds: ["细雨", "咖啡馆底噪", "偶尔杯碟声"],
+    description: "从晴日、雨雾到黄昏与月夜，选一种今天需要的光线，和岛民们安静地做自己的事。",
+    sounds: ["咖啡馆底噪", "窗外环境声", "偶尔杯碟声"],
     filter: 620,
     rooms: [
-      { id: "cafe-rain", name: "临窗雨声", mood: "雨声更清晰，适合写作与深度工作", occupied: 0 },
-      { id: "cafe-morning", name: "晨光吧台", mood: "温暖、明亮，适合开始一天", occupied: 0, locked: true },
-      { id: "cafe-night", name: "深夜角落", mood: "灯光更暗，适合晚间学习", occupied: 0, locked: true },
+      { id: "cafe-sun", name: "晴日花房", mood: "明亮日光 · 适合开始与轻任务", description: "让充足的自然光，陪你轻轻开始今天的任务。", occupied: 0, image: `${ASSET_BASE}20261015-cafe-room-aligned-sun.png`, selectorImage: `${ASSET_BASE}20261015-晴天阳光场景.png`, sounds: ["晴朗日光", "咖啡馆底噪", "轻松开始"] },
+      { id: "cafe-rain", name: "雨雾清晨", mood: "柔和雨声 · 适合写作与深度工作", description: "雨雾收住了城市的喧闹，适合把注意力留给一件事。", occupied: 0, image: `${ASSET_BASE}20261015-cafe-room-empty-stage-wide.png`, selectorImage: `${ASSET_BASE}20261015-雨雾清晨学习场景.png`, sounds: ["细雨", "窗上雨声", "深度工作"] },
+      { id: "cafe-sunset", name: "金色黄昏", mood: "温暖夕照 · 适合整理与复盘", description: "金色的光落在木地板上，适合把今天慢慢收好。", occupied: 0, image: `${ASSET_BASE}20261015-cafe-room-aligned-sunset.png`, selectorImage: `${ASSET_BASE}20261015-金色黄昏学习场景.png`, sounds: ["黄昏街声", "杯碟轻响", "整理复盘"] },
+      { id: "cafe-night", name: "月夜书室", mood: "安静月色 · 适合夜间学习", description: "月光与室内暖灯一起亮着，陪你完成今天最后一段专注。", occupied: 0, image: `${ASSET_BASE}20261015-cafe-room-aligned-night.png`, selectorImage: `${ASSET_BASE}20261015-晴朗月夜学习场景.png`, sounds: ["安静月色", "远处城市", "夜间学习"] },
     ],
     seats: [
-      [18, 46, false], [28, 40, false], [36, 42, false], [42, 35, false],
-      [60, 41, false], [71, 43, false], [80, 43, false], [92, 49, false],
-      [37, 66, false], [65, 68, false],
+      [32, 49, false], [37, 49, false],
+      [71, 50, false], [80, 51, false],
+      [15.5, 67, false], [66, 72, false],
+    ],
+    // One authoritative mapping for UI marker -> API seatId -> chair -> avatar.
+    // The array index above is always seatId - 1.
+    seatBindings: {
+      1: { chairObjectId: "seat-01-chair", avatarObjectId: "seat-01-avatar" },
+      2: { chairObjectId: "seat-02-chair", avatarObjectId: "seat-02-avatar" },
+      3: { chairObjectId: "seat-03-chair", avatarObjectId: "seat-03-avatar" },
+      4: { chairObjectId: "seat-04-chair", avatarObjectId: "seat-04-avatar" },
+      5: { chairObjectId: "seat-05-chair", avatarObjectId: "seat-05-avatar", oppositeChairObjectId: "seat-05-opposite-chair", tableObjectId: "sofa-red-table", rugObjectId: "sofa-red-rug" },
+      6: { chairObjectId: "seat-06-chair", avatarObjectId: "seat-06-avatar", oppositeChairObjectId: "seat-06-opposite-chair", tableObjectId: "sofa-green-table", rugObjectId: "sofa-green-rug" },
+    },
+    seatActors: {
+      3: {
+        idleSheet: `${ASSET_BASE}20261014-cafe-avatar-window-idle-sheet.png`,
+        frameCount: 8,
+        left: 63.68,
+        top: 23.69,
+        width: 14.56,
+        height: 28.23,
+        scale: 1,
+        rotate: 0,
+        flipX: false,
+        zIndex: 24,
+      },
+    },
+    cafeSceneObjects: [
+      { id: "seat-01-chair", name: "1号吧台高脚凳", type: "chair", src: `${ASSET_BASE}20261015-cafe-chair-bar-tall-left.png`, left: 27.2, top: 40.3, width: 7.1, height: 16.5, scale: 1, rotate: 0, flipX: false, zIndex: 18, visible: true },
+      { id: "seat-02-chair", name: "2号吧台高脚凳", type: "chair", src: `${ASSET_BASE}20261015-cafe-chair-bar-tall-right.png`, left: 34.6, top: 39.4, width: 7.1, height: 16.5, scale: 1, rotate: 0, flipX: false, zIndex: 18, visible: true },
+      { id: "seat-01-avatar", name: "1号人物", type: "avatar", idleSheet: `${ASSET_BASE}20261014-cafe-avatar-seat-01-idle-sheet.png`, frameCount: 8, left: 24.8, top: 23.8, width: 13.2, height: 31.2, scale: 1, rotate: 0, flipX: false, zIndex: 28, visible: true },
+      { id: "seat-02-avatar", name: "2号人物", type: "avatar", idleSheet: `${ASSET_BASE}20261014-cafe-avatar-seat-02-idle-sheet.png`, frameCount: 8, left: 32.1, top: 23.6, width: 13.2, height: 31.2, scale: 1, rotate: 0, flipX: false, zIndex: 28, visible: true },
+      { id: "seat-03-chair", name: "3号窗边椅", type: "chair", src: `${ASSET_BASE}20261014-cafe-chair-window-left.png`, left: 66.1, top: 42.6, width: 9.5, height: 18.1, scale: 1, rotate: 0, flipX: false, zIndex: 16, visible: true },
+      { id: "seat-04-chair", name: "4号窗边椅", type: "chair", src: `${ASSET_BASE}20261014-cafe-chair-window-right.png`, left: 76.5, top: 43.5, width: 9.5, height: 18.1, scale: 1, rotate: 0, flipX: true, zIndex: 16, visible: true },
+      { id: "seat-03-avatar", name: "3号人物", type: "avatar", idleSheet: `${ASSET_BASE}20261014-cafe-avatar-window-idle-sheet.png`, frameCount: 8, left: 63.68, top: 23.69, width: 14.56, height: 28.23, scale: 1, rotate: 0, flipX: false, zIndex: 24, visible: true },
+      { id: "seat-04-avatar", name: "4号人物", type: "avatar", idleSheet: `${ASSET_BASE}20261014-cafe-avatar-seat-04-idle-sheet.png`, frameCount: 8, left: 74.2, top: 24.1, width: 14.56, height: 28.23, scale: 1, rotate: 0, flipX: true, zIndex: 24, visible: true },
+      { id: "sofa-red-rug", name: "红色地毯", type: "rug", src: `${ASSET_BASE}20261014-cafe-sofa-rug.png`, left: 7.5, top: 54.8, width: 37.8, height: 23.8, scale: 1, rotate: 0, flipX: false, zIndex: 9, visible: true },
+      { id: "sofa-red-table", name: "红色地毯桌子", type: "table", src: `${ASSET_BASE}20261014-cafe-sofa-table.png`, left: 18.2, top: 49.8, width: 15.8, height: 22.8, scale: 1, rotate: 0, flipX: false, zIndex: 20, visible: true },
+      { id: "sofa-green-rug", name: "绿色地毯", type: "rug", src: `${ASSET_BASE}20261014-cafe-sofa-green-rug.png`, left: 55.1, top: 62.2, width: 37.8, height: 23.8, scale: 1, rotate: 0, flipX: false, zIndex: 9, visible: true },
+      { id: "sofa-green-table", name: "绿色地毯桌子", type: "table", src: `${ASSET_BASE}20261014-cafe-sofa-table.png`, left: 64.6, top: 58.2, width: 15.8, height: 22.8, scale: 1, rotate: 0, flipX: false, zIndex: 20, visible: true },
+      { id: "seat-05-chair", name: "5号座椅（红色地毯）", type: "chair", src: `${ASSET_BASE}20261014-cafe-chair-sofa-left.png`, left: 7.5, top: 50.5, width: 12.5, height: 20.3, scale: 1, rotate: 0, flipX: false, zIndex: 17, visible: true },
+      { id: "seat-06-chair", name: "6号座椅（绿色地毯）", type: "chair", src: `${ASSET_BASE}20261014-cafe-chair-sofa-right.png`, left: 61.2, top: 58.2, width: 12.5, height: 20.3, scale: 1, rotate: 0, flipX: false, zIndex: 17, visible: true },
+      { id: "seat-05-avatar", name: "5号人物", type: "avatar", idleSheet: `${ASSET_BASE}20261014-cafe-avatar-seat-05-idle-sheet.png`, frameCount: 8, left: 5.1, top: 40.7, width: 14.1, height: 28.4, scale: 1, rotate: 0, flipX: false, zIndex: 29, visible: true },
+      { id: "seat-06-avatar", name: "6号人物", type: "avatar", idleSheet: `${ASSET_BASE}20261014-cafe-avatar-seat-06-idle-sheet.png`, frameCount: 8, left: 58.8, top: 48.4, width: 14.1, height: 28.4, scale: 1, rotate: 0, flipX: false, zIndex: 29, visible: true },
+      { id: "seat-05-opposite-chair", name: "5号对面椅（红色地毯）", type: "chair", src: `${ASSET_BASE}20261014-cafe-chair-sofa-opposite-left.png`, left: 31.5, top: 54.5, width: 13.8, height: 19.6, scale: 1, rotate: 0, flipX: false, zIndex: 26, visible: true },
+      { id: "seat-06-opposite-chair", name: "6号对面椅（绿色地毯）", type: "chair", src: `${ASSET_BASE}20261014-cafe-chair-sofa-opposite-right.png`, left: 80.2, top: 62.5, width: 13.8, height: 19.6, scale: 1, rotate: 0, flipX: true, zIndex: 26, visible: true },
     ],
   },
   library: {
@@ -50,19 +87,38 @@ const scenes = {
     islandLabel: "学院区",
     icon: "academy",
     online: 45,
-    image: `${ASSET_BASE}20261011-library-focus-room.png`,
+    image: `${ASSET_BASE}20261015-library-template-stage-wide.png`,
+    debugImage: `${ASSET_BASE}20261015-library-template-stage-wide.png`,
     description: "高窗把光铺在木桌上，翻页声很轻。这里适合阅读、备考，也适合把难题慢慢做完。",
     sounds: ["静谧室内", "轻微翻页", "壁炉声"],
     filter: 430,
     rooms: [
-      { id: "library-sun", name: "高窗阅览室", mood: "自然光充足，适合阅读和整理", occupied: 15 },
-      { id: "library-fire", name: "壁炉长桌", mood: "温暖稳定，适合长时间专注", occupied: 17 },
-      { id: "library-carrel", name: "独立书阁", mood: "更少视觉干扰，适合备考", occupied: 13 },
+      { id: "library-sun", name: "高窗阅览室", mood: "自然光充足，适合阅读和整理", occupied: 0 },
+      { id: "library-fire", name: "壁炉长桌", mood: "温暖稳定，适合长时间专注", occupied: 0 },
+      { id: "library-carrel", name: "独立书阁", mood: "更少视觉干扰，适合备考", occupied: 0 },
+    ],
+    seatBindings: {
+      1: { chairObjectId: "library-seat-01-chair", avatarObjectId: "library-seat-01-avatar", occupiedIncludesChair: true },
+      2: { chairObjectId: "library-seat-02-chair", avatarObjectId: "library-seat-02-avatar", occupiedIncludesChair: true },
+      3: { chairObjectId: "library-seat-03-chair", avatarObjectId: "library-seat-03-avatar" },
+      4: { chairObjectId: "library-seat-04-chair", avatarObjectId: "library-seat-04-avatar" },
+    },
+    sceneObjects: [
+      { id: "library-background-study-group", name: "背景四人学习区（不可选座）", type: "background-ambience", src: `${ASSET_BASE}20261016-library-background-four-student-study-group.png`, left: 14, top: 32, width: 36, height: 29, scale: 1, rotate: 0, flipX: false, zIndex: 12, visible: true },
+      { id: "library-four-seat-table", name: "四人长桌", type: "table", src: `${ASSET_BASE}20261016-library-four-seat-table-no-stretcher.png`, left: 22, top: 39, width: 56, height: 46, scale: 1, rotate: 5, flipX: true, zIndex: 18, visible: true },
+      { id: "library-seat-01-chair", name: "1号座椅", type: "chair", seatId: 1, src: `${ASSET_BASE}20261016-library-seat-01-chair-cropped.png`, left: 55, top: 53, width: 12, height: 28, scale: 1, rotate: 5, flipX: true, zIndex: 16, visible: true },
+      { id: "library-seat-02-chair", name: "2号座椅", type: "chair", seatId: 2, src: `${ASSET_BASE}20261016-library-seat-02-chair-cropped.png`, left: 37, top: 54, width: 12, height: 28, scale: 1, rotate: 5, flipX: true, zIndex: 16, visible: true },
+      { id: "library-seat-03-chair", name: "3号座椅", type: "chair", seatId: 3, src: `${ASSET_BASE}20261016-library-seat-03-chair-cropped.png`, left: 55, top: 39, width: 10.5, height: 23, scale: 1, rotate: 5, flipX: true, zIndex: 16, visible: true },
+      { id: "library-seat-04-chair", name: "4号座椅", type: "chair", seatId: 4, src: `${ASSET_BASE}20261016-library-seat-04-chair-cropped.png`, left: 39, top: 40, width: 10.5, height: 23, scale: 1, rotate: 5, flipX: true, zIndex: 16, visible: true },
+      { id: "library-four-seat-lamps", name: "长桌台灯", type: "lamp", src: `${ASSET_BASE}20261015-library-four-seat-lamps-layer.png`, left: 22, top: 39, width: 56, height: 46, scale: 1, rotate: 5, flipX: true, zIndex: 34, visible: true },
+      { id: "library-seat-01-avatar", name: "1号占座整体 · 绿背心女生+椅子", type: "avatar", seatId: 1, idleSheet: `${ASSET_BASE}20261016-library-seat-01-occupied-idle-sheet.png`, frameCount: 8, left: 53.5, top: 51, width: 18, height: 38, scale: 1, rotate: 0, flipX: true, zIndex: 26, visible: true },
+      { id: "library-seat-02-avatar", name: "2号占座整体 · 蓝毛衣男生+椅子", type: "avatar", seatId: 2, idleSheet: `${ASSET_BASE}20261016-library-seat-02-occupied-idle-sheet.png`, frameCount: 8, left: 29.5, top: 50.5, width: 21, height: 38, scale: 1, rotate: 0, flipX: true, zIndex: 27, visible: true },
+      { id: "library-seat-03-avatar", name: "3号人物 · 红毛衣办公", type: "avatar", seatId: 3, idleSheet: `${ASSET_BASE}20261016-library-seat-03-idle-sheet.png`, frameCount: 8, left: 46, top: 42, width: 18, height: 21, scale: 1, rotate: 0, flipX: true, zIndex: 24, visible: true },
+      { id: "library-seat-04-avatar", name: "4号人物 · 酒红毛衣学习", type: "avatar", seatId: 4, idleSheet: `${ASSET_BASE}20261016-library-seat-04-idle-sheet.png`, frameCount: 8, left: 25, top: 42.5, width: 19, height: 23, scale: 1, rotate: 0, flipX: true, zIndex: 24, visible: true },
     ],
     seats: [
-      [29, 43, true], [37, 45, true], [46, 45, false], [54, 44, true],
-      [39, 67, false], [48, 67, true], [58, 67, true], [67, 65, false],
-      [77, 49, true], [86, 51, false],
+      [64, 75, false], [37, 74, false],
+      [57, 51, false], [35, 52, false],
     ],
   },
   forest: {
@@ -96,12 +152,31 @@ const STORAGE_KEYS = {
   activeSession: "focusIslandActiveSessionV1",
   history: "focusIslandHistoryV1",
   guestIdentity: "focusIslandGuestIdentityV2",
+  cafeSpriteTuning: "focusIslandCafeSpriteTuningV2",
+  // V5 resets stale editor drafts that were created before the scene layout
+  // was fixed. Older drafts can otherwise override the restored coordinates.
+  cafeSceneEditor: "focusIslandCafeSceneEditorV6",
+  cafeScenePublished: "focusIslandCafeScenePublishedV1",
+  librarySceneEditor: "focusIslandLibrarySceneEditorV1",
+  libraryScenePublished: "focusIslandLibraryScenePublishedV1",
 };
+
+const initialCafeSceneEditor = loadCafeSceneEditorState();
+const initialCafeScenePublished = loadCafeScenePublishedState() || cloneCafeSceneLayout(initialCafeSceneEditor);
+if (!localStorage.getItem(STORAGE_KEYS.cafeScenePublished)) {
+  localStorage.setItem(STORAGE_KEYS.cafeScenePublished, JSON.stringify(initialCafeScenePublished));
+}
+const initialLibrarySceneEditor = loadLibrarySceneLayout(STORAGE_KEYS.librarySceneEditor) || emptySceneLayout();
+const initialLibraryScenePublished = loadLibrarySceneLayout(STORAGE_KEYS.libraryScenePublished) || cloneCafeSceneLayout(initialLibrarySceneEditor);
+if (!localStorage.getItem(STORAGE_KEYS.libraryScenePublished)) {
+  localStorage.setItem(STORAGE_KEYS.libraryScenePublished, JSON.stringify(initialLibraryScenePublished));
+}
 
 const state = {
   view: "welcome",
   sceneId: null,
   roomId: null,
+  roomPreviewId: null,
   selectedSeat: null,
   timerMode: 25,
   durationSeconds: 25 * 60,
@@ -117,8 +192,38 @@ const state = {
   roomPresence: { leases: [], serverNow: Date.now() },
   currentSeatId: null,
   switchingFromSeatId: null,
+  awaitingImmersiveFocus: false,
+  immersiveAutoEnterAt: null,
+  sessionPanelOpen: false,
+  focusImageChoice: "seat",
+  cafeSpriteTuning: {
+    enabled: false,
+    activeSeatId: 3,
+    draftBySeatId: loadCafeSpriteTuningDrafts(),
+  },
+  cafeDebugMode: {
+    enabled: false,
+    previewOccupiedSeatId: 3,
+    disableAutoImmersive: true,
+  },
+  cafeSceneEditor: {
+    activeObjectId: "seat-03-avatar",
+    draftByObjectId: initialCafeSceneEditor.draftByObjectId,
+    customObjects: initialCafeSceneEditor.customObjects,
+    deletedObjectIds: initialCafeSceneEditor.deletedObjectIds,
+  },
+  cafeScenePublished: initialCafeScenePublished,
+  libraryDebugMode: { enabled: false },
+  libraryCurrentSeatId: null,
+  librarySceneEditor: {
+    activeObjectId: "",
+    draftByObjectId: initialLibrarySceneEditor.draftByObjectId,
+    customObjects: initialLibrarySceneEditor.customObjects,
+    deletedObjectIds: initialLibrarySceneEditor.deletedObjectIds,
+  },
+  libraryScenePublished: initialLibraryScenePublished,
   feedback: null,
-  sounds: { ambient: true, presence: true, white: false },
+  sounds: { ambient: true, presence: true, white: false, music: false },
 };
 
 let ticker = null;
@@ -131,8 +236,9 @@ let noiseFilter = null;
 let populationTimer = null;
 let roomSyncTimer = null;
 let heartbeatTimer = null;
+let immersiveAutoTimer = null;
 let roomSyncInFlight = false;
-let cafeOccupantPreload = null;
+let cafeSceneObjectDrag = null;
 
 const identity = getOrCreateIdentity();
 
@@ -184,16 +290,73 @@ async function api(path, options = {}) {
 }
 
 function currentRoomApiId() {
-  return state.sceneId === "cafe" ? "cafe-rain" : state.roomId;
+  return state.roomId || (state.sceneId === "cafe" ? scenes.cafe.rooms[0].id : null);
 }
 
 function leaseForSeat(seatIndex) {
-  return state.roomPresence.leases.find((lease) => Number(lease.seatId) === seatIndex + 1) || null;
+  return state.roomPresence.leases.find((lease) => Number(lease.seatId) === seatIndex + 1 && lease.state === "occupied") || null;
 }
 
 function focusedMinutes(lease) {
   if (!lease.focusStartedAt) return 0;
   return Math.max(0, Math.floor(((state.roomPresence.serverNow || Date.now()) - Number(lease.focusStartedAt)) / 60000));
+}
+
+function immersiveCountdownSeconds() {
+  if (!state.immersiveAutoEnterAt) return Math.ceil(CAFE_IMMERSIVE_AUTO_ENTER_MS / 1000);
+  return Math.max(0, Math.ceil((state.immersiveAutoEnterAt - Date.now()) / 1000));
+}
+
+function updateImmersiveCountdownCopy() {
+  const note = document.querySelector("[data-immersive-countdown]");
+  if (note) note.textContent = `已坐下，专注已开始 · ${immersiveCountdownSeconds()} 秒后自动进入沉浸式专注`;
+}
+
+function clearImmersiveAutoEnter({ resetState = true } = {}) {
+  if (immersiveAutoTimer) window.clearInterval(immersiveAutoTimer);
+  immersiveAutoTimer = null;
+  if (resetState) {
+    state.awaitingImmersiveFocus = false;
+    state.immersiveAutoEnterAt = null;
+  }
+}
+
+function startFocusFromSeat() {
+  state.isRunning = true;
+  state.sessionStartedAt = state.sessionStartedAt || Date.now();
+  lastTick = Date.now();
+  startTicker();
+  updateAudio();
+}
+
+function beginImmersiveAutoEnter() {
+  if (state.cafeDebugMode.enabled && state.cafeDebugMode.disableAutoImmersive) {
+    clearImmersiveAutoEnter();
+    return;
+  }
+  clearImmersiveAutoEnter({ resetState: false });
+  state.awaitingImmersiveFocus = true;
+  state.immersiveAutoEnterAt = Date.now() + CAFE_IMMERSIVE_AUTO_ENTER_MS;
+  immersiveAutoTimer = window.setInterval(() => {
+    if (state.view !== "room" || !state.awaitingImmersiveFocus) {
+      clearImmersiveAutoEnter();
+      return;
+    }
+    updateImmersiveCountdownCopy();
+    if (immersiveCountdownSeconds() <= 0) enterImmersiveFocus();
+  }, 250);
+}
+
+function enterImmersiveFocus() {
+  if (state.sceneId !== "cafe" || state.selectedSeat === null) return;
+  clearImmersiveAutoEnter();
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const roomView = document.querySelector(".view.room");
+  roomView?.classList.add("entering-focus");
+  window.setTimeout(() => {
+    state.view = "focus";
+    render();
+  }, reduceMotion ? 0 : 760);
 }
 
 function stopRoomPresence() {
@@ -204,31 +367,781 @@ function stopRoomPresence() {
   roomSyncInFlight = false;
 }
 
-function preloadCafeOccupants() {
-  if (cafeOccupantPreload) return cafeOccupantPreload;
-  cafeOccupantPreload = Promise.all(CAFE_OCCUPANT_IMAGES.map((source) => new Promise((resolve) => {
-    const image = new Image();
-    image.onload = () => image.decode?.().catch(() => {}).finally(resolve) || resolve();
-    image.onerror = resolve;
-    image.src = source;
-  })));
-  return cafeOccupantPreload;
+function cafeVisibleSeats() {
+  return cafeVisibleSeatEntries().map((entry) => entry.seat);
 }
 
-function renderCafeOccupantLayers() {
-  const occupiedSeats = new Set(state.roomPresence.leases.map((lease) => Number(lease.seatId)));
+function cafeVisibleSeatEntries() {
+  return scenes.cafe.seats.map((seat, index) => ({ seat, index }));
+}
+
+function cafeVisibleLeases(leases = state.roomPresence.leases) {
+  const visibleSeatIds = new Set(cafeVisibleSeatEntries().map((entry) => entry.index + 1));
+  return leases.filter((lease) => visibleSeatIds.has(Number(lease.seatId)));
+}
+
+function loadCafeSpriteTuningDrafts() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.cafeSpriteTuning) || "{}");
+    return saved && typeof saved === "object" ? saved : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveCafeSpriteTuningDrafts() {
+  localStorage.setItem(STORAGE_KEYS.cafeSpriteTuning, JSON.stringify(state.cafeSpriteTuning.draftBySeatId));
+}
+
+function roundTuningNumber(value, digits = 2) {
+  return Number(Number(value).toFixed(digits));
+}
+
+function defaultCafeSpriteTuning(seatId) {
+  const actor = scenes.cafe.seatActors[seatId] || {};
+  return {
+    left: Number(actor.left || 0),
+    top: Number(actor.top || 0),
+    width: Number(actor.width || 10),
+    height: Number(actor.height || 10),
+    scale: Number(actor.scale || 1),
+    rotate: Number(actor.rotate || 0),
+    flipX: Boolean(actor.flipX),
+    zIndex: Number(actor.zIndex || 24),
+  };
+}
+
+function cafeSpriteTuningForSeat(seatId) {
+  const draft = state.cafeSpriteTuning.draftBySeatId[seatId] || {};
+  return { ...defaultCafeSpriteTuning(seatId), ...draft };
+}
+
+function loadCafeSceneEditorState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.cafeSceneEditor) || "{}");
+    if (!saved || typeof saved !== "object") {
+      return { draftByObjectId: {}, customObjects: [], deletedObjectIds: [] };
+    }
+    if (saved.draftByObjectId || saved.customObjects || saved.deletedObjectIds) {
+      return {
+        draftByObjectId: saved.draftByObjectId && typeof saved.draftByObjectId === "object" ? saved.draftByObjectId : {},
+        customObjects: Array.isArray(saved.customObjects) ? saved.customObjects : [],
+        deletedObjectIds: Array.isArray(saved.deletedObjectIds) ? saved.deletedObjectIds : [],
+      };
+    }
+    return { draftByObjectId: saved, customObjects: [], deletedObjectIds: [] };
+  } catch (_) {
+    return { draftByObjectId: {}, customObjects: [], deletedObjectIds: [] };
+  }
+}
+
+function saveCafeSceneEditorDrafts() {
+  localStorage.setItem(STORAGE_KEYS.cafeSceneEditor, JSON.stringify({
+    draftByObjectId: state.cafeSceneEditor.draftByObjectId,
+    customObjects: state.cafeSceneEditor.customObjects,
+    deletedObjectIds: state.cafeSceneEditor.deletedObjectIds,
+  }));
+}
+
+function cloneCafeSceneLayout(layout) {
+  return {
+    draftByObjectId: JSON.parse(JSON.stringify(layout?.draftByObjectId || {})),
+    customObjects: JSON.parse(JSON.stringify(layout?.customObjects || [])),
+    deletedObjectIds: [...(layout?.deletedObjectIds || [])],
+  };
+}
+
+function emptySceneLayout() {
+  return { draftByObjectId: {}, customObjects: [], deletedObjectIds: [] };
+}
+
+function loadLibrarySceneLayout(storageKey) {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== "object") return null;
+    return cloneCafeSceneLayout(saved);
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveLibrarySceneEditorDrafts() {
+  localStorage.setItem(STORAGE_KEYS.librarySceneEditor, JSON.stringify(cloneCafeSceneLayout(state.librarySceneEditor)));
+}
+
+function publishLibrarySceneLayout() {
+  state.libraryScenePublished = cloneCafeSceneLayout(state.librarySceneEditor);
+  localStorage.setItem(STORAGE_KEYS.libraryScenePublished, JSON.stringify(state.libraryScenePublished));
+}
+
+function librarySceneObjects({ includeEditorState = state.libraryDebugMode.enabled } = {}) {
+  const layout = includeEditorState ? state.librarySceneEditor : state.libraryScenePublished;
+  const deleted = new Set(layout?.deletedObjectIds || []);
+  return [...(scenes.library.sceneObjects || []), ...(layout?.customObjects || [])].filter((object) => !deleted.has(object.id));
+}
+
+function librarySceneObjectById(objectId) {
+  return librarySceneObjects().find((object) => object.id === objectId) || null;
+}
+
+function librarySeatMarkerObjectId(index) {
+  return `library-seat-marker-${String(index + 1).padStart(2, "0")}`;
+}
+
+function librarySeatMarkerIndex(objectId) {
+  const match = objectId.match(/^library-seat-marker-(\d{2})$/);
+  if (!match) return null;
+  const index = Number(match[1]) - 1;
+  return index >= 0 && index < scenes.library.seats.length ? index : null;
+}
+
+function librarySeatMarkerObjectById(objectId) {
+  const index = librarySeatMarkerIndex(objectId);
+  if (index === null) return null;
+  const [left, top] = scenes.library.seats[index];
+  return {
+    id: objectId,
+    name: `${index + 1}号座位编号`,
+    type: "seat-marker",
+    left,
+    top,
+    width: 10,
+    height: 5,
+    scale: 1,
+    rotate: 0,
+    flipX: false,
+    zIndex: 60,
+    visible: true,
+  };
+}
+
+function libraryEditorObjects() {
+  const markers = scenes.library.seats.map((_, index) => librarySeatMarkerObjectById(librarySeatMarkerObjectId(index)));
+  return [...librarySceneObjects(), ...markers];
+}
+
+function libraryEditorObjectById(objectId) {
+  return librarySceneObjectById(objectId) || librarySeatMarkerObjectById(objectId);
+}
+
+function isLibrarySeatMarkerObject(objectId) {
+  return librarySeatMarkerIndex(objectId) !== null;
+}
+
+function defaultLibrarySceneObjectConfig(objectId) {
+  const object = libraryEditorObjectById(objectId) || {};
+  return {
+    left: Number(object.left || 0),
+    top: Number(object.top || 0),
+    width: Number(object.width || 10),
+    height: Number(object.height || 10),
+    scale: Number(object.scale || 1),
+    rotate: Number(object.rotate || 0),
+    flipX: Boolean(object.flipX),
+    zIndex: Number(object.zIndex || 20),
+    visible: object.visible !== false,
+  };
+}
+
+function librarySceneObjectConfig(objectId, { includeEditorDraft = state.libraryDebugMode.enabled } = {}) {
+  const layout = includeEditorDraft ? state.librarySceneEditor : state.libraryScenePublished;
+  return { ...defaultLibrarySceneObjectConfig(objectId), ...(layout?.draftByObjectId?.[objectId] || {}) };
+}
+
+function updateLibrarySceneObject(objectId, patch) {
+  if (!libraryEditorObjectById(objectId)) return;
+  const current = librarySceneObjectConfig(objectId);
+  state.librarySceneEditor.draftByObjectId[objectId] = normalizeCafeSceneObjectConfig({ ...current, ...patch });
+  saveLibrarySceneEditorDrafts();
+  applyLibrarySceneObjectToDom(objectId);
+}
+
+function resetLibrarySceneObject(objectId) {
+  delete state.librarySceneEditor.draftByObjectId[objectId];
+  saveLibrarySceneEditorDrafts();
+  applyLibrarySceneObjectToDom(objectId);
+}
+
+function duplicateLibrarySceneObject(objectId) {
+  if (isLibrarySeatMarkerObject(objectId)) return null;
+  const sourceObject = librarySceneObjectById(objectId);
+  if (!sourceObject) return null;
+  const sourceConfig = librarySceneObjectConfig(objectId);
+  const copyId = `${objectId}-copy-${Date.now().toString(36).slice(-5)}`;
+  state.librarySceneEditor.customObjects.push({
+    ...sourceObject,
+    ...sourceConfig,
+    id: copyId,
+    name: `${sourceObject.name || objectId} 副本`,
+    left: clampScenePercent(sourceConfig.left + 2),
+    top: clampScenePercent(sourceConfig.top + 2),
+    zIndex: sourceConfig.zIndex + 1,
+  });
+  state.librarySceneEditor.activeObjectId = copyId;
+  saveLibrarySceneEditorDrafts();
+  return copyId;
+}
+
+function deleteLibrarySceneObject(objectId) {
+  if (isLibrarySeatMarkerObject(objectId)) return false;
+  const object = librarySceneObjectById(objectId);
+  if (!object) return false;
+  state.librarySceneEditor.customObjects = state.librarySceneEditor.customObjects.filter((item) => item.id !== objectId);
+  if ((scenes.library.sceneObjects || []).some((item) => item.id === objectId) && !state.librarySceneEditor.deletedObjectIds.includes(objectId)) {
+    state.librarySceneEditor.deletedObjectIds.push(objectId);
+  }
+  delete state.librarySceneEditor.draftByObjectId[objectId];
+  state.librarySceneEditor.activeObjectId = librarySceneObjects().find((item) => item.id !== objectId)?.id || "";
+  saveLibrarySceneEditorDrafts();
+  return true;
+}
+
+function allLibrarySceneObjectConfigs() {
+  return Object.fromEntries(libraryEditorObjects().map((object) => [object.id, { ...object, ...librarySceneObjectConfig(object.id) }]));
+}
+
+function applyLibrarySceneObjectToDom(objectId) {
+  const config = librarySceneObjectConfig(objectId);
+  const element = document.querySelector(`[data-library-scene-object="${objectId}"], [data-library-seat-marker-object="${objectId}"]`);
+  if (element) {
+    element.style.setProperty("--object-left", `${config.left}%`);
+    element.style.setProperty("--object-top", `${config.top}%`);
+    element.style.setProperty("--object-width", `${config.width}%`);
+    element.style.setProperty("--object-height", `${config.height}%`);
+    element.style.setProperty("--object-scale", config.scale);
+    element.style.setProperty("--object-rotate", `${config.rotate}deg`);
+    element.style.setProperty("--object-flip", config.flipX ? -1 : 1);
+    element.style.setProperty("--object-z-index", config.zIndex);
+    element.classList.toggle("is-hidden", !config.visible);
+    if (element.matches("[data-library-seat-marker-object]")) {
+      element.style.left = `${config.left}%`;
+      element.style.top = `${config.top}%`;
+    }
+  }
+  document.querySelectorAll("[data-library-object-value]").forEach((output) => {
+    const field = output.dataset.libraryObjectValue;
+    output.textContent = field === "flipX" || field === "visible" ? (config[field] ? "开启" : "关闭") : config[field];
+  });
+  document.querySelectorAll("[data-library-object-option]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.libraryObjectOption === objectId);
+  });
+  document.querySelectorAll("[data-library-scene-object]").forEach((sceneObject) => {
+    sceneObject.classList.toggle("is-selected", sceneObject.dataset.librarySceneObject === objectId);
+  });
+  document.querySelectorAll("[data-library-seat-marker-object]").forEach((marker) => {
+    marker.classList.toggle("is-selected", marker.dataset.librarySeatMarkerObject === objectId);
+  });
+}
+
+function loadCafeScenePublishedState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.cafeScenePublished);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== "object") return null;
+    return cloneCafeSceneLayout(saved);
+  } catch (_) {
+    return null;
+  }
+}
+
+function publishCafeSceneLayout() {
+  state.cafeScenePublished = cloneCafeSceneLayout(state.cafeSceneEditor);
+  localStorage.setItem(STORAGE_KEYS.cafeScenePublished, JSON.stringify(state.cafeScenePublished));
+}
+
+function cafeSceneObjects({ includeEditorState = state.cafeDebugMode.enabled } = {}) {
+  const layout = includeEditorState ? state.cafeSceneEditor : state.cafeScenePublished;
+  const deleted = new Set(layout?.deletedObjectIds || []);
+  return [...scenes.cafe.cafeSceneObjects, ...(layout?.customObjects || [])].filter((object) => !deleted.has(object.id));
+}
+
+function cafeSceneObjectById(objectId) {
+  return cafeSceneObjects().find((object) => object.id === objectId) || null;
+}
+
+function cafeSeatMarkerObjectId(index) {
+  return `seat-marker-${String(index + 1).padStart(2, "0")}`;
+}
+
+function cafeSeatMarkerIndex(objectId) {
+  const match = objectId.match(/^seat-marker-(\d{2})$/);
+  if (!match) return null;
+  const index = Number(match[1]) - 1;
+  return index >= 0 && index < scenes.cafe.seats.length ? index : null;
+}
+
+function cafeSeatMarkerObjectById(objectId) {
+  const index = cafeSeatMarkerIndex(objectId);
+  if (index === null) return null;
+  const [left, top] = scenes.cafe.seats[index];
+  return {
+    id: objectId,
+    name: `${index + 1}号座位标记`,
+    type: "seat-marker",
+    left,
+    top,
+    width: 10,
+    height: 5,
+    scale: 1,
+    rotate: 0,
+    flipX: false,
+    zIndex: 60,
+    visible: true,
+  };
+}
+
+function cafeEditorObjects() {
+  const markerObjects = scenes.cafe.seats.map((_, index) => cafeSeatMarkerObjectById(cafeSeatMarkerObjectId(index)));
+  return [...cafeSceneObjects(), ...markerObjects];
+}
+
+function cafeEditorObjectById(objectId) {
+  return cafeSceneObjectById(objectId) || cafeSeatMarkerObjectById(objectId);
+}
+
+function isCafeSeatMarkerObject(objectId) {
+  return cafeSeatMarkerIndex(objectId) !== null;
+}
+
+function defaultCafeSceneObjectConfig(objectId) {
+  const object = cafeEditorObjectById(objectId) || {};
+  return {
+    left: Number(object.left || 0),
+    top: Number(object.top || 0),
+    width: Number(object.width || 10),
+    height: Number(object.height || 10),
+    scale: Number(object.scale || 1),
+    rotate: Number(object.rotate || 0),
+    flipX: Boolean(object.flipX),
+    zIndex: Number(object.zIndex || 20),
+    visible: object.visible !== false,
+  };
+}
+
+function cafeSceneObjectConfig(objectId, { includeEditorDraft = state.cafeDebugMode.enabled } = {}) {
+  const layout = includeEditorDraft ? state.cafeSceneEditor : state.cafeScenePublished;
+  const draft = layout?.draftByObjectId?.[objectId] || {};
+  return { ...defaultCafeSceneObjectConfig(objectId), ...draft };
+}
+
+function normalizeCafeSceneObjectConfig(next) {
+  return {
+    left: roundTuningNumber(next.left),
+    top: roundTuningNumber(next.top),
+    width: roundTuningNumber(Math.max(1, Math.min(80, next.width))),
+    height: roundTuningNumber(Math.max(1, Math.min(80, next.height))),
+    scale: roundTuningNumber(Math.max(0.1, Math.min(3, next.scale))),
+    rotate: roundTuningNumber(Math.max(-45, Math.min(45, next.rotate))),
+    flipX: Boolean(next.flipX),
+    zIndex: Math.round(Math.max(1, Math.min(120, next.zIndex))),
+    visible: next.visible !== false,
+  };
+}
+
+function updateCafeSceneObject(objectId, patch) {
+  if (!cafeEditorObjectById(objectId)) return;
+  const current = cafeSceneObjectConfig(objectId);
+  state.cafeSceneEditor.draftByObjectId[objectId] = normalizeCafeSceneObjectConfig({ ...current, ...patch });
+  saveCafeSceneEditorDrafts();
+  applyCafeSceneObjectToDom(objectId);
+}
+
+function clampScenePercent(value) {
+  return roundTuningNumber(Math.max(-20, Math.min(120, value)));
+}
+
+function cafeScenePointerPosition(event, stageElement) {
+  const rect = stageElement.getBoundingClientRect();
+  return {
+    left: ((event.clientX - rect.left) / rect.width) * 100,
+    top: ((event.clientY - rect.top) / rect.height) * 100,
+  };
+}
+
+function resetCafeSceneObject(objectId) {
+  delete state.cafeSceneEditor.draftByObjectId[objectId];
+  saveCafeSceneEditorDrafts();
+  applyCafeSceneObjectToDom(objectId);
+}
+
+function allCafeSceneObjectConfigs() {
+  return Object.fromEntries(cafeEditorObjects().map((object) => [object.id, { ...object, ...cafeSceneObjectConfig(object.id) }]));
+}
+
+function cafeSceneAvatarSeatId(object) {
+  const binding = Object.entries(scenes.cafe.seatBindings).find(([, value]) => value.avatarObjectId === object.id);
+  return binding ? Number(binding[0]) : null;
+}
+
+function isCafeAvatarObject(object) {
+  return object.type === "avatar" || Boolean(object.idleSheet);
+}
+
+function shouldRenderCafeSceneObject(object, config, { editor = false } = {}) {
+  if (editor) return true;
+  if (!config.visible) return false;
+  const avatarSeatId = cafeSceneAvatarSeatId(object);
+  if (!avatarSeatId) return !isCafeAvatarObject(object);
+  return state.roomPresence.leases.some((lease) => Number(lease.seatId) === avatarSeatId && lease.state === "occupied");
+}
+
+function duplicateCafeSceneObject(objectId) {
+  if (isCafeSeatMarkerObject(objectId)) return null;
+  const sourceObject = cafeSceneObjectById(objectId);
+  if (!sourceObject) return null;
+  const sourceConfig = cafeSceneObjectConfig(objectId);
+  const copyId = `${objectId}-copy-${Date.now().toString(36).slice(-5)}`;
+  const copyObject = {
+    ...sourceObject,
+    id: copyId,
+    name: `${sourceObject.name || objectId} 副本`,
+    left: clampScenePercent(sourceConfig.left + 2),
+    top: clampScenePercent(sourceConfig.top + 2),
+    width: sourceConfig.width,
+    height: sourceConfig.height,
+    scale: sourceConfig.scale,
+    rotate: sourceConfig.rotate,
+    flipX: sourceConfig.flipX,
+    zIndex: sourceConfig.zIndex + 1,
+    visible: true,
+  };
+  state.cafeSceneEditor.customObjects.push(copyObject);
+  state.cafeSceneEditor.activeObjectId = copyId;
+  saveCafeSceneEditorDrafts();
+  return copyId;
+}
+
+function deleteCafeSceneObject(objectId) {
+  if (isCafeSeatMarkerObject(objectId)) return false;
+  const object = cafeSceneObjectById(objectId);
+  if (!object) return false;
+  state.cafeSceneEditor.customObjects = state.cafeSceneEditor.customObjects.filter((item) => item.id !== objectId);
+  if (scenes.cafe.cafeSceneObjects.some((item) => item.id === objectId) && !state.cafeSceneEditor.deletedObjectIds.includes(objectId)) {
+    state.cafeSceneEditor.deletedObjectIds.push(objectId);
+  }
+  delete state.cafeSceneEditor.draftByObjectId[objectId];
+  const nextObject = cafeSceneObjects().find((item) => item.id !== objectId) || null;
+  state.cafeSceneEditor.activeObjectId = nextObject?.id || "";
+  saveCafeSceneEditorDrafts();
+  return true;
+}
+
+function applyCafeSceneObjectToDom(objectId) {
+  const config = cafeSceneObjectConfig(objectId);
+  const objectElement = document.querySelector(`[data-cafe-scene-object="${objectId}"], [data-cafe-seat-marker-object="${objectId}"]`);
+  if (objectElement) {
+    objectElement.style.setProperty("--object-left", `${config.left}%`);
+    objectElement.style.setProperty("--object-top", `${config.top}%`);
+    objectElement.style.setProperty("--object-width", `${config.width}%`);
+    objectElement.style.setProperty("--object-height", `${config.height}%`);
+    objectElement.style.setProperty("--object-scale", config.scale);
+    objectElement.style.setProperty("--object-rotate", `${config.rotate}deg`);
+    objectElement.style.setProperty("--object-flip", config.flipX ? -1 : 1);
+    objectElement.style.setProperty("--object-z-index", config.zIndex);
+    objectElement.classList.toggle("is-hidden", !config.visible);
+    if (objectElement.matches("[data-cafe-seat-marker-object]")) {
+      objectElement.style.left = `${config.left}%`;
+      objectElement.style.top = `${config.top}%`;
+    }
+  }
+  document.querySelectorAll("[data-object-value]").forEach((element) => {
+    const field = element.dataset.objectValue;
+    element.textContent = field === "flipX" || field === "visible" ? (config[field] ? "开启" : "关闭") : config[field];
+  });
+  document.querySelectorAll("[data-object-input]").forEach((input) => {
+    const field = input.dataset.objectInput;
+    const value = config[field];
+    if (String(input.value) !== String(value)) input.value = value;
+  });
+  document.querySelectorAll("[data-cafe-object-option]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.cafeObjectOption === objectId);
+  });
+  document.querySelectorAll("[data-cafe-scene-object]").forEach((element) => {
+    element.classList.toggle("is-selected", element.dataset.cafeSceneObject === objectId);
+  });
+  document.querySelectorAll("[data-cafe-seat-marker-object]").forEach((element) => {
+    element.classList.toggle("is-selected", element.dataset.cafeSeatMarkerObject === objectId);
+  });
+}
+
+function updateCafeSpriteTuning(seatId, patch) {
+  const current = cafeSpriteTuningForSeat(seatId);
+  const next = { ...current, ...patch };
+  const normalized = {
+    left: roundTuningNumber(next.left),
+    top: roundTuningNumber(next.top),
+    width: roundTuningNumber(next.width),
+    height: roundTuningNumber(next.height),
+    scale: roundTuningNumber(Math.max(0.5, Math.min(1.8, next.scale))),
+    rotate: roundTuningNumber(Math.max(-20, Math.min(20, next.rotate))),
+    flipX: Boolean(next.flipX),
+    zIndex: Math.round(Math.max(1, Math.min(99, next.zIndex))),
+  };
+  state.cafeSpriteTuning.draftBySeatId[seatId] = normalized;
+  saveCafeSpriteTuningDrafts();
+  applyCafeSpriteTuningToDom(seatId);
+}
+
+function resetCafeSpriteTuning(seatId) {
+  delete state.cafeSpriteTuning.draftBySeatId[seatId];
+  saveCafeSpriteTuningDrafts();
+  applyCafeSpriteTuningToDom(seatId);
+}
+
+function applyCafeSpriteTuningToDom(seatId) {
+  const config = cafeSpriteTuningForSeat(seatId);
+  const sprite = document.querySelector(`[data-cafe-seat-actor="${seatId}"]`);
+  if (sprite) {
+    sprite.style.setProperty("--sprite-left", `${config.left}%`);
+    sprite.style.setProperty("--sprite-top", `${config.top}%`);
+    sprite.style.setProperty("--sprite-width", `${config.width}%`);
+    sprite.style.setProperty("--sprite-height", `${config.height}%`);
+    sprite.style.setProperty("--sprite-scale", config.scale);
+    sprite.style.setProperty("--sprite-rotate", `${config.rotate}deg`);
+    sprite.style.setProperty("--sprite-flip", config.flipX ? -1 : 1);
+    sprite.style.setProperty("--sprite-z-index", config.zIndex);
+  }
+  document.querySelectorAll("[data-tune-value]").forEach((element) => {
+    const field = element.dataset.tuneValue;
+    element.textContent = field === "flipX" ? (config.flipX ? "开启" : "关闭") : config[field];
+  });
+  document.querySelectorAll("[data-tune-input]").forEach((input) => {
+    const field = input.dataset.tuneInput;
+    const value = config[field];
+    if (String(input.value) !== String(value)) input.value = value;
+  });
+}
+
+function renderCafeSpriteTuningPanel() {
+  if (!state.cafeDebugMode.enabled) {
+    return `<button class="sprite-tuning-toggle" data-action="toggle-cafe-debug-mode">开发者调试模式</button>`;
+  }
+  const objectId = state.cafeSceneEditor.activeObjectId;
+  const objects = cafeEditorObjects();
+  const activeObject = cafeEditorObjectById(objectId) || objects[0];
+  if (!activeObject) {
+    return `
+      <aside class="sprite-tuning-panel" aria-label="角色位置调试面板">
+        <div class="sprite-tuning-head">
+          <strong>咖啡厅场景编辑器</strong>
+          <button type="button" data-action="toggle-cafe-debug-mode">关闭调试</button>
+        </div>
+        <p class="sprite-tuning-note">当前没有可编辑物件。刷新页面或清空浏览器本地缓存可以恢复默认物件。</p>
+      </aside>`;
+  }
+  const config = cafeSceneObjectConfig(activeObject.id);
   return `
-    <div class="cafe-occupant-layer" aria-hidden="true">
-      ${CAFE_OCCUPANT_IMAGES.map((source, index) => `
-        <img class="cafe-occupant-image ${occupiedSeats.has(index + 1) ? "is-visible" : ""}"
-          data-occupant-seat="${index + 1}" src="${source}" alt="" draggable="false" />`).join("")}
+    <aside class="sprite-tuning-panel" aria-label="角色位置调试面板">
+      <div class="sprite-tuning-head">
+        <strong>咖啡厅场景编辑器</strong>
+        <button type="button" data-action="toggle-cafe-debug-mode">关闭调试</button>
+      </div>
+      <p class="sprite-tuning-note">调试模式不会自动进入沉浸视角，也不会占用真实座位。先选择物件，再调整位置和层级。</p>
+      <div class="scene-object-list" aria-label="场景物件列表">
+        ${objects.map((object) => `
+          <button
+            type="button"
+            class="${object.id === activeObject.id ? "is-active" : ""}"
+            data-action="select-cafe-scene-object"
+            data-cafe-object-option="${object.id}"
+          >
+            <span>${object.name}</span>
+            <small>${object.type}</small>
+          </button>
+        `).join("")}
+      </div>
+      <div class="sprite-tuning-grid">
+        <label>X <output data-object-value="left">${config.left}</output>%</label>
+        <div class="sprite-tuning-buttons">
+          <button type="button" data-action="nudge-cafe-scene-object" data-object-field="left" data-object-delta="-0.2">−</button>
+          <button type="button" data-action="nudge-cafe-scene-object" data-object-field="left" data-object-delta="0.2">+</button>
+        </div>
+        <label>Y <output data-object-value="top">${config.top}</output>%</label>
+        <div class="sprite-tuning-buttons">
+          <button type="button" data-action="nudge-cafe-scene-object" data-object-field="top" data-object-delta="-0.2">−</button>
+          <button type="button" data-action="nudge-cafe-scene-object" data-object-field="top" data-object-delta="0.2">+</button>
+        </div>
+      </div>
+      <label class="sprite-tuning-slider">
+        宽度 <output data-object-value="width">${config.width}</output>%
+        <input data-object-input="width" type="range" min="1" max="80" step="0.1" value="${config.width}">
+      </label>
+      <label class="sprite-tuning-slider">
+        高度 <output data-object-value="height">${config.height}</output>%
+        <input data-object-input="height" type="range" min="1" max="80" step="0.1" value="${config.height}">
+      </label>
+      <label class="sprite-tuning-slider">
+        缩放 <output data-object-value="scale">${config.scale}</output>
+        <input data-object-input="scale" type="range" min="0.1" max="3" step="0.01" value="${config.scale}">
+      </label>
+      <label class="sprite-tuning-slider">
+        旋转 <output data-object-value="rotate">${config.rotate}</output>°
+        <input data-object-input="rotate" type="range" min="-45" max="45" step="0.5" value="${config.rotate}">
+      </label>
+      <label class="sprite-tuning-slider">
+        层级 <output data-object-value="zIndex">${config.zIndex}</output>
+        <input data-object-input="zIndex" type="range" min="1" max="120" step="1" value="${config.zIndex}">
+      </label>
+      <div class="sprite-tuning-actions">
+        <button type="button" class="publish-layout" data-action="publish-cafe-scene-layout">固定到普通模式</button>
+        <button type="button" data-action="flip-cafe-scene-object">水平翻转：<span data-object-value="flipX">${config.flipX ? "开启" : "关闭"}</span></button>
+        <button type="button" data-action="toggle-cafe-scene-object-visible">显示：<span data-object-value="visible">${config.visible ? "开启" : "关闭"}</span></button>
+        ${isCafeSeatMarkerObject(activeObject.id) ? "" : `
+          <button type="button" data-action="duplicate-cafe-scene-object">复制当前</button>
+          <button type="button" class="danger" data-action="delete-cafe-scene-object">删除当前</button>
+        `}
+        <button type="button" data-action="reset-cafe-scene-object">重置当前</button>
+        <button type="button" data-action="release-cafe-seat-now">释放我的座位</button>
+        <button type="button" data-action="copy-cafe-scene-objects">复制全部 JSON</button>
+      </div>
+      <small>提示：打开面板后也可以用方向键移动，Shift + 方向键加大步长。</small>
+    </aside>`;
+}
+
+function renderCafeSceneObjectLayers(options = {}) {
+  const editor = Boolean(options.editor);
+  return `
+    <div class="cafe-scene-object-layer" aria-hidden="true">
+      ${cafeSceneObjects().map((object) => {
+        const config = cafeSceneObjectConfig(object.id);
+        if (!shouldRenderCafeSceneObject(object, config, { editor })) return "";
+        const isSelected = editor && object.id === state.cafeSceneEditor.activeObjectId;
+        const className = `cafe-scene-object ${config.visible ? "" : "is-hidden"} ${isSelected ? "is-selected" : ""}`;
+        const style = `--object-left:${config.left}%; --object-top:${config.top}%; --object-width:${config.width}%; --object-height:${config.height}%; --object-scale:${config.scale}; --object-rotate:${config.rotate}deg; --object-flip:${config.flipX ? -1 : 1}; --object-z-index:${config.zIndex}; --object-track-width:${(object.frameCount || 1) * 100}%;`;
+        if (object.idleSheet) {
+          return `
+            <div class="${className} cafe-scene-object-sprite" data-cafe-scene-object="${object.id}" data-frame-count="${object.frameCount || 8}" style="${style}">
+              <img class="cafe-scene-object-track" src="${object.idleSheet}" alt="" draggable="false" />
+            </div>`;
+        }
+        return `<img class="${className}" data-cafe-scene-object="${object.id}" src="${object.src}" alt="" draggable="false" style="${style}" />`;
+      }).join("")}
     </div>`;
 }
 
-function syncCafeOccupantLayers(leases = state.roomPresence.leases) {
+function renderLibrarySceneObjectLayers({ editor = false } = {}) {
+  return `
+    <div class="cafe-scene-object-layer library-scene-object-layer" aria-hidden="true">
+      ${librarySceneObjects().map((object) => {
+        const config = librarySceneObjectConfig(object.id);
+        if (!editor && !config.visible) return "";
+        if (!editor && object.type === "avatar" && Number(object.seatId) !== Number(state.libraryCurrentSeatId)) return "";
+        if (!editor && object.type === "chair" && Number(object.seatId) === Number(state.libraryCurrentSeatId)) {
+          const binding = scenes.library.seatBindings?.[Number(object.seatId)];
+          if (binding?.occupiedIncludesChair) return "";
+        }
+        const selected = editor && object.id === state.librarySceneEditor.activeObjectId;
+        const className = `cafe-scene-object ${config.visible ? "" : "is-hidden"} ${selected ? "is-selected" : ""}`;
+        const style = `--object-left:${config.left}%; --object-top:${config.top}%; --object-width:${config.width}%; --object-height:${config.height}%; --object-scale:${config.scale}; --object-rotate:${config.rotate}deg; --object-flip:${config.flipX ? -1 : 1}; --object-z-index:${config.zIndex}; --object-track-width:${(object.frameCount || 1) * 100}%;`;
+        if (object.idleSheet) {
+          return `<div class="${className} cafe-scene-object-sprite" data-library-scene-object="${object.id}" data-frame-count="${object.frameCount || 8}" style="${style}"><img class="cafe-scene-object-track" src="${object.idleSheet}" alt="" draggable="false" /></div>`;
+        }
+        return `<img class="${className}" data-library-scene-object="${object.id}" src="${object.src}" alt="" draggable="false" style="${style}" />`;
+      }).join("")}
+    </div>`;
+}
+
+function renderLibrarySceneEditorPanel() {
+  if (!state.libraryDebugMode.enabled) {
+    return `<button class="sprite-tuning-toggle" data-action="toggle-library-debug-mode">开发者调试模式</button>`;
+  }
+  const objects = libraryEditorObjects();
+  const activeObject = libraryEditorObjectById(state.librarySceneEditor.activeObjectId) || objects[0];
+  if (!activeObject) {
+    return `
+      <aside class="sprite-tuning-panel" aria-label="学院区场景编辑器">
+        <div class="sprite-tuning-head">
+          <strong>学院区场景编辑器</strong>
+          <button type="button" data-action="toggle-library-debug-mode">关闭调试</button>
+        </div>
+        <p class="sprite-tuning-note">模板母图已经接入并统一为 1764×992。桌椅和人物素材加入配置后，会自动出现在这里并支持拖动、缩放、旋转、翻转、复制、删除和固定。</p>
+        <div class="sprite-tuning-actions">
+          <button type="button" class="publish-layout" data-action="publish-library-scene-layout">固定到普通模式</button>
+          <button type="button" data-action="copy-library-scene-objects">复制全部 JSON</button>
+        </div>
+      </aside>`;
+  }
+  state.librarySceneEditor.activeObjectId = activeObject.id;
+  const config = librarySceneObjectConfig(activeObject.id);
+  return `
+    <aside class="sprite-tuning-panel" aria-label="学院区场景编辑器">
+      <div class="sprite-tuning-head">
+        <strong>学院区场景编辑器</strong>
+        <button type="button" data-action="toggle-library-debug-mode">关闭调试</button>
+      </div>
+      <p class="sprite-tuning-note">选择或直接拖动物件；所有修改只保存在本机，点击“固定到普通模式”后正式生效。</p>
+      <div class="scene-object-list">
+        ${objects.map((object) => `<button type="button" class="${object.id === activeObject.id ? "is-active" : ""}" data-action="select-library-scene-object" data-library-object-option="${object.id}"><span>${object.name}</span><small>${object.type}</small></button>`).join("")}
+      </div>
+      <div class="sprite-tuning-grid">
+        <label>X <output data-library-object-value="left">${config.left}</output>%</label>
+        <div class="sprite-tuning-buttons"><button type="button" data-action="nudge-library-scene-object" data-object-field="left" data-object-delta="-0.2">−</button><button type="button" data-action="nudge-library-scene-object" data-object-field="left" data-object-delta="0.2">+</button></div>
+        <label>Y <output data-library-object-value="top">${config.top}</output>%</label>
+        <div class="sprite-tuning-buttons"><button type="button" data-action="nudge-library-scene-object" data-object-field="top" data-object-delta="-0.2">−</button><button type="button" data-action="nudge-library-scene-object" data-object-field="top" data-object-delta="0.2">+</button></div>
+      </div>
+      ${[["width", "宽度", 1, 80, .1], ["height", "高度", 1, 80, .1], ["scale", "缩放", .1, 3, .01], ["rotate", "旋转", -45, 45, .5], ["zIndex", "层级", 1, 120, 1]].map(([field, label, min, max, step]) => `<label class="sprite-tuning-slider">${label} <output data-library-object-value="${field}">${config[field]}</output><input data-library-object-input="${field}" type="range" min="${min}" max="${max}" step="${step}" value="${config[field]}"></label>`).join("")}
+      <div class="sprite-tuning-actions">
+        <button type="button" class="publish-layout" data-action="publish-library-scene-layout">固定到普通模式</button>
+        <button type="button" data-action="flip-library-scene-object">水平翻转：<span data-library-object-value="flipX">${config.flipX ? "开启" : "关闭"}</span></button>
+        <button type="button" data-action="toggle-library-scene-object-visible">显示：<span data-library-object-value="visible">${config.visible ? "开启" : "关闭"}</span></button>
+        <button type="button" data-action="duplicate-library-scene-object">复制当前</button>
+        <button type="button" class="danger" data-action="delete-library-scene-object">删除当前</button>
+        <button type="button" data-action="reset-library-scene-object">重置当前</button>
+        <button type="button" data-action="copy-library-scene-objects">复制全部 JSON</button>
+      </div>
+      <small>方向键微调位置，Shift + 方向键加大步长。</small>
+    </aside>`;
+}
+
+function syncCafeSceneObjectLayers() {
+  const layer = document.querySelector(".cafe-scene-object-layer");
+  if (!layer || state.sceneId !== "cafe") return;
+  const template = document.createElement("template");
+  template.innerHTML = renderCafeSceneObjectLayers({ editor: state.cafeDebugMode.enabled }).trim();
+  layer.replaceWith(template.content.firstElementChild);
+}
+
+function renderCafeSeatActorLayers() {
+  const occupiedSeats = new Set(state.roomPresence.leases.map((lease) => Number(lease.seatId)));
+  const layers = Object.entries(scenes.cafe.seatActors).map(([seatId, actor]) => {
+    const tuning = cafeSpriteTuningForSeat(seatId);
+    const debugVisible = state.cafeDebugMode.enabled && Number(seatId) === state.cafeDebugMode.previewOccupiedSeatId;
+    const visible = occupiedSeats.has(Number(seatId)) || debugVisible;
+    const emptyLayer = actor.empty
+      ? `<img class="cafe-seat-empty ${visible ? "" : "is-visible"}" data-cafe-seat-empty="${seatId}" src="${actor.empty}" alt="" draggable="false" />`
+      : "";
+    return `
+      <div class="cafe-seat-actor-layer ${visible ? "is-occupied" : ""}" aria-hidden="true">
+        ${emptyLayer}
+        <div
+          class="cafe-seat-sprite ${visible ? "is-visible" : ""}"
+          data-cafe-seat-actor="${seatId}"
+          data-frame-count="${actor.frameCount || 8}"
+          style="--sprite-left:${tuning.left}%; --sprite-top:${tuning.top}%; --sprite-width:${tuning.width}%; --sprite-height:${tuning.height}%; --sprite-scale:${tuning.scale}; --sprite-rotate:${tuning.rotate}deg; --sprite-flip:${tuning.flipX ? -1 : 1}; --sprite-z-index:${tuning.zIndex}; --sprite-track-width:${(actor.frameCount || 8) * 100}%;"
+        >
+          <img class="cafe-seat-sprite-track" src="${actor.idleSheet}" alt="" draggable="false" />
+        </div>
+      </div>`;
+  }).join("");
+  return layers;
+}
+
+function syncCafeSeatActorLayers(leases = state.roomPresence.leases) {
   const occupiedSeats = new Set(leases.map((lease) => Number(lease.seatId)));
-  document.querySelectorAll("[data-occupant-seat]").forEach((image) => {
-    image.classList.toggle("is-visible", occupiedSeats.has(Number(image.dataset.occupantSeat)));
+  document.querySelectorAll("[data-cafe-seat-actor]").forEach((layer) => {
+    const seatId = Number(layer.dataset.cafeSeatActor);
+    const debugVisible = state.cafeDebugMode.enabled && seatId === state.cafeDebugMode.previewOccupiedSeatId;
+    const visible = occupiedSeats.has(seatId) || debugVisible;
+    layer.classList.toggle("is-visible", visible);
+    layer.closest(".cafe-seat-actor-layer")?.classList.toggle("is-occupied", visible);
+  });
+  document.querySelectorAll("[data-cafe-seat-empty]").forEach((layer) => {
+    const seatId = Number(layer.dataset.cafeSeatEmpty);
+    const debugVisible = state.cafeDebugMode.enabled && seatId === state.cafeDebugMode.previewOccupiedSeatId;
+    layer.classList.toggle("is-visible", !occupiedSeats.has(seatId) && !debugVisible);
   });
 }
 
@@ -239,11 +1152,13 @@ async function syncCafeState({ refreshMarkers = true } = {}) {
     const presence = await api(`/api/rooms/${currentRoomApiId()}/state`);
     state.roomPresence = presence;
     const ownLease = presence.leases.find((lease) => lease.sessionId === identity.sessionId && lease.state === "occupied");
-    if (ownLease) state.currentSeatId = Number(ownLease.seatId);
-    const room = scenes.cafe.rooms.find((item) => item.id === "cafe-rain");
-    if (room) room.occupied = presence.leases.length;
-    scenes.cafe.online = presence.leases.length;
-    syncCafeOccupantLayers(presence.leases);
+    state.currentSeatId = ownLease ? Number(ownLease.seatId) : null;
+    const room = scenes.cafe.rooms.find((item) => item.id === currentRoomApiId());
+    const visibleLeases = cafeVisibleLeases(presence.leases);
+    if (room) room.occupied = visibleLeases.length;
+    scenes.cafe.online = scenes.cafe.rooms.reduce((total, item) => total + Number(item.occupied || 0), 0);
+    syncCafeSceneObjectLayers();
+    syncCafeSeatActorLayers(presence.leases);
     if (refreshMarkers && state.view === "room") refreshCafeSeatMarkers();
   } catch (_) {
     const syncLabel = document.querySelector(".room-sync-label");
@@ -256,13 +1171,15 @@ async function syncCafeState({ refreshMarkers = true } = {}) {
 function refreshCafeSeatMarkers() {
   const markerLayer = document.querySelector(".seat-markers");
   if (!markerLayer || state.sceneId !== "cafe") return;
-  markerLayer.innerHTML = scenes.cafe.seats.map((seat, index) => renderSeat(seat, index, "cafe")).join("");
-  syncCafeOccupantLayers();
-  const openSeats = Math.max(0, 10 - state.roomPresence.leases.length);
+  const renderedSeatEntries = cafeVisibleSeatEntries();
+  markerLayer.innerHTML = renderedSeatEntries.map(({ seat, index }) => renderSeat(seat, index, "cafe")).join("");
+  syncCafeSceneObjectLayers();
+  syncCafeSeatActorLayers();
+  const openSeats = renderedSeatEntries.filter(({ index }) => !leaseForSeat(index)).length;
   const note = document.querySelector(".room-footer-copy span");
-  if (note && state.selectedSeat === null) note.textContent = `所有座位都来自实时状态 · 还剩 ${openSeats} 个空位`;
+  if (note && state.selectedSeat === null) note.textContent = `选择一张喜欢的位置坐下 · 还剩 ${openSeats} 个空位`;
   const syncLabel = document.querySelector(".room-sync-label");
-  if (syncLabel) syncLabel.textContent = `${state.roomPresence.leases.length} 人正在房间里`;
+  if (syncLabel) syncLabel.textContent = `${cafeVisibleLeases().length} 人正在房间里`;
 }
 
 function updateCafeSeatSelection() {
@@ -273,7 +1190,7 @@ function updateCafeSeatSelection() {
   const note = document.querySelector(".room-footer-copy span");
   const action = document.querySelector('[data-action="sit-down"]');
   if (title) title.textContent = state.selectedSeat === null ? "找一个喜欢的位置坐下" : `已选择 ${state.selectedSeat + 1} 号座位`;
-  if (note && state.selectedSeat !== null) note.textContent = state.currentSeatId ? "确认后，你会在新座位上安静浮现" : "确认后，你会在这个座位上安静浮现";
+  if (note && state.selectedSeat !== null) note.textContent = state.currentSeatId ? "确认后，角色会切换到新的动态座位" : `确认后，你会化身小角色坐进 ${state.selectedSeat + 1} 号座位`;
   if (action) {
     action.disabled = state.selectedSeat === null;
     action.textContent = state.currentSeatId ? "起身并换座" : "坐下，准备专注";
@@ -285,9 +1202,7 @@ async function startCafePresence() {
   stopRoomPresence();
   const layer = document.querySelector(".seat-layer");
   if (!layer) return;
-  const preload = preloadCafeOccupants();
   await syncCafeState();
-  await preload;
   roomSyncTimer = window.setInterval(() => syncCafeState(), 2000);
   heartbeatTimer = window.setInterval(sendHeartbeat, 15000);
 }
@@ -307,8 +1222,9 @@ async function sendHeartbeat() {
   }
 }
 
-async function releaseSeat({ beacon = false } = {}) {
-  if (!state.currentSeatId && !state.switchingFromSeatId) return;
+async function releaseSeat({ beacon = false, force = false } = {}) {
+  clearImmersiveAutoEnter();
+  if (!force && !state.currentSeatId && !state.switchingFromSeatId) return;
   const url = `/api/sessions/${identity.sessionId}/release`;
   if (beacon && navigator.sendBeacon) {
     navigator.sendBeacon(url, new Blob(["{}"], { type: "application/json" }));
@@ -427,7 +1343,7 @@ function renderWelcome() {
               <figcaption><span>01</span><strong>选一个地方</strong><small>今天想去咖啡馆、图书馆，还是森林？</small></figcaption>
             </figure>
             <figure class="journey-shot journey-shot-room">
-              <img src="${scenes.cafe.image}" alt="雨巷咖啡馆房间内的座位与安静专注的岛民" loading="lazy" />
+              <img src="${scenes.cafe.image}" alt="四时咖啡馆房间内的座位与安静专注的岛民" loading="lazy" />
               <figcaption><span>02</span><strong>走进一间房</strong><small>听听环境声，看看这里是不是今天需要的氛围。</small></figcaption>
             </figure>
             <figure class="journey-shot journey-shot-seat">
@@ -456,15 +1372,15 @@ function renderWelcome() {
 
           <article class="scene-story scene-story-cafe">
             <div class="scene-story-visual">
-              <img src="${scenes.cafe.image}" alt="暖色灯光与雨窗环绕的雨巷咖啡馆" loading="lazy" />
+              <img src="${scenes.cafe.image}" alt="四种光线氛围的四时咖啡馆" loading="lazy" />
               <span class="scene-index">01 / CITY</span>
             </div>
             <div class="scene-story-copy">
               <span class="scene-icon">${regionIcon("city")}</span>
-              <p class="landing-eyebrow">雨巷咖啡馆</p>
+              <p class="landing-eyebrow">四时咖啡馆</p>
               <h3>让生活的声音，<br />陪你轻轻开始。</h3>
-              <p>窗外下着雨，咖啡机偶尔轻响。这里有一点温度，也有一点日常的流动感，适合写作、邮件和不需要太大启动压力的任务。</p>
-              <div class="sound-line"><span>环境声</span><strong>细雨 · 咖啡馆底噪 · 偶尔杯碟声</strong></div>
+              <p>晴日、雨雾、黄昏和月夜会给开始带来不同的节奏。选一间今天最想待着的房间，让咖啡馆的日常声音陪你进入状态。</p>
+              <div class="sound-line"><span>环境声</span><strong>天气环境 · 咖啡馆底噪 · 偶尔杯碟声</strong></div>
             </div>
           </article>
 
@@ -616,6 +1532,10 @@ function lockedHotspot(name, note, x, y, icon) {
 
 function renderRooms() {
   const scene = scenes[state.sceneId];
+  if (scene.id === "cafe") {
+    renderCafeRooms(scene);
+    return;
+  }
   app.innerHTML = `
     <section class="view rooms">
       <img class="scene-image" src="${scene.image}" alt="${scene.name}" />
@@ -638,11 +1558,66 @@ function renderRooms() {
     </section>`;
 }
 
+function renderCafeRooms(scene) {
+  const selectedRoom = scene.rooms.find((room) => room.id === state.roomPreviewId) || scene.rooms.find((room) => room.id === "cafe-rain") || scene.rooms[0];
+  state.roomPreviewId = selectedRoom.id;
+  const capacity = cafeVisibleSeats().length;
+  app.innerHTML = `
+    <section class="view rooms cafe-room-selector">
+      <img class="scene-image" src="${selectedRoom.selectorImage || selectedRoom.image}" alt="${selectedRoom.name}" />
+      ${topbar({ back: "back-island", showPresence: false })}
+      <main class="cafe-room-picker" aria-labelledby="cafe-room-picker-title">
+        <section class="cafe-room-intro">
+          <p class="eyebrow">${scene.islandLabel} · ${scene.name}</p>
+          <h1 id="cafe-room-picker-title">${scene.name}</h1>
+          <i class="cafe-room-intro-rule" aria-hidden="true"></i>
+          <p class="cafe-room-intro-copy">随光线与天气，进入自己的专注节奏。</p>
+          <div class="cafe-room-features" aria-label="房间特点">
+            ${cafeRoomFeature("quiet", "安静共处", "沉浸不打扰")}
+            ${cafeRoomFeature("people", "6 人小房间", "适合专注学习")}
+            ${cafeRoomFeature("coffee", "专注陪伴", "让时间更有质感")}
+          </div>
+        </section>
+        <section class="cafe-room-list-panel" aria-label="四时咖啡馆房间列表">
+          <div class="cafe-room-list-heading"><strong>选择房间</strong><small>${scene.rooms.length} 个房间</small></div>
+          <div class="cafe-room-preview-list">
+            ${scene.rooms.map((room) => cafeRoomPreviewCard(room, selectedRoom.id, capacity)).join("")}
+          </div>
+          <button type="button" class="cafe-room-enter" data-action="enter-preview-room">进入${selectedRoom.name} <span aria-hidden="true">→</span></button>
+        </section>
+      </main>
+    </section>`;
+}
+
+function cafeRoomFeature(icon, title, copy) {
+  const icons = {
+    quiet: `<path d="M12 21v-8m0 0c-4.2 0-6.5-2-7-6 4-.3 6.6 1.4 7 6Zm0 0c4.2 0 6.5-2 7-6-4-.3-6.6 1.4-7 6Z"/>`,
+    people: `<circle cx="9" cy="9" r="3"/><circle cx="17" cy="10" r="2.2"/><path d="M3.5 20c.5-4.2 2.3-6.2 5.5-6.2s5 2 5.5 6.2m.3-4.7c.8-.8 1.7-1.2 2.9-1.2 2.1 0 3.3 1.7 3.8 5.1"/>`,
+    coffee: `<path d="M4 8h13v6.5A4.5 4.5 0 0 1 12.5 19h-4A4.5 4.5 0 0 1 4 14.5Zm13 2h1.7a2.3 2.3 0 0 1 0 4.6H17M7 4.5c0 1 1 1.2 1 2.2m3-2.2c0 1 1 1.2 1 2.2"/>`,
+  };
+  return `<div class="cafe-room-feature">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icons[icon]}</svg>
+    <span><strong>${title}</strong><small>${copy}</small></span>
+  </div>`;
+}
+
+function cafeRoomPreviewCard(room, selectedRoomId, capacity) {
+  const selected = room.id === selectedRoomId;
+  return `
+    <button type="button" class="cafe-room-preview-card ${selected ? "is-selected" : ""}" data-preview-room="${room.id}" aria-pressed="${selected}">
+      <img src="${room.selectorImage || room.image}" alt="" />
+      <span class="cafe-room-preview-copy"><strong>${room.name}</strong><small>${room.mood}</small></span>
+      <span class="cafe-room-preview-occupancy"><strong>${room.occupied} / ${capacity}</strong></span>
+      ${selected ? `<span class="cafe-room-preview-check" aria-hidden="true">✓</span>` : ""}
+    </button>`;
+}
+
 function roomCard(scene, room) {
+  const capacity = scene.id === "cafe" ? cafeVisibleSeats().length : scene.seats.length;
   return `
     <button class="room-card ${room.locked ? "is-locked" : ""}" ${room.locked ? 'data-action="locked-room"' : `data-room="${room.id}"`}>
       <span class="room-card-copy"><strong>${room.name}</strong><span>${room.mood}</span></span>
-      <span class="occupancy"><strong>${room.locked ? "稍后" : `${room.occupied}/10`}</strong><small>${room.locked ? "下一阶段" : "实时在线"}</small></span>
+      <span class="occupancy"><strong>${room.locked ? "稍后" : `${room.occupied}/${capacity}`}</strong><small>${room.locked ? "下一阶段" : "实时在线"}</small></span>
     </button>`;
 }
 
@@ -650,39 +1625,88 @@ function renderRoom() {
   const scene = scenes[state.sceneId];
   const room = scene.rooms.find((item) => item.id === state.roomId) || scene.rooms[0];
   const animatedCafe = scene.id === "cafe";
-  const openSeats = animatedCafe ? Math.max(0, 10 - state.roomPresence.leases.length) : scene.seats.filter((seat) => !seat[2]).length;
+  const editableLibrary = scene.id === "library";
+  const editableScene = animatedCafe || editableLibrary;
+  const cafeDebugMode = animatedCafe && state.cafeDebugMode.enabled;
+  const libraryDebugMode = editableLibrary && state.libraryDebugMode.enabled;
+  const librarySeated = editableLibrary && state.libraryCurrentSeatId && state.selectedSeat === state.libraryCurrentSeatId - 1;
+  const sceneDebugMode = cafeDebugMode || libraryDebugMode;
+  const sceneImageSource = sceneDebugMode ? (scene.debugImage || scene.image) : (room.image || scene.image);
+  const renderedSeatEntries = animatedCafe ? cafeVisibleSeatEntries() : scene.seats.map((seat, index) => ({ seat, index }));
+  const openSeats = animatedCafe ? renderedSeatEntries.filter(({ index }) => !leaseForSeat(index)).length : scene.seats.filter((seat) => !seat[2]).length;
+  const awaitingImmersive = animatedCafe && state.awaitingImmersiveFocus && state.currentSeatId && state.selectedSeat === state.currentSeatId - 1;
+  const footerTitle = awaitingImmersive
+    ? `${state.currentSeatId} 号座位 · 已开始专注`
+    : librarySeated
+      ? `${state.libraryCurrentSeatId} 号座位 · 角色已坐下`
+      : state.selectedSeat === null ? "找一个喜欢的位置坐下" : `已选择 ${state.selectedSeat + 1} 号座位`;
+  const footerNote = awaitingImmersive
+    ? `<span data-immersive-countdown>已坐下，专注已开始 · ${immersiveCountdownSeconds()} 秒后自动进入沉浸式专注</span>`
+    : librarySeated
+      ? `<span>人物已按座位独立显示，并正在进行轻微专注动画</span>`
+      : `<span>${state.selectedSeat === null ? `${animatedCafe ? "选择一张喜欢的位置坐下" : "亮起的座位可选"} · 还剩 ${openSeats} 个空位` : animatedCafe ? (state.currentSeatId ? "确认后，角色会切换到新的座位" : `确认后，你会化身小角色坐进 ${state.selectedSeat + 1} 号座位`) : `确认后，只会显示 ${state.selectedSeat + 1} 号座位对应的人物`}</span>`;
+  const primaryAction = awaitingImmersive ? "enter-immersive-focus" : librarySeated ? "enter-library-focus" : "sit-down";
+  const primaryText = awaitingImmersive || librarySeated ? "沉浸式专注" : (animatedCafe && state.currentSeatId) || (editableLibrary && state.libraryCurrentSeatId) ? "起身并换座" : "坐下，准备专注";
+  const primaryDisabled = !awaitingImmersive && !librarySeated && state.selectedSeat === null;
   app.innerHTML = `
-    <section class="view room ${animatedCafe ? "animated-room" : ""}">
-      <img class="scene-image" src="${scene.image}" alt="${room.name}房间内部" />
+    <section class="view room ${editableScene ? "animated-room" : ""} ${editableLibrary ? "library-room" : ""} ${sceneDebugMode ? "is-debug-layout" : ""}">
       ${topbar({ back: "back-rooms", showPresence: false })}
-      <div class="room-title">${regionIcon(scene.icon, "room-region-icon")}<span>${room.name} · 保持安静</span></div>
-      <div class="seat-layer" aria-label="座位区域">
-        ${animatedCafe ? renderCafeOccupantLayers() : ""}
-        <div class="seat-markers">${scene.seats.map((seat, index) => renderSeat(seat, index, scene.id)).join("")}</div>
-      </div>
-      <div class="room-footer">
-        <div class="room-footer-copy">
-          <strong>${state.selectedSeat === null ? "找一个喜欢的位置坐下" : `已选择 ${state.selectedSeat + 1} 号座位`}</strong>
-          <span>${state.selectedSeat === null ? `${animatedCafe ? "所有座位都来自实时状态" : "亮起的座位可选"} · 还剩 ${openSeats} 个空位` : animatedCafe ? (state.currentSeatId ? "确认后，你会在新座位上安静浮现" : "确认后，你会在这个座位上安静浮现") : "坐下后会进入沉浸式桌面，你仍能感受到大家的陪伴"}</span>
+      ${animatedCafe && state.currentSeatId ? renderSessionHud("room") : ""}
+      <div class="room-debug-shell">
+        <div class="room-stage">
+          <img class="scene-image" src="${sceneImageSource}" alt="${room.name}房间内部" />
+          <div class="room-title">${regionIcon(scene.icon, "room-region-icon")}<span>${room.name} · 保持安静</span></div>
+          <div class="seat-layer" aria-label="座位区域">
+            ${animatedCafe ? renderCafeSceneObjectLayers({ editor: cafeDebugMode }) : ""}
+            ${editableLibrary ? renderLibrarySceneObjectLayers({ editor: libraryDebugMode }) : ""}
+            <div class="seat-markers">${renderedSeatEntries.map(({ seat, index }) => renderSeat(seat, index, scene.id)).join("")}</div>
+          </div>
+          <div class="room-footer">
+            <div class="room-footer-copy">
+              <strong>${footerTitle}</strong>
+              ${footerNote}
+            </div>
+            ${animatedCafe ? `<span class="room-sync-label">正在同步真实座位…</span>` : ""}
+            <button class="primary-button" data-action="${primaryAction}" ${primaryDisabled ? "disabled" : ""}>${primaryText}</button>
+          </div>
         </div>
-        ${animatedCafe ? `<span class="room-sync-label">正在同步真实座位…</span>` : ""}
-        <button class="primary-button" data-action="sit-down" ${state.selectedSeat === null ? "disabled" : ""}>${state.currentSeatId ? "起身并换座" : "坐下，准备专注"}</button>
+        ${animatedCafe ? renderCafeSpriteTuningPanel() : ""}
+        ${editableLibrary ? renderLibrarySceneEditorPanel() : ""}
       </div>
     </section>`;
   if (animatedCafe) requestAnimationFrame(() => startCafePresence());
+  if (awaitingImmersive) updateImmersiveCountdownCopy();
 }
 
 function renderSeat(seat, index, sceneId) {
-  const [x, y, staticOccupied] = seat;
+  const [defaultX, defaultY, staticOccupied] = seat;
+  const markerConfig = sceneId === "cafe"
+    ? cafeSceneObjectConfig(cafeSeatMarkerObjectId(index))
+    : sceneId === "library"
+      ? librarySceneObjectConfig(librarySeatMarkerObjectId(index))
+      : null;
+  const x = markerConfig ? markerConfig.left : defaultX;
+  const y = markerConfig ? markerConfig.top : defaultY;
   const lease = sceneId === "cafe" ? leaseForSeat(index) : null;
-  const occupied = sceneId === "cafe" ? Boolean(lease) : staticOccupied;
+  const mineInLibrary = sceneId === "library" && Number(state.libraryCurrentSeatId) === index + 1;
+  const occupied = sceneId === "cafe" ? Boolean(lease) : staticOccupied || mineInLibrary;
+  const cafeZoneClass = sceneId === "cafe" ? `seat-zone-${index < 2 ? "bar" : index < 4 ? "window" : "sofa"}` : "";
+  const markerAttrs = sceneId === "cafe" && state.cafeDebugMode.enabled
+    ? `data-cafe-seat-marker-object="${cafeSeatMarkerObjectId(index)}"`
+    : sceneId === "library" && state.libraryDebugMode.enabled
+      ? `data-library-seat-marker-object="${librarySeatMarkerObjectId(index)}"`
+      : "";
+  const selectedMarkerClass = state.cafeDebugMode.enabled && state.cafeSceneEditor.activeObjectId === cafeSeatMarkerObjectId(index)
+    || state.libraryDebugMode.enabled && state.librarySceneEditor.activeObjectId === librarySeatMarkerObjectId(index)
+    ? "is-selected"
+    : "";
   if (occupied) {
     if (sceneId === "cafe") {
       const mine = lease.sessionId === identity.sessionId;
       const minutes = focusedMinutes(lease);
       const status = minutes > 0 ? `已专注 ${minutes} 分钟` : "刚刚坐下";
       return `
-        <span class="seat occupied cafe-seat-status ${mine ? "is-mine" : ""}" style="left:${x}%; top:${y}%" tabindex="0" aria-label="${index + 1}号座位已占用，${lease.displayName}${status}">
+        <span class="seat occupied cafe-seat-status ${cafeZoneClass} ${mine ? "is-mine" : ""} ${selectedMarkerClass}" ${markerAttrs} style="left:${x}%; top:${y}%" tabindex="0" aria-label="${index + 1}号座位已占用，${lease.displayName}${status}">
           <span class="seat-status-dot busy" aria-hidden="true"></span>
           <span class="seat-number">${index + 1}</span>
           <span class="seat-popover" role="tooltip">
@@ -692,14 +1716,20 @@ function renderSeat(seat, index, sceneId) {
           </span>
         </span>`;
     }
-    return `<span class="seat occupied" style="left:${x}%; top:${y}%" title="${index + 1}号座位已占用" aria-label="${index + 1}号座位已占用"><span class="seat-status-dot busy" aria-hidden="true"></span><span class="seat-number">${index + 1}</span></span>`;
+    return `<span class="seat occupied ${mineInLibrary ? "is-mine" : ""} ${cafeZoneClass} ${selectedMarkerClass}" ${markerAttrs} style="left:${x}%; top:${y}%" title="${index + 1}号座位已占用" aria-label="${index + 1}号座位已占用"><span class="seat-status-dot busy" aria-hidden="true"></span><span class="seat-number">${index + 1}</span></span>`;
   }
-  return `<button class="seat available ${state.selectedSeat === index ? "selected" : ""}" style="left:${x}%; top:${y}%" data-seat="${index}" aria-label="选择 ${index + 1} 号空位"><span class="seat-status-dot free" aria-hidden="true"></span><span class="seat-number">${index + 1}</span><span class="seat-free-label">空位</span></button>`;
+  return `<button class="seat available ${cafeZoneClass} ${state.selectedSeat === index ? "selected" : ""} ${selectedMarkerClass}" ${markerAttrs} style="left:${x}%; top:${y}%" data-seat="${index}" aria-label="选择 ${index + 1} 号空位"><span class="seat-status-dot free" aria-hidden="true"></span><span class="seat-number">${index + 1}</span><span class="seat-free-label">空位</span></button>`;
 }
 
 async function occupySelectedSeat() {
   if (state.isTransitioning || state.selectedSeat === null) return;
   const scene = scenes[state.sceneId];
+  if (scene.id === "library") {
+    state.libraryCurrentSeatId = state.selectedSeat + 1;
+    startFocusFromSeat();
+    renderRoom();
+    return;
+  }
   if (scene.id !== "cafe") {
     state.view = "focus";
     render();
@@ -720,7 +1750,7 @@ async function occupySelectedSeat() {
   }
   if (backButton) backButton.disabled = true;
   if (footerTitle) footerTitle.textContent = fromSeatId ? `正在换到 ${targetSeatId} 号座位` : `正在确认 ${targetSeatId} 号座位`;
-  if (footerNote) footerNote.textContent = "座位确认后，你会在画面中安静浮现";
+  if (footerNote) footerNote.textContent = "座位确认后，你的小角色会坐下并开始轻微专注动画";
 
   try {
     if (fromSeatId) {
@@ -742,18 +1772,33 @@ async function occupySelectedSeat() {
     state.currentSeatId = targetSeatId;
     state.switchingFromSeatId = null;
     await syncCafeState({ refreshMarkers: false });
-    syncCafeOccupantLayers();
+    syncCafeSceneObjectLayers();
+    syncCafeSeatActorLayers();
+    // A genuinely new sit-down starts a fresh focus clock. Switching seats keeps
+    // the current session continuous, but stale values from an earlier visit must
+    // never leak into a newly occupied seat.
+    if (!fromSeatId) {
+      stopTicker();
+      state.durationSeconds = Math.max(0, state.timerMode * 60);
+      state.remainingSeconds = state.durationSeconds;
+      state.elapsedSeconds = 0;
+      state.sessionStartedAt = Date.now();
+      state.sessionResult = null;
+      lastTick = null;
+      localStorage.removeItem(STORAGE_KEYS.activeSession);
+    }
+    startFocusFromSeat();
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!reduceMotion) {
-      await new Promise((resolve) => window.setTimeout(resolve, CAFE_OCCUPANT_FADE_MS + CAFE_OCCUPANT_CONFIRM_MS));
+      await new Promise((resolve) => window.setTimeout(resolve, CAFE_STATE_LAYER_SETTLE_MS));
     }
-    const roomView = document.querySelector(".view.room");
-    roomView?.classList.add("entering-focus");
-    if (!reduceMotion) await new Promise((resolve) => window.setTimeout(resolve, 760));
-    state.view = "focus";
-    render();
+    state.isTransitioning = false;
+    beginImmersiveAutoEnter();
+    renderRoom();
+    return;
   } catch (error) {
     state.isTransitioning = false;
+    clearImmersiveAutoEnter();
     if (error.status === 409) {
       showToast(error.message === "seat_taken" ? "刚刚有人先坐下了，请换一个位置" : "这个座位的预留已过期，请重试");
     } else {
@@ -771,30 +1816,13 @@ function renderFocus() {
   roomSyncTimer = null;
   const scene = scenes[state.sceneId];
   const room = scene.rooms.find((item) => item.id === state.roomId) || scene.rooms[0];
-  const focusImage = scene.focusViews?.[state.selectedSeat + 1] || scene.image;
+  const focusImage = selectedFocusImage(scene);
   app.innerHTML = `
     <section class="view focus">
-      <img class="scene-image" src="${focusImage}" alt="坐在${room.name}${state.selectedSeat + 1}号座位看到的沉浸式工作视角" />
+      <img class="scene-image" data-focus-scene-image src="${focusImage}" alt="坐在${room.name}${state.selectedSeat + 1}号座位看到的沉浸式工作视角" />
       ${topbar({ back: "finish-session", showPresence: false })}
-      <section class="focus-stage" aria-label="专注计时器">
-        <div class="timer" id="timer">${formatTime()}</div>
-        <p class="focus-presence"><span class="presence-dot"></span><span id="presence-copy">${Math.max(0, state.roomPresence.leases.length - 1)} 位真实岛民陪伴中</span></p>
-        <div class="focus-label">${scene.name} · ${room.name} · ${state.selectedSeat + 1} 号座位</div>
-        <div class="timer-modes" aria-label="专注时长">
-          ${modeButton(25, "25 分钟")}${modeButton(50, "50 分钟")}${modeButton(0, "自由专注")}
-        </div>
-        <div class="focus-controls">
-          <button class="primary-button" data-action="toggle-timer">${state.isRunning ? "暂停" : state.elapsedSeconds > 0 ? "继续" : "开始"}</button>
-          ${scene.id === "cafe" ? '<button class="secondary-button" data-action="switch-seat">换座</button>' : ""}
-          <button class="secondary-button" data-action="finish-session">结束</button>
-        </div>
-        <div class="sound-controls" aria-label="环境声音">
-          ${soundButton("ambient", "♫", "环境声")}
-          ${soundButton("presence", "◌", "陪伴感")}
-          ${soundButton("white", "≈", "柔和底噪")}
-        </div>
-        <p class="focus-tip">轻触控制区调整计时与声音</p>
-      </section>
+      ${renderSessionHud("focus")}
+      <div class="immersive-seat-caption">${scene.name} · ${room.name} · ${state.selectedSeat + 1} 号座位</div>
     </section>`;
   persistActiveSession();
   if (state.isRunning) startTicker();
@@ -805,8 +1833,71 @@ function renderFocus() {
   }
 }
 
+function selectedFocusImage(scene = scenes[state.sceneId]) {
+  const choices = {
+    window: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
+    bar: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
+    sofa: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`,
+  };
+  if (state.focusImageChoice !== "seat" && choices[state.focusImageChoice]) return choices[state.focusImageChoice];
+  return scene.focusViews?.[state.selectedSeat + 1] || scene.image;
+}
+
+function renderSessionHud(context = "focus") {
+  const companionCount = Math.max(0, cafeVisibleLeases().length - (state.currentSeatId ? 1 : 0));
+  const timerLabel = state.timerMode === -1 ? "自由专注" : state.timerMode === 0 ? "正计时" : `${state.timerMode} 分钟倒计时`;
+  return `
+    <aside class="session-hud session-hud-${context} ${state.sessionPanelOpen ? "is-open" : ""}" aria-label="专注计时与设置">
+      <button class="session-clock-button" type="button" data-action="toggle-session-panel" aria-expanded="${state.sessionPanelOpen}">
+        <strong data-session-clock>${formatTime()}</strong>
+        <small>${timerLabel}</small>
+      </button>
+      ${state.sessionPanelOpen ? `
+        <section class="session-control-panel">
+          <header><div><strong>专注设置</strong><small>计时已经开始，修改后立即生效</small></div><button type="button" data-action="toggle-session-panel" aria-label="关闭设置">×</button></header>
+          <div class="session-setting-group">
+            <span>计时方式</span>
+            <div class="session-choice-row">
+              ${modeButton(25, "25 分钟倒计时")}
+              ${modeButton(50, "50 分钟倒计时")}
+              ${modeButton(0, "正计时")}
+              ${modeButton(-1, "自由专注")}
+            </div>
+          </div>
+          <div class="session-setting-group">
+            <span>沉浸画面</span>
+            <div class="session-choice-row compact">
+              ${focusViewButton("seat", "当前座位")}
+              ${focusViewButton("window", "雨窗")}
+              ${focusViewButton("bar", "吧台")}
+              ${focusViewButton("sofa", "沙发")}
+            </div>
+          </div>
+          <div class="session-setting-group">
+            <span>声音</span>
+            <div class="sound-controls" aria-label="声音设置">
+              ${soundButton("ambient", "♫", "环境音")}
+              ${soundButton("presence", "◌", "陪伴感")}
+              ${soundButton("white", "≈", "柔和底噪")}
+              ${soundButton("music", "♪", "背景音乐")}
+            </div>
+          </div>
+          <p class="session-companions"><i></i><span>${companionCount} 位真实岛民正在陪伴</span></p>
+          <div class="session-panel-actions">
+            <button type="button" data-action="toggle-timer">${state.isRunning ? "暂停" : "继续"}</button>
+            ${state.sceneId === "cafe" ? '<button type="button" data-action="switch-seat">换座</button>' : ""}
+            <button type="button" class="danger" data-action="finish-session">结束</button>
+          </div>
+        </section>` : ""}
+    </aside>`;
+}
+
 function modeButton(value, label) {
-  return `<button class="mode-button ${state.timerMode === value ? "active" : ""}" data-mode="${value}" ${state.isRunning ? "disabled" : ""}>${label}</button>`;
+  return `<button class="mode-button ${state.timerMode === value ? "active" : ""}" data-mode="${value}">${label}</button>`;
+}
+
+function focusViewButton(value, label) {
+  return `<button class="focus-view-button ${state.focusImageChoice === value ? "active" : ""}" data-focus-view="${value}">${label}</button>`;
 }
 
 function soundButton(key, icon, label) {
@@ -879,6 +1970,7 @@ function getSummaryCopy(status) {
 }
 
 function formatTime() {
+  if (state.timerMode === -1) return "专注中";
   const total = state.timerMode === 0 ? state.elapsedSeconds : state.remainingSeconds;
   const minutes = Math.floor(total / 60);
   const seconds = Math.floor(total % 60);
@@ -886,14 +1978,16 @@ function formatTime() {
 }
 
 function setTimerMode(mode) {
-  if (state.isRunning) return;
+  if (state.isRunning) syncTimerFromClock();
   state.timerMode = mode;
-  state.durationSeconds = mode * 60;
-  state.remainingSeconds = mode * 60;
+  state.durationSeconds = Math.max(0, mode * 60);
+  state.remainingSeconds = state.durationSeconds;
   state.elapsedSeconds = 0;
-  state.sessionStartedAt = null;
+  state.sessionStartedAt = Date.now();
   state.sessionResult = null;
-  renderFocus();
+  lastTick = Date.now();
+  if (state.view === "room") renderRoom();
+  else renderFocus();
 }
 
 function toggleTimer() {
@@ -911,9 +2005,9 @@ function toggleTimer() {
     updateAudio();
     persistActiveSession(true);
   }
-  const button = document.querySelector('[data-action="toggle-timer"]');
-  if (button) button.textContent = state.isRunning ? "暂停" : "继续";
-  document.querySelectorAll("[data-mode]").forEach((element) => { element.disabled = state.isRunning; });
+  document.querySelectorAll('[data-action="toggle-timer"]').forEach((button) => {
+    button.textContent = state.isRunning ? "暂停" : "继续";
+  });
 }
 
 function startTicker() {
@@ -921,8 +2015,9 @@ function startTicker() {
   lastTick = lastTick || Date.now();
   ticker = window.setInterval(() => {
     if (syncTimerFromClock()) return;
-    const timerElement = document.querySelector("#timer");
-    if (timerElement) timerElement.textContent = formatTime();
+    document.querySelectorAll("[data-session-clock]").forEach((timerElement) => {
+      timerElement.textContent = formatTime();
+    });
     if (Date.now() - lastPersistAt >= 5000) persistActiveSession();
   }, 1000);
 }
@@ -951,15 +2046,17 @@ function stopTicker() {
 }
 
 function stopTickerIfNeeded() {
-  if (state.view !== "focus") stopTicker();
+  if (state.view !== "focus" && !state.awaitingImmersiveFocus) stopTicker();
 }
 
 async function finishSession(forcedStatus = null) {
   if (state.isRunning && !forcedStatus && syncTimerFromClock()) return;
   state.isRunning = false;
+  state.sessionPanelOpen = false;
+  clearImmersiveAutoEnter();
   stopTicker();
   stopAudio();
-  const status = forcedStatus || (state.elapsedSeconds === 0 ? "not_started" : state.timerMode === 0 ? "free_completed" : "ended_early");
+  const status = forcedStatus || (state.elapsedSeconds === 0 ? "not_started" : state.timerMode <= 0 ? "free_completed" : "ended_early");
   state.sessionResult = buildSessionResult(status);
   if (state.elapsedSeconds > 0) saveSessionResult(state.sessionResult);
   localStorage.removeItem(STORAGE_KEYS.activeSession);
@@ -1027,7 +2124,8 @@ function persistActiveSession(force = false) {
 function restoreActiveSession() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.activeSession) || "null");
-    if (!saved || !scenes[saved.sceneId] || saved.selectedSeat === null) return;
+    const scene = saved ? scenes[saved.sceneId] : null;
+    if (!saved || !scene || saved.selectedSeat === null || saved.selectedSeat >= scene.seats.length) return;
     Object.assign(state, {
       view: "focus",
       sceneId: saved.sceneId,
@@ -1064,9 +2162,10 @@ function restoreActiveSession() {
 
 function resetTimerState({ keepMode = true } = {}) {
   state.isRunning = false;
+  clearImmersiveAutoEnter();
   state.timerMode = keepMode ? state.timerMode : 25;
-  state.durationSeconds = state.timerMode * 60;
-  state.remainingSeconds = state.timerMode * 60;
+  state.durationSeconds = Math.max(0, state.timerMode * 60);
+  state.remainingSeconds = state.durationSeconds;
   state.elapsedSeconds = 0;
   state.sessionStartedAt = null;
   state.sessionResult = null;
@@ -1163,6 +2262,24 @@ function showToast(message) {
   window.setTimeout(() => toast.classList.remove("show"), 1800);
 }
 
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const success = document.execCommand("copy");
+    textarea.remove();
+    return success;
+  }
+}
+
 function refreshPopulationDisplay() {
   document.querySelectorAll(".global-online-count").forEach((element) => {
     element.textContent = state.onlineIslanders;
@@ -1195,10 +2312,19 @@ function schedulePopulationChange() {
 document.addEventListener("click", (event) => {
   const sceneButton = event.target.closest("[data-scene]");
   if (sceneButton) {
+    state.libraryCurrentSeatId = null;
     state.sceneId = sceneButton.dataset.scene;
     state.roomId = null;
+    state.roomPreviewId = null;
     state.view = "rooms";
     render();
+    return;
+  }
+
+  const roomPreviewButton = event.target.closest("[data-preview-room]");
+  if (roomPreviewButton) {
+    state.roomPreviewId = roomPreviewButton.dataset.previewRoom;
+    renderRooms();
     return;
   }
 
@@ -1208,6 +2334,20 @@ document.addEventListener("click", (event) => {
     state.selectedSeat = null;
     state.view = "room";
     render();
+    return;
+  }
+
+  const seatMarkerElement = event.target.closest("[data-cafe-seat-marker-object]");
+  if (seatMarkerElement && state.cafeDebugMode.enabled) {
+    state.cafeSceneEditor.activeObjectId = seatMarkerElement.dataset.cafeSeatMarkerObject;
+    renderRoom();
+    return;
+  }
+
+  const librarySeatMarkerElement = event.target.closest("[data-library-seat-marker-object]");
+  if (librarySeatMarkerElement && state.libraryDebugMode.enabled) {
+    state.librarySceneEditor.activeObjectId = librarySeatMarkerElement.dataset.librarySeatMarkerObject;
+    renderRoom();
     return;
   }
 
@@ -1235,6 +2375,14 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const focusViewButtonElement = event.target.closest("[data-focus-view]");
+  if (focusViewButtonElement) {
+    state.focusImageChoice = focusViewButtonElement.dataset.focusView;
+    if (state.view === "focus") renderFocus();
+    else renderRoom();
+    return;
+  }
+
   const feedbackButton = event.target.closest("[data-feedback]");
   if (feedbackButton) {
     state.feedback = feedbackButton.dataset.feedback;
@@ -1244,6 +2392,20 @@ document.addEventListener("click", (event) => {
     }
     document.querySelectorAll("[data-feedback]").forEach((button) => button.classList.toggle("selected", button === feedbackButton));
     showToast("谢谢，你的感受已经记下了");
+    return;
+  }
+
+  const sceneObjectElement = event.target.closest("[data-cafe-scene-object]");
+  if (sceneObjectElement && state.cafeDebugMode.enabled) {
+    state.cafeSceneEditor.activeObjectId = sceneObjectElement.dataset.cafeSceneObject;
+    renderRoom();
+    return;
+  }
+
+  const libraryObjectElement = event.target.closest("[data-library-scene-object]");
+  if (libraryObjectElement && state.libraryDebugMode.enabled) {
+    state.librarySceneEditor.activeObjectId = libraryObjectElement.dataset.librarySceneObject;
+    renderRoom();
     return;
   }
 
@@ -1261,23 +2423,44 @@ document.addEventListener("click", (event) => {
   }
   if (action === "back-island") {
     state.view = "island";
+    state.roomPreviewId = null;
     render();
   }
   if (action === "back-rooms") {
     state.isTransitioning = false;
+    clearImmersiveAutoEnter();
     releaseSeat();
     stopRoomPresence();
     state.view = "rooms";
     state.selectedSeat = null;
+    state.libraryCurrentSeatId = null;
     render();
   }
   if (action === "sit-down" && state.selectedSeat !== null) {
     occupySelectedSeat();
   }
+  if (action === "enter-preview-room") {
+    state.roomId = state.roomPreviewId || scenes[state.sceneId].rooms[0].id;
+    state.selectedSeat = null;
+    state.view = "room";
+    render();
+  }
+  if (action === "enter-immersive-focus") enterImmersiveFocus();
+  if (action === "enter-library-focus") {
+    state.view = "focus";
+    render();
+  }
+  if (action === "toggle-session-panel") {
+    state.sessionPanelOpen = !state.sessionPanelOpen;
+    if (state.view === "focus") renderFocus();
+    else renderRoom();
+  }
   if (action === "toggle-timer") toggleTimer();
   if (action === "switch-seat") {
     syncTimerFromClock();
     state.isRunning = false;
+    state.sessionPanelOpen = false;
+    clearImmersiveAutoEnter();
     stopTicker();
     suspendAudio();
     state.selectedSeat = null;
@@ -1288,9 +2471,269 @@ document.addEventListener("click", (event) => {
   if (action === "retry-session") retrySession();
   if (action === "return-room") returnRoom();
   if (action === "return-island") returnIsland();
+  if (action === "toggle-cafe-debug-mode") {
+    state.cafeDebugMode.enabled = !state.cafeDebugMode.enabled;
+    state.cafeSpriteTuning.enabled = state.cafeDebugMode.enabled;
+    if (state.cafeDebugMode.enabled) clearImmersiveAutoEnter();
+    renderRoom();
+  }
+  if (action === "toggle-library-debug-mode") {
+    state.libraryDebugMode.enabled = !state.libraryDebugMode.enabled;
+    renderRoom();
+  }
+  if (action === "publish-cafe-scene-layout") {
+    publishCafeSceneLayout();
+    showToast("当前位置已固定，普通模式将使用这套布局");
+  }
+  if (action === "select-cafe-scene-object") {
+    const objectId = actionElement.dataset.cafeObjectOption;
+    if (cafeEditorObjectById(objectId)) {
+      state.cafeSceneEditor.activeObjectId = objectId;
+      renderRoom();
+    }
+  }
+  if (action === "nudge-cafe-scene-object") {
+    const objectId = state.cafeSceneEditor.activeObjectId;
+    const field = actionElement.dataset.objectField;
+    const delta = Number(actionElement.dataset.objectDelta || 0);
+    const current = cafeSceneObjectConfig(objectId);
+    updateCafeSceneObject(objectId, { [field]: Number(current[field]) + delta });
+  }
+  if (action === "flip-cafe-scene-object") {
+    const objectId = state.cafeSceneEditor.activeObjectId;
+    const current = cafeSceneObjectConfig(objectId);
+    updateCafeSceneObject(objectId, { flipX: !current.flipX });
+  }
+  if (action === "toggle-cafe-scene-object-visible") {
+    const objectId = state.cafeSceneEditor.activeObjectId;
+    const current = cafeSceneObjectConfig(objectId);
+    updateCafeSceneObject(objectId, { visible: !current.visible });
+  }
+  if (action === "duplicate-cafe-scene-object") {
+    const copyId = duplicateCafeSceneObject(state.cafeSceneEditor.activeObjectId);
+    if (copyId) {
+      renderRoom();
+      showToast("已复制当前物件，可以直接拖动副本");
+    }
+  }
+  if (action === "delete-cafe-scene-object") {
+    if (deleteCafeSceneObject(state.cafeSceneEditor.activeObjectId)) {
+      renderRoom();
+      showToast("已删除当前物件");
+    }
+  }
+  if (action === "reset-cafe-scene-object") {
+    resetCafeSceneObject(state.cafeSceneEditor.activeObjectId);
+    showToast("已恢复当前物件默认参数");
+  }
+  if (action === "release-cafe-seat-now") {
+    releaseSeat({ force: true }).then(() => {
+      state.selectedSeat = null;
+      syncCafeState();
+      renderRoom();
+      showToast("已释放当前浏览器的座位占用");
+    });
+  }
+  if (action === "copy-cafe-scene-objects") {
+    const json = JSON.stringify(allCafeSceneObjectConfigs(), null, 2);
+    copyTextToClipboard(json).then((success) => {
+      showToast(success ? "全部场景物件 JSON 已复制" : "复制失败，请手动记录参数");
+    });
+  }
+  if (action === "publish-library-scene-layout") {
+    publishLibrarySceneLayout();
+    showToast("学院区当前位置已固定，普通模式将使用这套布局");
+  }
+  if (action === "select-library-scene-object") {
+    const objectId = actionElement.dataset.libraryObjectOption;
+    if (libraryEditorObjectById(objectId)) {
+      state.librarySceneEditor.activeObjectId = objectId;
+      renderRoom();
+    }
+  }
+  if (action === "nudge-library-scene-object") {
+    const objectId = state.librarySceneEditor.activeObjectId;
+    const field = actionElement.dataset.objectField;
+    const delta = Number(actionElement.dataset.objectDelta || 0);
+    const current = librarySceneObjectConfig(objectId);
+    updateLibrarySceneObject(objectId, { [field]: Number(current[field]) + delta });
+  }
+  if (action === "flip-library-scene-object") {
+    const objectId = state.librarySceneEditor.activeObjectId;
+    const current = librarySceneObjectConfig(objectId);
+    updateLibrarySceneObject(objectId, { flipX: !current.flipX });
+  }
+  if (action === "toggle-library-scene-object-visible") {
+    const objectId = state.librarySceneEditor.activeObjectId;
+    const current = librarySceneObjectConfig(objectId);
+    updateLibrarySceneObject(objectId, { visible: !current.visible });
+  }
+  if (action === "duplicate-library-scene-object") {
+    if (duplicateLibrarySceneObject(state.librarySceneEditor.activeObjectId)) {
+      renderRoom();
+      showToast("已复制当前学院区物件");
+    }
+  }
+  if (action === "delete-library-scene-object") {
+    if (deleteLibrarySceneObject(state.librarySceneEditor.activeObjectId)) {
+      renderRoom();
+      showToast("已删除当前学院区物件");
+    }
+  }
+  if (action === "reset-library-scene-object") {
+    resetLibrarySceneObject(state.librarySceneEditor.activeObjectId);
+    showToast("已恢复当前物件默认参数");
+  }
+  if (action === "copy-library-scene-objects") {
+    copyTextToClipboard(JSON.stringify(allLibrarySceneObjectConfigs(), null, 2)).then((success) => {
+      showToast(success ? "学院区全部物件 JSON 已复制" : "复制失败，请手动记录参数");
+    });
+  }
+  if (action === "nudge-cafe-sprite") {
+    const seatId = state.cafeSpriteTuning.activeSeatId;
+    const field = actionElement.dataset.tuneField;
+    const delta = Number(actionElement.dataset.tuneDelta || 0);
+    const current = cafeSpriteTuningForSeat(seatId);
+    updateCafeSpriteTuning(seatId, { [field]: Number(current[field]) + delta });
+  }
+  if (action === "flip-cafe-sprite") {
+    const seatId = state.cafeSpriteTuning.activeSeatId;
+    const current = cafeSpriteTuningForSeat(seatId);
+    updateCafeSpriteTuning(seatId, { flipX: !current.flipX });
+  }
+  if (action === "reset-cafe-sprite-tuning") {
+    resetCafeSpriteTuning(state.cafeSpriteTuning.activeSeatId);
+    showToast("已恢复默认角色参数");
+  }
+  if (action === "copy-cafe-sprite-tuning") {
+    const seatId = state.cafeSpriteTuning.activeSeatId;
+    const json = JSON.stringify({ [seatId]: cafeSpriteTuningForSeat(seatId) }, null, 2);
+    copyTextToClipboard(json).then((success) => {
+      showToast(success ? "角色参数 JSON 已复制" : "复制失败，请手动记录参数");
+    });
+  }
   if (action === "profile") showToast("个人中心将用于设置、偏好与语言切换，后续开放");
   if (action === "locked-room") showToast("首期先把临窗雨声做完整，另外两个房间会沿用同一套引擎");
   if (action === "locked") showToast("这个区域还在建设中，内测后会根据投票决定优先开放顺序");
+});
+
+document.addEventListener("input", (event) => {
+  const libraryObjectInput = event.target.closest("[data-library-object-input]");
+  if (libraryObjectInput) {
+    const field = libraryObjectInput.dataset.libraryObjectInput;
+    updateLibrarySceneObject(state.librarySceneEditor.activeObjectId, { [field]: Number(libraryObjectInput.value) });
+    return;
+  }
+  const objectInput = event.target.closest("[data-object-input]");
+  if (objectInput) {
+    const field = objectInput.dataset.objectInput;
+    updateCafeSceneObject(state.cafeSceneEditor.activeObjectId, { [field]: Number(objectInput.value) });
+    return;
+  }
+  const input = event.target.closest("[data-tune-input]");
+  if (!input) return;
+  const field = input.dataset.tuneInput;
+  updateCafeSpriteTuning(state.cafeSpriteTuning.activeSeatId, { [field]: Number(input.value) });
+});
+
+document.addEventListener("pointerdown", (event) => {
+  const cafeEditorActive = state.sceneId === "cafe" && state.cafeDebugMode.enabled;
+  const libraryEditorActive = state.sceneId === "library" && state.libraryDebugMode.enabled;
+  if ((!cafeEditorActive && !libraryEditorActive) || state.view !== "room") return;
+  if (event.button !== undefined && event.button !== 0) return;
+  const objectElement = event.target.closest("[data-cafe-scene-object], [data-cafe-seat-marker-object], [data-library-scene-object], [data-library-seat-marker-object]");
+  if (!objectElement) return;
+  const stageElement = objectElement.closest(".seat-layer");
+  if (!stageElement) return;
+  const objectId = objectElement.dataset.cafeSceneObject || objectElement.dataset.cafeSeatMarkerObject || objectElement.dataset.librarySceneObject || objectElement.dataset.librarySeatMarkerObject;
+  const config = libraryEditorActive ? librarySceneObjectConfig(objectId) : cafeSceneObjectConfig(objectId);
+  const pointer = cafeScenePointerPosition(event, stageElement);
+  if (libraryEditorActive) {
+    state.librarySceneEditor.activeObjectId = objectId;
+    applyLibrarySceneObjectToDom(objectId);
+  } else {
+    state.cafeSceneEditor.activeObjectId = objectId;
+    applyCafeSceneObjectToDom(objectId);
+  }
+  cafeSceneObjectDrag = {
+    objectId,
+    sceneId: state.sceneId,
+    pointerId: event.pointerId,
+    offsetLeft: pointer.left - config.left,
+    offsetTop: pointer.top - config.top,
+    element: objectElement,
+  };
+  objectElement.classList.add("is-dragging");
+  document.body.classList.add("is-cafe-object-dragging");
+  objectElement.setPointerCapture?.(event.pointerId);
+  event.preventDefault();
+});
+
+document.addEventListener("pointermove", (event) => {
+  if (!cafeSceneObjectDrag) return;
+  if (event.pointerId !== cafeSceneObjectDrag.pointerId) return;
+  const stageElement = document.querySelector(".room.is-debug-layout .seat-layer");
+  if (!stageElement) return;
+  const pointer = cafeScenePointerPosition(event, stageElement);
+  const updateObject = cafeSceneObjectDrag.sceneId === "library" ? updateLibrarySceneObject : updateCafeSceneObject;
+  updateObject(cafeSceneObjectDrag.objectId, {
+    left: clampScenePercent(pointer.left - cafeSceneObjectDrag.offsetLeft),
+    top: clampScenePercent(pointer.top - cafeSceneObjectDrag.offsetTop),
+  });
+  event.preventDefault();
+});
+
+function endCafeSceneObjectDrag(event) {
+  if (!cafeSceneObjectDrag) return;
+  if (event?.pointerId !== undefined && event.pointerId !== cafeSceneObjectDrag.pointerId) return;
+  cafeSceneObjectDrag.element?.classList.remove("is-dragging");
+  document.body.classList.remove("is-cafe-object-dragging");
+  cafeSceneObjectDrag = null;
+}
+
+document.addEventListener("pointerup", endCafeSceneObjectDrag);
+document.addEventListener("pointercancel", endCafeSceneObjectDrag);
+
+document.addEventListener("keydown", (event) => {
+  if (state.view !== "room" || !["cafe", "library"].includes(state.sceneId)) return;
+  const libraryEditorActive = state.sceneId === "library" && state.libraryDebugMode.enabled;
+  if (!libraryEditorActive && !state.cafeSpriteTuning.enabled && !state.cafeDebugMode.enabled) return;
+  const deltas = {
+    ArrowLeft: { left: -1 },
+    ArrowRight: { left: 1 },
+    ArrowUp: { top: -1 },
+    ArrowDown: { top: 1 },
+  };
+  const direction = deltas[event.key];
+  if (!direction) return;
+  const activeTag = document.activeElement?.tagName;
+  if (activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT") return;
+  event.preventDefault();
+  const step = event.shiftKey ? 1 : 0.2;
+  if (libraryEditorActive) {
+    const objectId = state.librarySceneEditor.activeObjectId;
+    const current = librarySceneObjectConfig(objectId);
+    updateLibrarySceneObject(objectId, {
+      left: current.left + (direction.left || 0) * step,
+      top: current.top + (direction.top || 0) * step,
+    });
+    return;
+  }
+  if (state.cafeDebugMode.enabled) {
+    const objectId = state.cafeSceneEditor.activeObjectId;
+    const current = cafeSceneObjectConfig(objectId);
+    updateCafeSceneObject(objectId, {
+      left: current.left + (direction.left || 0) * step,
+      top: current.top + (direction.top || 0) * step,
+    });
+    return;
+  }
+  const seatId = state.cafeSpriteTuning.activeSeatId;
+  const current = cafeSpriteTuningForSeat(seatId);
+  updateCafeSpriteTuning(seatId, {
+    left: current.left + (direction.left || 0) * step,
+    top: current.top + (direction.top || 0) * step,
+  });
 });
 
 document.addEventListener("visibilitychange", () => {

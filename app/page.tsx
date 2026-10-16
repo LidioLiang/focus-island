@@ -5,7 +5,7 @@ export default function Home() {
     <>
       <main id="app" aria-live="polite" />
       <div className="rotate-notice">请将设备横过来，岛上的房间会更舒展。</div>
-      <Script src="/app.js?v=11" strategy="afterInteractive" />
+      <Script src="/app.js?v=12" strategy="afterInteractive" />
     </>
   );
 }

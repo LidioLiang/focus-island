@@ -8,19 +8,17 @@ ASSETS = ROOT / "public" / "assets"
 EMPTY_PATH = ASSETS / "20261011-cafe-focus-room.png"
 OCCUPIED_PATH = ASSETS / "20261012-cafe-all-seats-occupied.png"
 
-# Tight polygons isolate each seated person and their immediate work surface.
+# Tight polygons isolate the six MVP seats and their immediate work surface.
 # Coordinates are in the shared 1586 x 992 room-image coordinate system.
+# New seat IDs map to the previous wider scene as follows:
+# 1 <- old 2, 2 <- old 3, 3 <- old 6, 4 <- old 7, 5 <- old 9, 6 <- old 10.
 SEAT_POLYGONS = {
-    1: [(205, 264), (235, 220), (255, 183), (309, 181), (351, 225), (365, 309), (350, 389), (342, 469), (245, 478), (218, 405)],
-    2: [(377, 273), (405, 226), (416, 181), (469, 178), (510, 222), (523, 315), (504, 420), (403, 435), (380, 362)],
-    3: [(488, 250), (515, 209), (539, 169), (595, 165), (637, 213), (646, 307), (630, 418), (524, 437), (493, 358)],
-    4: [(624, 253), (653, 207), (676, 164), (724, 168), (759, 215), (769, 307), (754, 414), (659, 425), (628, 354)],
-    5: [(893, 262), (923, 215), (947, 177), (998, 181), (1045, 220), (1068, 313), (1058, 417), (984, 455), (917, 429), (892, 353)],
-    6: [(1038, 291), (1071, 247), (1096, 214), (1147, 217), (1192, 264), (1210, 354), (1192, 451), (1114, 467), (1052, 414)],
-    7: [(1188, 325), (1220, 278), (1246, 243), (1305, 242), (1352, 289), (1371, 390), (1355, 499), (1268, 520), (1207, 466)],
-    8: [(1357, 365), (1390, 318), (1413, 282), (1466, 283), (1522, 333), (1554, 442), (1538, 553), (1438, 565), (1372, 503)],
-    9: [(403, 558), (444, 510), (514, 486), (548, 443), (606, 450), (650, 504), (665, 600), (635, 700), (548, 744), (447, 713), (407, 643)],
-    10: [(958, 582), (992, 531), (1019, 478), (1077, 476), (1133, 516), (1177, 592), (1190, 682), (1160, 758), (1055, 778), (981, 724)],
+    1: [(382, 268), (406, 226), (422, 184), (466, 181), (505, 224), (518, 314), (502, 414), (424, 432), (389, 365)],
+    2: [(500, 251), (523, 211), (546, 170), (590, 168), (632, 214), (642, 304), (625, 414), (542, 433), (502, 360)],
+    3: [(1046, 290), (1076, 249), (1102, 216), (1144, 219), (1188, 266), (1202, 351), (1187, 444), (1117, 461), (1058, 412)],
+    4: [(1198, 324), (1228, 281), (1252, 246), (1300, 245), (1346, 291), (1361, 387), (1346, 492), (1272, 511), (1214, 462)],
+    5: [(412, 557), (452, 512), (517, 488), (548, 447), (600, 453), (640, 506), (653, 596), (628, 682), (550, 728), (456, 704), (418, 640)],
+    6: [(968, 582), (1000, 535), (1027, 484), (1075, 482), (1128, 520), (1168, 592), (1178, 674), (1152, 743), (1058, 764), (990, 718)],
 }
 
 
@@ -30,12 +28,12 @@ def build_difference_alpha(empty: Image.Image, occupied: Image.Image, polygon: l
 
     # Suppress tiny global color drift, keep subject-level changes, then softly
     # close small holes around hair, clothing, hands and laptop edges.
-    difference = difference.point(lambda value: max(0, min(255, (value - 10) * 9)))
+    difference = difference.point(lambda value: max(0, min(255, (value - 18) * 11)))
     difference = difference.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(1.0))
 
     polygon_mask = Image.new("L", empty.size, 0)
     ImageDraw.Draw(polygon_mask).polygon(polygon, fill=255)
-    polygon_mask = polygon_mask.filter(ImageFilter.GaussianBlur(3.0))
+    polygon_mask = polygon_mask.filter(ImageFilter.GaussianBlur(1.0))
     return ImageChops.multiply(difference, polygon_mask)
 
 
@@ -50,11 +48,11 @@ def main() -> None:
         alpha = build_difference_alpha(empty, occupied, polygon)
         layer = occupied.convert("RGBA")
         layer.putalpha(alpha)
-        output = ASSETS / f"20261012-cafe-seat-{seat_id:02d}-occupant.webp"
+        output = ASSETS / f"20261013-cafe-seat-{seat_id:02d}-occupant.webp"
         layer.save(output, "WEBP", quality=92, method=6, exact=True)
         preview = Image.alpha_composite(preview, layer)
 
-    preview.save(ASSETS / "20261012-cafe-occupants-composite-preview.png")
+    preview.save(ASSETS / "20261013-cafe-six-seat-occupants-preview.png")
 
 
 if __name__ == "__main__":

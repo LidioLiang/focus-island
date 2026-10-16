@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
 import { NextResponse } from "next/server";
 
-export const ROOM_ID = "cafe-rain";
-export const SEAT_COUNT = 10;
+export const ROOM_IDS = new Set(["cafe-sun", "cafe-rain", "cafe-sunset", "cafe-night"]);
+export const SEAT_COUNT = 6;
 export const RESERVED_TTL_MS = 15_000;
 export const OCCUPIED_TTL_MS = 45_000;
 
@@ -23,7 +23,7 @@ export function json(data: unknown, init?: ResponseInit) {
 }
 
 export function validRoom(roomId: string) {
-  return roomId === ROOM_ID;
+  return ROOM_IDS.has(roomId);
 }
 
 export function validSeat(seatId: number) {
