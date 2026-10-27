@@ -2,10 +2,10 @@ begin;
 create extension if not exists pgtap with schema extensions;
 select plan(17);
 
-select has_table('public', 'profiles');
-select has_table('public', 'room_instances');
-select has_table('public', 'room_sessions');
-select has_table('public', 'seat_leases');
+select has_table('public', 'profiles', 'profiles exists');
+select has_table('public', 'room_instances', 'room_instances exists');
+select has_table('public', 'room_sessions', 'room_sessions exists');
+select has_table('public', 'seat_leases', 'seat_leases exists');
 select ok((select relrowsecurity from pg_class where oid = 'public.profiles'::regclass), 'profiles has RLS enabled');
 select ok((select relrowsecurity from pg_class where oid = 'public.room_instances'::regclass), 'room_instances has RLS enabled');
 select ok((select relrowsecurity from pg_class where oid = 'public.room_sessions'::regclass), 'room_sessions has RLS enabled');
