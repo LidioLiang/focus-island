@@ -1,8 +1,32 @@
 const ASSET_BASE = "./assets/";
+const PUBLIC_CONFIG = window.__FOCUS_ISLAND_CONFIG__ || {};
+const AUDIO_BASE = PUBLIC_CONFIG.audioBaseUrl
+  ? `${String(PUBLIC_CONFIG.audioBaseUrl).replace(/\/$/, "")}/`
+  : `${ASSET_BASE}audio/`;
 // 填入正式问卷地址后，页面底部的反馈入口会自动启用。
 const FEEDBACK_FORM_URL = "";
 const CAFE_STATE_LAYER_SETTLE_MS = 800;
-const CAFE_IMMERSIVE_AUTO_ENTER_MS = 30000;
+const CAFE_IMMERSIVE_AUTO_ENTER_MS = 800;
+const CAFE_ROOM_3D_READY_TIMEOUT_MS = 12000;
+const CAFE_ROOM_RENDERER_QUERY_KEY = "roomRenderer";
+const CAFE_ROOM_RENDERER_STORAGE_KEY = "focusIslandInternalCafeRoomRendererV1";
+const CAFE_ROOM_RENDERER_STATIC = "static";
+const CAFE_ROOM_RENDERER_GODOT_3D = "godot3d";
+const CAFE_ROOM_3D_SRC_QUERY_KEY = "godot3dSrc";
+const CAFE_ROOM_3D_DEFAULT_SRC = "/godot-room-3d/index.html";
+const ROOM_3D_CONTRACT_VERSION = 1;
+const ROOM_3D_SERVICE_SEAT_ID = 3;
+const ROOM_3D_RESPONSE_STORAGE_KEY = "focusIslandRoom3DResponseV1";
+const ROOM_3D_LEASE_HEARTBEAT_MS = 5000;
+const ROOM_3D_EVENT_TYPES = new Set([
+  "seat_intent", "seat_reservation_granted", "seat_reservation_denied",
+  "seat_sequence_started", "seat_contact_completed", "seat_occupation_confirmed",
+  "seat_occupation_failed", "activity_setup_completed", "focus_autostart_requested",
+  "focus_autostart_confirmed", "focus_autostart_failed", "seat_sequence_failed",
+  "seat_release_requested",
+]);
+const DEFAULT_REST_MINUTES = 5;
+const REST_PRESET_MINUTES = [5, 10, 15];
 const scenes = {
   cafe: {
     id: "cafe",
@@ -11,24 +35,16 @@ const scenes = {
     islandLabel: "四时咖啡厅",
     icon: "city",
     online: 0,
-    image: `${ASSET_BASE}20261015-cafe-room-aligned-sun.png`,
+    image: `${ASSET_BASE}20261013-cafe-room-six-seat-base.png`,
     debugImage: `${ASSET_BASE}20261015-cafe-room-empty-stage-wide.png`,
-    focusViews: {
-      1: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
-      2: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
-      3: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
-      4: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
-      5: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`,
-      6: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`,
-    },
-    description: "从晴日、雨雾到黄昏与月夜，选一种今天需要的光线，和岛民们安静地做自己的事。",
+    focusViews: Object.fromEntries([1, 2, 3, 4, 5, 6].map((seatId) => [seatId, `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`])),
+    description: "在六座咖啡馆里选一张喜欢的位置，和其他人安静地开始今天的专注。",
     sounds: ["咖啡馆底噪", "窗外环境声", "偶尔杯碟声"],
     filter: 620,
     rooms: [
-      { id: "cafe-sun", name: "晴日花房", mood: "明亮日光 · 适合开始与轻任务", description: "让充足的自然光，陪你轻轻开始今天的任务。", occupied: 0, image: `${ASSET_BASE}20261015-cafe-room-aligned-sun.png`, selectorImage: `${ASSET_BASE}20261015-晴天阳光场景.png`, sounds: ["晴朗日光", "咖啡馆底噪", "轻松开始"] },
-      { id: "cafe-rain", name: "雨雾清晨", mood: "柔和雨声 · 适合写作与深度工作", description: "雨雾收住了城市的喧闹，适合把注意力留给一件事。", occupied: 0, image: `${ASSET_BASE}20261015-cafe-room-empty-stage-wide.png`, selectorImage: `${ASSET_BASE}20261015-雨雾清晨学习场景.png`, sounds: ["细雨", "窗上雨声", "深度工作"] },
-      { id: "cafe-sunset", name: "金色黄昏", mood: "温暖夕照 · 适合整理与复盘", description: "金色的光落在木地板上，适合把今天慢慢收好。", occupied: 0, image: `${ASSET_BASE}20261015-cafe-room-aligned-sunset.png`, selectorImage: `${ASSET_BASE}20261015-金色黄昏学习场景.png`, sounds: ["黄昏街声", "杯碟轻响", "整理复盘"] },
-      { id: "cafe-night", name: "月夜书室", mood: "安静月色 · 适合夜间学习", description: "月光与室内暖灯一起亮着，陪你完成今天最后一段专注。", occupied: 0, image: `${ASSET_BASE}20261015-cafe-room-aligned-night.png`, selectorImage: `${ASSET_BASE}20261015-晴朗月夜学习场景.png`, sounds: ["安静月色", "远处城市", "夜间学习"] },
+      { id: "cafe-01", name: "四时咖啡馆", occupied: 0, image: `${ASSET_BASE}20261013-cafe-room-six-seat-base.png` },
+      { id: "cafe-02", name: "四时咖啡馆", occupied: 0, image: `${ASSET_BASE}20261013-cafe-room-six-seat-base.png` },
+      { id: "cafe-03", name: "四时咖啡馆", occupied: 0, image: `${ASSET_BASE}20261013-cafe-room-six-seat-base.png` },
     ],
     seats: [
       [32, 49, false], [37, 49, false],
@@ -145,13 +161,23 @@ const scenes = {
   },
 };
 
-const islandImage = `${ASSET_BASE}20261012-focus-island-map-detailed.png`;
-const islandOnlineCount = Object.values(scenes).reduce((total, scene) => total + scene.online, 0);
+// The only production room-layout configuration used by the fast MVP.
+// Coordinates are percentages of the 1586 × 992 design canvas.
+const staticSeatSlots = [
+  { seat_id: 1, hit_area: [32, 49], occupant_anchor: [24.8, 23.8, 13.2, 31.2], label_anchor: [32, 43], desk_zone_id: "bar", occupied_asset: `${ASSET_BASE}20261014-cafe-avatar-seat-01-idle-sheet.png`, flip: false },
+  { seat_id: 2, hit_area: [37, 49], occupant_anchor: [32.1, 23.6, 13.2, 31.2], label_anchor: [37, 43], desk_zone_id: "bar", occupied_asset: `${ASSET_BASE}20261014-cafe-avatar-seat-02-idle-sheet.png`, flip: false },
+  { seat_id: 3, hit_area: [71, 50], occupant_anchor: [63.68, 23.69, 14.56, 28.23], label_anchor: [71, 44], desk_zone_id: "window", occupied_asset: `${ASSET_BASE}20261014-cafe-avatar-window-idle-sheet.png`, flip: false },
+  { seat_id: 4, hit_area: [80, 51], occupant_anchor: [74.2, 24.1, 14.56, 28.23], label_anchor: [80, 45], desk_zone_id: "window", occupied_asset: `${ASSET_BASE}20261014-cafe-avatar-seat-04-idle-sheet.png`, flip: true },
+  { seat_id: 5, hit_area: [15.5, 67], occupant_anchor: [5.1, 40.7, 14.1, 28.4], label_anchor: [15.5, 61], desk_zone_id: "lounge", occupied_asset: `${ASSET_BASE}20261014-cafe-avatar-seat-05-idle-sheet.png`, flip: false },
+  { seat_id: 6, hit_area: [66, 72], occupant_anchor: [58.8, 48.4, 14.1, 28.4], label_anchor: [66, 66], desk_zone_id: "lounge", occupied_asset: `${ASSET_BASE}20261014-cafe-avatar-seat-06-idle-sheet.png`, flip: false },
+];
 
+const islandImage = `${ASSET_BASE}20261012-focus-island-map-detailed.png`;
 const STORAGE_KEYS = {
   activeSession: "focusIslandActiveSessionV1",
   history: "focusIslandHistoryV1",
   guestIdentity: "focusIslandGuestIdentityV2",
+  preferences: "focusIslandPreferencesV1",
   cafeSpriteTuning: "focusIslandCafeSpriteTuningV2",
   // V5 resets stale editor drafts that were created before the scene layout
   // was fixed. Older drafts can otherwise override the restored coordinates.
@@ -160,6 +186,32 @@ const STORAGE_KEYS = {
   librarySceneEditor: "focusIslandLibrarySceneEditorV1",
   libraryScenePublished: "focusIslandLibraryScenePublishedV1",
 };
+
+const FOCUS_MUSIC_TRACKS = {
+  "rainy-notes": { name: "雨夜手札", src: `${AUDIO_BASE}20261022-focus-music-rainy-notes.mp3` },
+  "warm-reverie": { name: "暖灯漫想", src: `${AUDIO_BASE}20261022-focus-music-warm-reverie.mp3` },
+  "moonlit-walk": { name: "月光缓行", src: `${AUDIO_BASE}20261022-focus-music-moonlit-walk.mp3` },
+  "island-breeze": { name: "岛屿长风", src: `${AUDIO_BASE}20261022-focus-music-island-breeze.mp3` },
+};
+const MUSIC_VOLUME_BOOST = 1.3;
+const CAFE_AMBIENT_GAIN = 0.09;
+const SOUND_OPTION_ART = {
+  mute: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
+  ambient: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
+  white: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
+  "rainy-notes": `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
+  "warm-reverie": `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
+  "moonlit-walk": `${ASSET_BASE}20261015-晴朗月夜学习场景.png`,
+  "island-breeze": `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`,
+};
+const AVATAR_OPTIONS = [
+  { id: 0, name: "暖光旅人", image: `${ASSET_BASE}20261014-cafe-avatar-seat-01-source.png` },
+  { id: 1, name: "静谧旅人", image: `${ASSET_BASE}20261014-cafe-avatar-seat-02-source.png` },
+  { id: 2, name: "晨雾旅人", image: `${ASSET_BASE}20261014-cafe-avatar-seat-04-source.png` },
+  { id: 3, name: "月夜旅人", image: `${ASSET_BASE}20261014-cafe-avatar-seat-05-source.png` },
+];
+
+let preferences = loadPreferences();
 
 const initialCafeSceneEditor = loadCafeSceneEditorState();
 const initialCafeScenePublished = loadCafeScenePublishedState() || cloneCafeSceneLayout(initialCafeSceneEditor);
@@ -176,26 +228,32 @@ const state = {
   view: "welcome",
   sceneId: null,
   roomId: null,
+  localRoom: false,
+  isAllocatingRoom: false,
   roomPreviewId: null,
   selectedSeat: null,
-  timerMode: 25,
-  durationSeconds: 25 * 60,
-  remainingSeconds: 25 * 60,
+  timerMode: preferences.defaultTimerMode,
+  durationSeconds: Math.max(0, preferences.defaultTimerMode * 60),
+  remainingSeconds: Math.max(0, preferences.defaultTimerMode * 60),
   elapsedSeconds: 0,
   isRunning: false,
+  sessionPhase: "focus",
+  restDurationSeconds: DEFAULT_REST_MINUTES * 60,
+  restRemainingSeconds: DEFAULT_REST_MINUTES * 60,
+  restStartedAt: null,
+  restCustomOpen: false,
+  nextFocusMode: 25,
   isTransitioning: false,
   sessionStartedAt: null,
   sessionResult: null,
   companions: 6,
-  onlineIslanders: islandOnlineCount,
-  focusedIslanders: 116,
   roomPresence: { leases: [], serverNow: Date.now() },
   currentSeatId: null,
   switchingFromSeatId: null,
   awaitingImmersiveFocus: false,
   immersiveAutoEnterAt: null,
   sessionPanelOpen: false,
-  focusImageChoice: "seat",
+  focusImageChoice: preferences.rememberLastFocusView ? preferences.lastFocusView : "window",
   cafeSpriteTuning: {
     enabled: false,
     activeSeatId: 3,
@@ -223,7 +281,17 @@ const state = {
   },
   libraryScenePublished: initialLibraryScenePublished,
   feedback: null,
-  sounds: { ambient: true, presence: true, white: false, music: false },
+  sounds: { ...preferences.sounds },
+  musicTrack: preferences.musicTrack,
+  soundVolumes: { ...preferences.soundVolumes },
+  personalCenter: {
+    open: false,
+    tab: "overview",
+    monthKey: shanghaiDateKey(Date.now()).slice(0, 7),
+    selectedDate: shanghaiDateKey(Date.now()),
+    filters: { scene: "all", status: "all", mode: "all" },
+    confirmAction: null,
+  },
 };
 
 let ticker = null;
@@ -233,16 +301,155 @@ let audioContext = null;
 let noiseSource = null;
 let noiseGain = null;
 let noiseFilter = null;
-let populationTimer = null;
+let whiteNoiseSource = null;
+let whiteNoiseGain = null;
+let musicAudio = null;
+let loadedMusicTrack = null;
 let roomSyncTimer = null;
 let heartbeatTimer = null;
+let room3DLeaseHeartbeatTimer = null;
+let room3DInteraction = null;
 let immersiveAutoTimer = null;
+let hudIdleTimer = null;
+let godotRoomReadyTimer = null;
 let roomSyncInFlight = false;
 let cafeSceneObjectDrag = null;
+let onlineIdentityPromise = null;
+let onlineUserId = null;
 
-const identity = getOrCreateIdentity();
+let identity = getOrCreateIdentity();
 
 const app = document.querySelector("#app");
+
+function defaultPreferences() {
+  return {
+    schemaVersion: 1,
+    defaultTimerMode: 25,
+    rememberLastSound: true,
+    rememberLastFocusView: true,
+    lastFocusView: "window",
+    sounds: { ambient: true, white: false, music: false },
+    musicTrack: "rainy-notes",
+    soundVolumes: { ambient: 55, white: 30, music: 24 },
+    language: "zh-CN",
+    motionEffects: true,
+    reduceMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || false,
+    hudAutoHide: true,
+    completionSound: true,
+    desktopNotifications: false,
+  };
+}
+
+function clampVolume(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(100, Math.max(0, Math.round(number))) : fallback;
+}
+
+function loadPreferences() {
+  const defaults = defaultPreferences();
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.preferences) || "null");
+    if (!saved || saved.schemaVersion !== 1) return defaults;
+    const defaultTimerMode = [0, 25, 50].includes(Number(saved.defaultTimerMode)) ? Number(saved.defaultTimerMode) : defaults.defaultTimerMode;
+    const musicTrack = FOCUS_MUSIC_TRACKS[saved.musicTrack] ? saved.musicTrack : defaults.musicTrack;
+    return {
+      ...defaults,
+      ...saved,
+      schemaVersion: 1,
+      defaultTimerMode,
+      musicTrack,
+      sounds: { ...defaults.sounds, ...(saved.sounds || {}) },
+      soundVolumes: {
+        ambient: clampVolume(saved.soundVolumes?.ambient, defaults.soundVolumes.ambient),
+        white: clampVolume(saved.soundVolumes?.white, defaults.soundVolumes.white),
+        music: clampVolume(saved.soundVolumes?.music, defaults.soundVolumes.music),
+      },
+      language: saved.language === "en" ? "en" : "zh-CN",
+    };
+  } catch (_) {
+    return defaults;
+  }
+}
+
+function savePreferences() {
+  localStorage.setItem(STORAGE_KEYS.preferences, JSON.stringify(preferences));
+  document.body.classList.toggle("reduce-motion", Boolean(preferences.reduceMotion));
+  document.body.classList.toggle("motion-effects-off", !preferences.motionEffects);
+}
+
+function saveSoundPreferencesFromState() {
+  preferences.sounds = { ...state.sounds };
+  preferences.musicTrack = state.musicTrack;
+  preferences.soundVolumes = { ...state.soundVolumes };
+  savePreferences();
+}
+
+function applyPreferencesToState({ includeTimer = false } = {}) {
+  state.sounds = { ...preferences.sounds };
+  state.musicTrack = preferences.musicTrack;
+  state.soundVolumes = { ...preferences.soundVolumes };
+  if (includeTimer) {
+    state.timerMode = preferences.defaultTimerMode;
+    state.durationSeconds = Math.max(0, state.timerMode * 60);
+    state.remainingSeconds = state.durationSeconds;
+  }
+  if (preferences.rememberLastFocusView && preferences.lastFocusView) state.focusImageChoice = preferences.lastFocusView;
+  document.body.classList.toggle("reduce-motion", Boolean(preferences.reduceMotion));
+  if (state.isRunning) updateAudio();
+}
+
+function persistIdentity() {
+  localStorage.setItem(STORAGE_KEYS.guestIdentity, JSON.stringify(identity));
+  const ownLease = state.roomPresence.leases.find((lease) => lease.sessionId === identity.sessionId);
+  if (ownLease) {
+    ownLease.displayName = identity.displayName;
+    ownLease.avatarSkin = identity.avatarSkin;
+  }
+}
+
+function shanghaiParts(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return parts;
+}
+
+function shanghaiDateKey(value) {
+  const parts = shanghaiParts(value);
+  return parts ? `${parts.year}-${parts.month}-${parts.day}` : "";
+}
+
+function shiftDateKey(dateKey, days) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}-${String(shifted.getUTCDate()).padStart(2, "0")}`;
+}
+
+function dateKeyWeekday(dateKey) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+function formatClockTime(value) {
+  const parts = shanghaiParts(value);
+  return parts ? `${parts.hour}:${parts.minute}` : "--:--";
+}
+
+function formatDuration(seconds) {
+  const totalMinutes = Math.floor(Math.max(0, Number(seconds) || 0) / 60);
+  if (totalMinutes < 60) return `${totalMinutes} 分钟`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`;
+}
 
 function getOrCreateIdentity() {
   try {
@@ -289,12 +496,111 @@ async function api(path, options = {}) {
   return payload;
 }
 
+async function turnstileToken() {
+  const siteKey = PUBLIC_CONFIG.turnstileSiteKey;
+  if (!siteKey) return "";
+  if (!window.turnstile) {
+    await new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-focus-island-turnstile]');
+      if (existing) {
+        existing.addEventListener("load", resolve, { once: true });
+        existing.addEventListener("error", reject, { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.defer = true;
+      script.dataset.focusIslandTurnstile = "true";
+      script.addEventListener("load", resolve, { once: true });
+      script.addEventListener("error", reject, { once: true });
+      document.head.appendChild(script);
+    });
+  }
+  return new Promise((resolve, reject) => {
+    const container = document.createElement("div");
+    Object.assign(container.style, {
+      position: "fixed", inset: "0", zIndex: "10000", display: "grid", placeItems: "center",
+      background: "rgba(8, 28, 24, .42)", backdropFilter: "blur(8px)",
+    });
+    document.body.appendChild(container);
+    const cleanup = () => container.remove();
+    window.turnstile.render(container, {
+      sitekey: siteKey,
+      size: "compact",
+      appearance: "interaction-only",
+      callback: (token) => { cleanup(); resolve(token); },
+      "error-callback": () => { cleanup(); reject(new Error("captcha_failed")); },
+      "expired-callback": () => { cleanup(); reject(new Error("captcha_expired")); },
+    });
+  });
+}
+
+async function ensureOnlineIdentity() {
+  if (!onlineIdentityPromise) {
+    onlineIdentityPromise = (async () => {
+      const session = await api("/api/auth/session");
+      if (session.authenticated) {
+        onlineUserId = session.userId;
+        return session;
+      }
+      const captchaToken = await turnstileToken();
+      const created = await api("/api/auth/anonymous", {
+        method: "POST",
+        body: JSON.stringify({ captchaToken, displayName: identity.displayName, avatarSkin: identity.avatarSkin }),
+      });
+      onlineUserId = created.userId;
+      return created;
+    })().catch((error) => {
+      onlineIdentityPromise = null;
+      throw error;
+    });
+  }
+  return onlineIdentityPromise;
+}
+
 function currentRoomApiId() {
   return state.roomId || (state.sceneId === "cafe" ? scenes.cafe.rooms[0].id : null);
 }
 
+function localNpcLeases() {
+  const now = Date.now();
+  return [
+    { roomId: "cafe-local", seatId: 2, sessionId: "npc-02", displayName: "岛民 · 小鹿", avatarSkin: 1, memberType: "npc", state: "occupied", activity: "安静阅读", focusStartedAt: now - 18 * 60 * 1000 },
+    { roomId: "cafe-local", seatId: 4, sessionId: "npc-04", displayName: "岛民 · 海獭", avatarSkin: 2, memberType: "npc", state: "occupied", activity: "整理笔记", focusStartedAt: now - 7 * 60 * 1000 },
+  ];
+}
+
+async function enterCafeRoom() {
+  if (state.isAllocatingRoom) return;
+  state.isAllocatingRoom = true;
+  showToast("正在为你准备咖啡馆座位…");
+  try {
+    await ensureOnlineIdentity();
+    const allocation = await api("/api/scenes/cafe/allocate", {
+      method: "POST",
+      body: JSON.stringify(identityBody()),
+    });
+    state.roomId = allocation.roomId;
+    state.localRoom = allocation.mode === "local";
+  } catch (_) {
+    state.roomId = "cafe-local";
+    state.localRoom = true;
+    showToast("在线房间暂不可用，已进入本地岛民房间");
+  } finally {
+    state.isAllocatingRoom = false;
+  }
+  state.roomPresence = state.localRoom
+    ? { leases: localNpcLeases(), serverNow: Date.now() }
+    : { leases: [], serverNow: Date.now() };
+  state.selectedSeat = null;
+  state.currentSeatId = null;
+  state.view = roomViewForScene();
+  render();
+}
+
 function leaseForSeat(seatIndex) {
-  return state.roomPresence.leases.find((lease) => Number(lease.seatId) === seatIndex + 1 && lease.state === "occupied") || null;
+  return state.roomPresence.leases.find((lease) => Number(lease.seatId) === seatIndex + 1 && ["reserved", "moving", "occupied"].includes(lease.state)) || null;
 }
 
 function focusedMinutes(lease) {
@@ -350,7 +656,7 @@ function beginImmersiveAutoEnter() {
 function enterImmersiveFocus() {
   if (state.sceneId !== "cafe" || state.selectedSeat === null) return;
   clearImmersiveAutoEnter();
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduceMotion = preferences.reduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const roomView = document.querySelector(".view.room");
   roomView?.classList.add("entering-focus");
   window.setTimeout(() => {
@@ -365,6 +671,7 @@ function stopRoomPresence() {
   roomSyncTimer = null;
   heartbeatTimer = null;
   roomSyncInFlight = false;
+  window.dispatchEvent(new CustomEvent("focus-island:subscribe-room", { detail: { roomId: null } }));
 }
 
 function cafeVisibleSeats() {
@@ -1147,6 +1454,11 @@ function syncCafeSeatActorLayers(leases = state.roomPresence.leases) {
 
 async function syncCafeState({ refreshMarkers = true } = {}) {
   if (roomSyncInFlight || state.sceneId !== "cafe") return;
+  if (state.localRoom) {
+    state.roomPresence.serverNow = Date.now();
+    if (refreshMarkers && state.view === "room") refreshCafeSeatMarkers();
+    return;
+  }
   roomSyncInFlight = true;
   try {
     const presence = await api(`/api/rooms/${currentRoomApiId()}/state`);
@@ -1173,11 +1485,14 @@ function refreshCafeSeatMarkers() {
   if (!markerLayer || state.sceneId !== "cafe") return;
   const renderedSeatEntries = cafeVisibleSeatEntries();
   markerLayer.innerHTML = renderedSeatEntries.map(({ seat, index }) => renderSeat(seat, index, "cafe")).join("");
+  const staticOccupants = document.querySelector(".static-occupants");
+  if (staticOccupants) staticOccupants.innerHTML = renderStaticCafeOccupants();
   syncCafeSceneObjectLayers();
   syncCafeSeatActorLayers();
   const openSeats = renderedSeatEntries.filter(({ index }) => !leaseForSeat(index)).length;
   const note = document.querySelector(".room-footer-copy span");
-  if (note && state.selectedSeat === null) note.textContent = `选择一张喜欢的位置坐下 · 还剩 ${openSeats} 个空位`;
+  if (note && document.querySelector(".static-seat-room")) note.textContent = `无需移动角色 · 还剩 ${openSeats} 个空位`;
+  else if (note && state.selectedSeat === null) note.textContent = `选择一张喜欢的位置坐下 · 还剩 ${openSeats} 个空位`;
   const syncLabel = document.querySelector(".room-sync-label");
   if (syncLabel) syncLabel.textContent = `${cafeVisibleLeases().length} 人正在房间里`;
 }
@@ -1202,20 +1517,26 @@ async function startCafePresence() {
   stopRoomPresence();
   const layer = document.querySelector(".seat-layer");
   if (!layer) return;
+  if (state.localRoom) {
+    refreshCafeSeatMarkers();
+    return;
+  }
   await syncCafeState();
-  roomSyncTimer = window.setInterval(() => syncCafeState(), 2000);
+  window.dispatchEvent(new CustomEvent("focus-island:subscribe-room", { detail: { roomId: currentRoomApiId() } }));
+  roomSyncTimer = window.setInterval(() => syncCafeState(), 60000);
   heartbeatTimer = window.setInterval(sendHeartbeat, 15000);
 }
 
 async function sendHeartbeat() {
   if (!state.currentSeatId || state.sceneId !== "cafe") return;
+  if (state.localRoom) return;
   try {
     await api(`/api/sessions/${identity.sessionId}/heartbeat`, {
       method: "POST",
-      body: JSON.stringify({ activity: state.isRunning ? "专注计时中" : "安静专注" }),
+      body: JSON.stringify({ activity: state.sessionPhase === "rest" ? "休息中" : state.isRunning ? "专注计时中" : "已入座", focusing: state.isRunning }),
     });
   } catch (error) {
-    if (error.status === 404) {
+    if (error.status === 404 || error.status === 409) {
       state.currentSeatId = null;
       showToast("座位连接已过期，请重新选座");
     }
@@ -1225,6 +1546,12 @@ async function sendHeartbeat() {
 async function releaseSeat({ beacon = false, force = false } = {}) {
   clearImmersiveAutoEnter();
   if (!force && !state.currentSeatId && !state.switchingFromSeatId) return;
+  if (state.localRoom) {
+    state.roomPresence.leases = localNpcLeases();
+    state.currentSeatId = null;
+    state.switchingFromSeatId = null;
+    return;
+  }
   const url = `/api/sessions/${identity.sessionId}/release`;
   if (beacon && navigator.sendBeacon) {
     navigator.sendBeacon(url, new Blob(["{}"], { type: "application/json" }));
@@ -1249,6 +1576,15 @@ function brand() {
     </div>`;
 }
 
+function avatarOption(avatarSkin = identity.avatarSkin) {
+  return AVATAR_OPTIONS.find((option) => option.id === Number(avatarSkin)) || AVATAR_OPTIONS[0];
+}
+
+function profileAvatarMarkup(className = "profile-avatar-mini", avatarSkin = identity.avatarSkin) {
+  const avatar = avatarOption(avatarSkin);
+  return `<span class="${className}" style="background-image:url('${avatar.image}')" aria-hidden="true"></span>`;
+}
+
 function regionIcon(type, className = "") {
   const icons = {
     city: `<path d="M4 19V9l5-4 5 4v10M14 12l3-2 3 2v7M7 12h4M7 15h4"/>`,
@@ -1266,14 +1602,12 @@ function topbar({ back = null, right = true, showPresence = true } = {}) {
     <header class="topbar">
       ${back ? `<button class="back-button" data-action="${back}" aria-label="返回">←</button>` : brand()}
       ${right ? `<div class="topbar-actions">
-        ${showPresence ? `<div class="glass-pill global-presence" title="全岛实时状态">
+        ${showPresence ? `<div class="glass-pill global-presence" title="内部演示状态">
           <span class="presence-dot"></span>
-          <span class="presence-stat"><strong class="global-online-count">${state.onlineIslanders}</strong><small>人在线</small></span>
-          <i class="presence-divider" aria-hidden="true"></i>
-          <span class="presence-stat"><strong class="global-focus-count">${state.focusedIslanders}</strong><small>人正在专注</small></span>
+          <span class="presence-stat"><strong>内部演示</strong><small>岛民 NPC</small></span>
         </div>` : ""}
-        <button class="icon-button profile-button" data-action="profile" aria-label="个人中心，即将开放" title="个人中心 · 即将开放">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.8 19c.7-3.5 2.8-5.3 6.2-5.3s5.5 1.8 6.2 5.3"/></svg>
+        <button class="icon-button profile-button" data-action="profile" aria-label="打开个人中心" title="个人中心">
+          ${profileAvatarMarkup()}
         </button>
       </div>` : ""}
     </header>`;
@@ -1287,9 +1621,370 @@ function render() {
   if (state.view === "welcome") renderWelcome();
   if (state.view === "island") renderIsland();
   if (state.view === "rooms") renderRooms();
+  if (state.view === "godot-room") renderGodotRoom();
   if (state.view === "room") renderRoom();
   if (state.view === "focus") renderFocus();
   if (state.view === "summary") renderSummary();
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '"': "&quot;",
+  })[character]);
+}
+
+function validFocusHistory() {
+  return readHistory().filter((item) => Number(item?.elapsedSeconds) > 0 && shanghaiDateKey(item.endedAt || item.startedAt));
+}
+
+function focusStatusKey(status) {
+  if (["completed", "free_completed"].includes(status)) return "completed";
+  if (status === "interrupted") return "interrupted";
+  return "ended_early";
+}
+
+function focusStatusLabel(status) {
+  return focusStatusKey(status) === "completed" ? "已完成" : focusStatusKey(status) === "interrupted" ? "已中断" : "提前结束";
+}
+
+function isActiveFocusSession() {
+  return Boolean(state.currentSeatId && state.sceneId && (state.sessionStartedAt || state.sessionPhase === "rest"));
+}
+
+function hasActiveSeatSession() {
+  return Boolean(state.currentSeatId || state.switchingFromSeatId || isActiveFocusSession());
+}
+
+function openPersonalCenter() {
+  if (state.isRunning || state.sessionPhase === "rest") syncTimerFromClock();
+  persistActiveSession(true);
+  state.personalCenter.open = true;
+  state.personalCenter.tab = "overview";
+  state.personalCenter.monthKey = shanghaiDateKey(Date.now()).slice(0, 7);
+  state.personalCenter.selectedDate = shanghaiDateKey(Date.now());
+  state.personalCenter.filters = { scene: "all", status: "all", mode: "all" };
+  state.personalCenter.confirmAction = null;
+  document.body.classList.add("personal-center-open");
+  renderPersonalCenter();
+}
+
+function closePersonalCenter() {
+  state.personalCenter.open = false;
+  state.personalCenter.confirmAction = null;
+  document.querySelector(".personal-center-overlay")?.remove();
+  document.body.classList.remove("personal-center-open");
+  scheduleHudFade();
+}
+
+function personalCenterNotice() {
+  if (!isActiveFocusSession()) return "";
+  const message = state.sessionPhase === "rest" || !state.isRunning
+    ? "本次专注已暂停，返回专注页面后可继续"
+    : state.timerMode === 0
+      ? "你还在专注中，计时仍在继续，请尽快返回专注页面"
+      : "你还在专注中，倒计时仍在继续，请尽快返回专注页面";
+  return `<div class="personal-focus-notice" role="status"><span><i aria-hidden="true"></i>${message}</span><button type="button" data-action="return-active-focus">返回专注</button></div>`;
+}
+
+function renderPersonalCenter() {
+  document.querySelector(".personal-center-overlay")?.remove();
+  const tabs = [
+    ["overview", "⌂", "个人概览"],
+    ["history", "▣", "专注记录"],
+    ["preferences", "♪", "偏好设置"],
+    ["account", "◇", "账户与数据"],
+  ];
+  const overlay = document.createElement("section");
+  overlay.className = "personal-center-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-labelledby", "personal-center-title");
+  overlay.innerHTML = `
+    <div class="personal-center-backdrop" aria-hidden="true"></div>
+    <div class="personal-center-shell">
+      <aside class="personal-center-sidebar">
+        <div class="personal-center-brand">${brand()}</div>
+        <div class="personal-center-identity">
+          ${profileAvatarMarkup("personal-center-avatar")}
+          <div><strong>${escapeHtml(identity.displayName)}</strong><small>本地游客</small></div>
+        </div>
+        <nav aria-label="个人中心">
+          ${tabs.map(([id, icon, label]) => `<button type="button" class="personal-nav-button ${state.personalCenter.tab === id ? "is-active" : ""}" data-profile-tab="${id}" aria-current="${state.personalCenter.tab === id ? "page" : "false"}"><span aria-hidden="true">${icon}</span>${label}</button>`).join("")}
+        </nav>
+        <p class="personal-center-local-note">身份、记录与偏好保存在本设备</p>
+      </aside>
+      <main class="personal-center-main">
+        <header class="personal-center-header">
+          <div><p>PERSONAL CENTER</p><h1 id="personal-center-title">${tabs.find(([id]) => id === state.personalCenter.tab)?.[2] || "个人中心"}</h1></div>
+          <button class="personal-center-close" type="button" data-action="close-personal-center" aria-label="关闭个人中心">×</button>
+        </header>
+        ${personalCenterNotice()}
+        <div class="personal-center-content">${renderPersonalCenterContent()}</div>
+      </main>
+    </div>
+    ${renderPersonalCenterConfirm()}`;
+  app.appendChild(overlay);
+  window.setTimeout(() => overlay.querySelector(".personal-center-close")?.focus(), 0);
+}
+
+function renderPersonalCenterContent() {
+  if (state.personalCenter.tab === "history") return renderPersonalHistory();
+  if (state.personalCenter.tab === "preferences") return renderPersonalPreferences();
+  if (state.personalCenter.tab === "account") return renderPersonalAccount();
+  return renderPersonalOverview();
+}
+
+function personalCenterPrimaryAction() {
+  if (isActiveFocusSession()) return { action: "return-active-focus", label: "返回专注" };
+  if (localStorage.getItem(STORAGE_KEYS.activeSession)) return { action: "resume-focus-session", label: "继续上次专注" };
+  return { action: "profile-start-focus", label: "开始专注" };
+}
+
+function sumHistory(history) {
+  return history.reduce((total, item) => total + Math.max(0, Number(item.elapsedSeconds) || 0), 0);
+}
+
+function renderPersonalOverview() {
+  const history = validFocusHistory();
+  const todayKey = shanghaiDateKey(Date.now());
+  const weekday = dateKeyWeekday(todayKey);
+  const weekStart = shiftDateKey(todayKey, -((weekday + 6) % 7));
+  const monthKey = todayKey.slice(0, 7);
+  const todayHistory = history.filter((item) => shanghaiDateKey(item.endedAt || item.startedAt) === todayKey);
+  const weekHistory = history.filter((item) => {
+    const key = shanghaiDateKey(item.endedAt || item.startedAt);
+    return key >= weekStart && key <= todayKey;
+  });
+  const monthDays = new Set(history.map((item) => shanghaiDateKey(item.endedAt || item.startedAt)).filter((key) => key.startsWith(monthKey))).size;
+  const lastSevenDays = Array.from({ length: 7 }, (_, index) => shiftDateKey(todayKey, index - 6));
+  const dailyTotals = lastSevenDays.map((key) => sumHistory(history.filter((item) => shanghaiDateKey(item.endedAt || item.startedAt) === key)));
+  const maximumDaily = Math.max(...dailyTotals, 1);
+  const sceneUsage = new Map();
+  history.forEach((item) => {
+    if (!scenes[item.sceneId]) return;
+    const current = sceneUsage.get(item.sceneId) || { count: 0, lastUsed: 0 };
+    current.count += 1;
+    current.lastUsed = Math.max(current.lastUsed, Number(item.endedAt || item.startedAt) || 0);
+    sceneUsage.set(item.sceneId, current);
+  });
+  const recentScenes = [...sceneUsage.entries()].sort((a, b) => b[1].lastUsed - a[1].lastUsed).slice(0, 3);
+  const primary = personalCenterPrimaryAction();
+  return `
+    <div class="profile-overview">
+      <section class="profile-hero-card">
+        <div class="profile-hero-identity">
+          ${profileAvatarMarkup("profile-hero-avatar")}
+          <div><span>本地游客</span><h2>${escapeHtml(identity.displayName)}</h2><p>你的身份和记录保存在这台设备中。</p></div>
+        </div>
+        <div class="profile-hero-actions"><button type="button" class="profile-text-button" data-profile-tab="account">编辑资料</button><button type="button" class="profile-primary-button" data-action="${primary.action}">${primary.label}<span aria-hidden="true">→</span></button></div>
+      </section>
+      <section class="profile-stat-grid" aria-label="专注数据概览">
+        ${profileStatCard("今日专注", formatDuration(sumHistory(todayHistory)), "今天的真实记录")}
+        ${profileStatCard("本周专注", formatDuration(sumHistory(weekHistory)), "从本周一开始")}
+        ${profileStatCard("本月专注", `${monthDays} 天`, "有记录的自然日")}
+        ${profileStatCard("累计专注", formatDuration(sumHistory(history)), `${history.length} 次记录`)}
+      </section>
+      <div class="profile-overview-grid">
+        <section class="profile-panel profile-week-panel">
+          <div class="profile-panel-heading"><div><span>最近七天</span><h3>专注节奏</h3></div><small>${formatDuration(sumHistory(history.filter((item) => lastSevenDays.includes(shanghaiDateKey(item.endedAt || item.startedAt)))))}</small></div>
+          <div class="profile-week-chart" aria-label="最近七天专注时长">
+            ${lastSevenDays.map((key, index) => `<div class="profile-chart-day"><span class="profile-chart-bar"><i style="height:${Math.max(dailyTotals[index] ? 10 : 2, Math.round(dailyTotals[index] / maximumDaily * 100))}%"></i></span><small>${["日", "一", "二", "三", "四", "五", "六"][dateKeyWeekday(key)]}</small></div>`).join("")}
+          </div>
+          ${history.length ? "" : '<p class="profile-empty-inline">完成一次专注后，这里会出现你的节奏。</p>'}
+        </section>
+        <section class="profile-panel">
+          <div class="profile-panel-heading"><div><span>最近使用</span><h3>场景</h3></div></div>
+          <div class="profile-scene-list">
+            ${recentScenes.length ? recentScenes.map(([sceneId, usage]) => `<article class="profile-scene-item"><img src="${scenes[sceneId].image}" alt="" /><div><strong>${scenes[sceneId].name}</strong><small>${usage.count} 次专注</small></div></article>`).join("") : '<p class="profile-empty-state">去咖啡馆开始第一段专注时光吧。</p>'}
+          </div>
+        </section>
+      </div>
+      <section class="profile-panel profile-recent-panel">
+        <div class="profile-panel-heading"><div><span>最近记录</span><h3>刚刚走过的专注时光</h3></div><button type="button" data-profile-tab="history">查看全部记录</button></div>
+        ${renderProfileRecordList(history.slice(0, 3), "还没有专注记录。去咖啡馆找个喜欢的位置吧。")}
+      </section>
+    </div>`;
+}
+
+function profileStatCard(label, value, note) {
+  return `<article class="profile-stat-card"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
+}
+
+function renderProfileRecordList(history, emptyMessage) {
+  if (!history.length) return `<p class="profile-empty-state">${emptyMessage}</p>`;
+  return `<div class="profile-record-list">${history.map((item) => {
+    const scene = scenes[item.sceneId];
+    return `<article class="profile-record-item"><time>${formatClockTime(item.startedAt || item.endedAt)}</time><strong>${formatDuration(item.elapsedSeconds)}</strong><span>${escapeHtml(scene?.name || "已移除场景")}</span><em class="is-${focusStatusKey(item.status)}">${focusStatusLabel(item.status)}</em></article>`;
+  }).join("")}</div>`;
+}
+
+function monthCalendarDays(monthKey) {
+  const [year, month] = monthKey.split("-").map(Number);
+  const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const leading = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+  return { year, month, days, leading };
+}
+
+function renderPersonalHistory() {
+  const history = validFocusHistory();
+  const { year, month, days, leading } = monthCalendarDays(state.personalCenter.monthKey);
+  const todayKey = shanghaiDateKey(Date.now());
+  const recordDates = new Set(history.map((item) => shanghaiDateKey(item.endedAt || item.startedAt)));
+  const filters = state.personalCenter.filters;
+  const selectedHistory = history.filter((item) => {
+    if (shanghaiDateKey(item.endedAt || item.startedAt) !== state.personalCenter.selectedDate) return false;
+    if (filters.scene !== "all" && item.sceneId !== filters.scene) return false;
+    if (filters.status !== "all" && focusStatusKey(item.status) !== filters.status) return false;
+    if (filters.mode !== "all" && String(item.timerMode) !== filters.mode) return false;
+    return true;
+  });
+  const completedCount = selectedHistory.filter((item) => focusStatusKey(item.status) === "completed").length;
+  const sceneIds = [...new Set(history.map((item) => item.sceneId).filter((sceneId) => scenes[sceneId]))];
+  const selectedDay = Number(state.personalCenter.selectedDate.slice(-2));
+  return `
+    <div class="profile-history-layout">
+      <section class="profile-calendar-card">
+        <div class="profile-calendar-header"><button type="button" data-profile-month-delta="-1" aria-label="上个月">‹</button><h2>${year} 年 ${month} 月</h2><button type="button" data-profile-month-delta="1" aria-label="下个月">›</button></div>
+        <div class="profile-calendar-weekdays">${["日", "一", "二", "三", "四", "五", "六"].map((day) => `<span>${day}</span>`).join("")}</div>
+        <div class="profile-calendar-grid">
+          ${Array.from({ length: leading }, () => "<span></span>").join("")}
+          ${Array.from({ length: days }, (_, index) => {
+            const day = index + 1;
+            const key = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+            return `<button type="button" class="profile-calendar-day ${key === todayKey ? "is-today" : ""} ${key === state.personalCenter.selectedDate ? "is-selected" : ""} ${recordDates.has(key) ? "has-record" : ""}" data-profile-date="${key}" aria-label="${month}月${day}日${recordDates.has(key) ? "，有专注记录" : ""}"><span>${day}</span>${recordDates.has(key) ? "<i></i>" : ""}</button>`;
+          }).join("")}
+        </div>
+      </section>
+      <section class="profile-history-detail">
+        <div class="profile-history-title"><div><span>当天记录</span><h2>${month} 月 ${selectedDay} 日</h2></div><div class="profile-filter-row">
+          <label>场景<select data-profile-filter="scene"><option value="all">全部场景</option>${sceneIds.map((sceneId) => `<option value="${sceneId}" ${filters.scene === sceneId ? "selected" : ""}>${scenes[sceneId].name}</option>`).join("")}</select></label>
+          <label>状态<select data-profile-filter="status"><option value="all">全部状态</option><option value="completed" ${filters.status === "completed" ? "selected" : ""}>已完成</option><option value="ended_early" ${filters.status === "ended_early" ? "selected" : ""}>提前结束</option><option value="interrupted" ${filters.status === "interrupted" ? "selected" : ""}>已中断</option></select></label>
+          <label>模式<select data-profile-filter="mode"><option value="all">全部模式</option><option value="25" ${filters.mode === "25" ? "selected" : ""}>25 分钟</option><option value="50" ${filters.mode === "50" ? "selected" : ""}>50 分钟</option><option value="0" ${filters.mode === "0" ? "selected" : ""}>自由正计时</option></select></label>
+        </div></div>
+        <div class="profile-day-summary">${profileStatCard("专注次数", `${selectedHistory.length} 次`, "当天记录")}${profileStatCard("实际时长", formatDuration(sumHistory(selectedHistory)), "真实累计")}${profileStatCard("完成次数", `${completedCount} 次`, "正常完成")}</div>
+        ${renderProfileRecordList(selectedHistory, history.length ? "这一天没有符合当前筛选条件的记录。" : "还没有专注记录。去咖啡馆找个喜欢的位置吧。")}
+      </section>
+    </div>`;
+}
+
+function profileToggle(key, label, description, checked = preferences[key], disabled = false) {
+  return `<div class="profile-setting-row ${disabled ? "is-disabled" : ""}"><div><strong>${label}</strong><small>${description}</small></div><button type="button" class="profile-switch ${checked ? "is-on" : ""}" data-preference-toggle="${key}" aria-pressed="${Boolean(checked)}" ${disabled ? "disabled" : ""}><span></span></button></div>`;
+}
+
+function soundSettingRow(key, label) {
+  return `<div class="profile-sound-row"><button type="button" class="profile-sound-toggle ${state.sounds[key] ? "is-on" : ""}" data-profile-sound-toggle="${key}" aria-pressed="${Boolean(state.sounds[key])}"><span>${state.sounds[key] ? "开启" : "关闭"}</span><strong>${label}</strong></button><label><input type="range" min="0" max="100" value="${state.soundVolumes[key]}" data-profile-volume="${key}" aria-label="${label}音量" /><span data-profile-volume-value="${key}">${state.soundVolumes[key]}%</span></label></div>`;
+}
+
+function renderPersonalPreferences() {
+  const notificationSupported = "Notification" in window;
+  const notificationDescription = !notificationSupported ? "当前浏览器不支持桌面通知" : Notification.permission === "denied" ? "通知权限已关闭，请在浏览器设置中开启" : "专注完成后发送系统通知";
+  return `
+    <div class="profile-settings-layout">
+      <section class="profile-settings-card">
+        <div class="profile-settings-heading"><span>默认专注</span><h2>下一次如何开始</h2></div>
+        <div class="profile-segmented" aria-label="默认计时模式">${[[25, "25 分钟"], [50, "50 分钟"], [0, "自由正计时"]].map(([value, label]) => `<button type="button" class="${preferences.defaultTimerMode === value ? "is-active" : ""}" data-preference-timer="${value}" aria-pressed="${preferences.defaultTimerMode === value}">${label}</button>`).join("")}</div>
+        ${profileToggle("rememberLastSound", "记住上次声音组合", "下一次沿用当前声音选择")}
+        ${profileToggle("rememberLastFocusView", "记住上次沉浸画面", "下一次沿用当前窗景")}
+      </section>
+      <section class="profile-settings-card">
+        <div class="profile-settings-heading"><span>声音</span><h2>专注时的听觉环境</h2></div>
+        <div class="profile-sound-settings">${soundSettingRow("ambient", "咖啡馆环境声")}${soundSettingRow("white", "白噪音")}${soundSettingRow("music", "背景音乐")}</div>
+        <div class="profile-music-grid">${Object.entries(FOCUS_MUSIC_TRACKS).map(([key, track]) => `<button type="button" class="${state.musicTrack === key ? "is-active" : ""}" data-profile-music="${key}"><span>${escapeHtml(track.name)}</span><small>${state.musicTrack === key ? "当前曲目" : "选择"}</small></button>`).join("")}</div>
+      </section>
+      <section class="profile-settings-card">
+        <div class="profile-settings-heading"><span>界面与提醒</span><h2>减少不必要的打扰</h2></div>
+        <div class="profile-language-row"><div><strong>语言</strong><small>English 将在完整翻译后开放</small></div><div class="profile-segmented is-compact"><button type="button" class="is-active">简体中文</button><button type="button" disabled>English</button></div></div>
+        ${profileToggle("motionEffects", "动态效果", "保留场景和界面过渡")}
+        ${profileToggle("reduceMotion", "减少动画", "降低大幅移动和弹跳效果")}
+        ${profileToggle("hudAutoHide", "HUD 自动淡出", "无操作时隐藏沉浸控制")}
+        ${profileToggle("completionSound", "完成提示音", "计时完成时播放双音提示")}
+        ${profileToggle("desktopNotifications", "桌面通知", notificationDescription, preferences.desktopNotifications, !notificationSupported || Notification.permission === "denied")}
+      </section>
+    </div>`;
+}
+
+function renderPersonalAccount() {
+  const visibleId = onlineUserId || identity.guestId;
+  const shortId = `${visibleId.slice(0, 8)}…${visibleId.slice(-4)}`;
+  const idLabel = onlineUserId ? "匿名账户 ID" : "本设备身份 ID";
+  const activeSession = hasActiveSeatSession();
+  return `
+    <div class="profile-account-layout">
+      <section class="profile-settings-card">
+        <div class="profile-settings-heading"><span>匿名游客资料</span><h2>你的岛上身份</h2></div>
+        <label class="profile-name-field"><span>昵称</span><div><input type="text" maxlength="16" value="${escapeHtml(identity.displayName)}" data-profile-name aria-describedby="profile-name-help" /><button type="button" data-action="save-profile-identity">保存昵称</button></div><small id="profile-name-help">1–16 个字符</small></label>
+        <fieldset class="profile-avatar-field"><legend>选择角色</legend><div>${AVATAR_OPTIONS.map((avatar) => `<button type="button" class="profile-avatar-option ${identity.avatarSkin === avatar.id ? "is-active" : ""}" data-profile-avatar="${avatar.id}" aria-pressed="${identity.avatarSkin === avatar.id}"><span style="background-image:url('${avatar.image}')"></span><small>${avatar.name}</small></button>`).join("")}</div></fieldset>
+        <div class="profile-local-id"><span>${idLabel}</span><code>${shortId}</code></div>
+        <p class="profile-storage-note">匿名账户用于安全分房和占座；偏好与专注记录仍保存在这台设备。未绑定可恢复登录方式前，清除浏览器数据后可能无法找回该账户。</p>
+      </section>
+      <section class="profile-settings-card profile-data-card">
+        <div class="profile-settings-heading"><span>数据管理</span><h2>重置或清理本地数据</h2></div>
+        <div class="profile-data-action"><div><strong>恢复默认偏好</strong><small>不会删除游客身份、记录或当前会话</small></div><button type="button" data-confirm-profile="reset-preferences">恢复默认</button></div>
+        <div class="profile-data-action"><div><strong>清空专注记录</strong><small>身份和偏好会继续保留</small></div><button type="button" data-confirm-profile="clear-history">清空记录</button></div>
+        <div class="profile-data-action is-danger"><div><strong>删除账户与本地数据</strong><small>${activeSession ? "请先结束当前专注，再执行此操作" : "匿名账户、偏好和记录都会被删除"}</small></div><button type="button" data-confirm-profile="delete-all" ${activeSession ? "disabled" : ""}>删除全部</button></div>
+      </section>
+    </div>`;
+}
+
+function renderPersonalCenterConfirm() {
+  const action = state.personalCenter.confirmAction;
+  if (!action) return "";
+  const content = {
+    "reset-preferences": ["恢复默认偏好？", "默认计时、声音、界面和提醒将恢复初始状态。", "恢复默认"],
+    "clear-history": ["清空全部专注记录？", "此操作无法撤销，但不会影响身份、偏好或当前会话。", "清空记录"],
+    "delete-all": ["删除账户与全部本地数据？", "匿名账户、偏好和专注记录都会被删除，此操作无法撤销。", "确认删除"],
+  }[action];
+  if (!content) return "";
+  return `<div class="profile-confirm-backdrop" role="presentation"><div class="profile-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="profile-confirm-title"><span>请确认</span><h2 id="profile-confirm-title">${content[0]}</h2><p>${content[1]}</p><div><button type="button" data-action="cancel-profile-confirm">取消</button><button type="button" class="is-danger" data-action="execute-profile-confirm">${content[2]}</button></div></div></div>`;
+}
+
+async function executeProfileDataAction() {
+  const action = state.personalCenter.confirmAction;
+  state.personalCenter.confirmAction = null;
+  if (action === "reset-preferences") {
+    preferences = defaultPreferences();
+    applyPreferencesToState();
+    savePreferences();
+    persistActiveSession(true);
+    renderPersonalCenter();
+    showToast("偏好已恢复默认");
+    return;
+  }
+  if (action === "clear-history") {
+    localStorage.removeItem(STORAGE_KEYS.history);
+    renderPersonalCenter();
+    showToast("专注记录已清空");
+    return;
+  }
+  if (action === "delete-all") {
+    if (hasActiveSeatSession()) {
+      renderPersonalCenter();
+      showToast("请先结束当前专注，再删除全部本地数据");
+      return;
+    }
+    try {
+      const response = await fetch("/api/account", { method: "DELETE", headers: { "Content-Type": "application/json" } });
+      if (!response.ok && response.status !== 401) throw new Error("account_delete_failed");
+    } catch (_) {
+      renderPersonalCenter();
+      showToast("云端账户暂时无法删除，请稍后重试");
+      return;
+    }
+    onlineIdentityPromise = null;
+    onlineUserId = null;
+    [STORAGE_KEYS.activeSession, STORAGE_KEYS.history, STORAGE_KEYS.guestIdentity, STORAGE_KEYS.preferences].forEach((key) => localStorage.removeItem(key));
+    preferences = defaultPreferences();
+    identity = getOrCreateIdentity();
+    applyPreferencesToState({ includeTimer: true });
+    closePersonalCenter();
+    state.view = "welcome";
+    render();
+    showToast("账户与本地数据已删除，已生成新的游客身份");
+  }
 }
 
 function renderWelcome() {
@@ -1302,7 +1997,7 @@ function renderWelcome() {
       <section class="view welcome welcome-hero" aria-labelledby="welcome-title">
         <img class="scene-image" src="${islandImage}" alt="一座有城市、图书馆、森林、湖泊与雪山的宁静海岛" />
         <div class="welcome-content">
-          <div class="welcome-kicker"><span class="presence-dot"></span>此刻，<strong class="global-focus-count">${state.focusedIslanders}</strong> 位岛民正安静地做自己的事</div>
+          <div class="welcome-kicker"><span class="presence-dot"></span>内部演示 · 画面中的陪伴角色均为岛民 NPC</div>
           <h1 id="welcome-title">换一个地方，<br />开始专注。</h1>
           <p class="welcome-subtitle">像进入游戏一样，去咖啡馆、图书馆或森林里找个位置坐下。有人陪伴，互不打扰。</p>
           <div class="welcome-actions">
@@ -1486,6 +2181,7 @@ function renderWelcome() {
         <div class="section-shell">
           ${brand()}
           <p>一个有人陪伴、互不打扰的沉浸式专注空间。</p>
+          <p><a href="/privacy">隐私政策</a> · <a href="/terms">服务条款</a></p>
           <button class="footer-enter" data-action="enter-island">进入专注岛&nbsp; →</button>
         </div>
       </footer>
@@ -1498,8 +2194,8 @@ function renderIsland() {
       <div class="island-map-frame">
         <img class="scene-image" src="${islandImage}" alt="专注岛地图" />
         ${islandHotspot("cafe", 26, 51)}
-        ${islandHotspot("library", 43, 25)}
-        ${islandHotspot("forest", 75, 48)}
+        ${lockedHotspot("学院区", "图书馆即将开放", 43, 25, "academy")}
+        ${lockedHotspot("溪流区", "即将开放", 75, 48, "forest")}
         ${lockedHotspot("湖畔区", "即将开放", 52, 56, "lake")}
         ${lockedHotspot("海滨区", "即将开放", 72, 75, "coast")}
         ${lockedHotspot("雪山营地", "即将开放", 73, 17, "mountain")}
@@ -1518,7 +2214,7 @@ function islandHotspot(sceneId, x, y) {
   return `
     <button class="hotspot" style="left:${x}%; top:${y}%" data-scene="${sceneId}" aria-label="进入${scene.islandLabel}${scene.shortName}">
       <span class="hotspot-pin"><span class="hotspot-symbol">${regionIcon(scene.icon)}</span></span>
-      <span class="hotspot-label"><strong>${scene.islandLabel}</strong><small>${scene.shortName} · ${scene.online} 人在线</small></span>
+      <span class="hotspot-label"><strong>${scene.islandLabel}</strong><small>${scene.shortName} · 现在开放</small></span>
     </button>`;
 }
 
@@ -1607,9 +2303,75 @@ function cafeRoomPreviewCard(room, selectedRoomId, capacity) {
     <button type="button" class="cafe-room-preview-card ${selected ? "is-selected" : ""}" data-preview-room="${room.id}" aria-pressed="${selected}">
       <img src="${room.selectorImage || room.image}" alt="" />
       <span class="cafe-room-preview-copy"><strong>${room.name}</strong><small>${room.mood}</small></span>
-      <span class="cafe-room-preview-occupancy"><strong>${room.occupied} / ${capacity}</strong></span>
+      <span class="cafe-room-preview-occupancy"><strong>${capacity} 座</strong></span>
       ${selected ? `<span class="cafe-room-preview-check" aria-hidden="true">✓</span>` : ""}
     </button>`;
+}
+
+function roomViewForScene() {
+  return state.sceneId === "cafe" && resolveCafeRoomRenderer() === CAFE_ROOM_RENDERER_GODOT_3D
+    ? "godot-room"
+    : "room";
+}
+
+function resolveCafeRoomRenderer({ search = window.location.search, storage = localStorage } = {}) {
+  const requested = new URLSearchParams(search).get(CAFE_ROOM_RENDERER_QUERY_KEY);
+  if (requested === CAFE_ROOM_RENDERER_GODOT_3D || requested === CAFE_ROOM_RENDERER_STATIC) {
+    storage.setItem(CAFE_ROOM_RENDERER_STORAGE_KEY, requested);
+    return requested;
+  }
+  const stored = storage.getItem(CAFE_ROOM_RENDERER_STORAGE_KEY);
+  return stored === CAFE_ROOM_RENDERER_GODOT_3D
+    ? CAFE_ROOM_RENDERER_GODOT_3D
+    : CAFE_ROOM_RENDERER_STATIC;
+}
+
+function fallbackFromGodotRoom(reason = "load_failed") {
+  if (godotRoomReadyTimer) window.clearTimeout(godotRoomReadyTimer);
+  godotRoomReadyTimer = null;
+  localStorage.setItem(CAFE_ROOM_RENDERER_STORAGE_KEY, CAFE_ROOM_RENDERER_STATIC);
+  if (state.view !== "godot-room") return;
+  state.view = "room";
+  render();
+  showToast(reason === "ready_timeout" ? "3D 房间准备超时，已返回静态房间" : "3D 房间加载失败，已返回静态房间");
+}
+
+function resolveGodotRoom3DSrc({ search = window.location.search, baseUrl = window.location.href } = {}) {
+  const requested = new URLSearchParams(search).get(CAFE_ROOM_3D_SRC_QUERY_KEY);
+  if (!requested) return CAFE_ROOM_3D_DEFAULT_SRC;
+  try {
+    const resolved = new URL(requested, baseUrl);
+    return ["http:", "https:"].includes(resolved.protocol) ? resolved.href : CAFE_ROOM_3D_DEFAULT_SRC;
+  } catch (_) {
+    return CAFE_ROOM_3D_DEFAULT_SRC;
+  }
+}
+
+function renderGodotRoom() {
+  if (!state.currentSeatId) {
+    stopRoom3DLeaseHeartbeat();
+    room3DInteraction = null;
+    localStorage.removeItem(ROOM_3D_RESPONSE_STORAGE_KEY);
+  }
+  app.innerHTML = `
+    <section class="view godot-room-view" aria-label="四时咖啡馆 Godot 房间">
+      <div class="godot-room-loading" data-godot-room-loading>
+        <span class="presence-dot"></span>
+        <strong>正在进入四时咖啡馆…</strong>
+        <small>海岛与沉浸专注仍沿用 V1.0</small>
+      </div>
+      <iframe
+        class="godot-room-frame"
+        data-godot-room-frame
+        src="${escapeHtml(resolveGodotRoom3DSrc())}"
+        title="四时咖啡馆互动房间"
+        allow="autoplay; fullscreen"
+      ></iframe>
+    </section>`;
+  const frame = document.querySelector("[data-godot-room-frame]");
+  frame?.addEventListener("error", () => fallbackFromGodotRoom("load_failed"), { once: true });
+  if (godotRoomReadyTimer) window.clearTimeout(godotRoomReadyTimer);
+  godotRoomReadyTimer = window.setTimeout(() => fallbackFromGodotRoom("ready_timeout"), CAFE_ROOM_3D_READY_TIMEOUT_MS);
 }
 
 function roomCard(scene, room) {
@@ -1617,12 +2379,63 @@ function roomCard(scene, room) {
   return `
     <button class="room-card ${room.locked ? "is-locked" : ""}" ${room.locked ? 'data-action="locked-room"' : `data-room="${room.id}"`}>
       <span class="room-card-copy"><strong>${room.name}</strong><span>${room.mood}</span></span>
-      <span class="occupancy"><strong>${room.locked ? "稍后" : `${room.occupied}/${capacity}`}</strong><small>${room.locked ? "下一阶段" : "实时在线"}</small></span>
+      <span class="occupancy"><strong>${room.locked ? "稍后" : `${capacity} 座`}</strong><small>${room.locked ? "下一阶段" : "内部演示"}</small></span>
     </button>`;
+}
+
+function renderStaticCafeOccupants() {
+  return staticSeatSlots.map((slot) => {
+    const lease = leaseForSeat(slot.seat_id - 1);
+    if (!lease) return "";
+    const mine = lease.sessionId === identity.sessionId;
+    const npc = lease.memberType === "npc";
+    const minutes = focusedMinutes(lease);
+    const status = lease.focusStartedAt ? `已专注 ${minutes} 分钟` : "已入座";
+    const [left, top, width, height] = slot.occupant_anchor;
+    const [labelLeft, labelTop] = slot.label_anchor;
+    return `
+      <div class="static-seat-occupant ${mine ? "is-mine" : ""}" style="--left:${left}%;--top:${top}%;--width:${width}%;--height:${height}%;--avatar:${Number(lease.avatarSkin || 0)};${slot.flip ? "--flip:-1;" : ""}">
+        <span class="static-seat-avatar" style="background-image:url('${slot.occupied_asset}')" aria-hidden="true"></span>
+      </div>
+      <div class="static-seat-label ${mine ? "is-mine" : ""} ${npc ? "is-npc" : ""}" style="left:${labelLeft}%;top:${labelTop}%">
+        <strong>${mine ? "我" : npc ? "岛民" : lease.displayName}</strong>
+        <small>${mine ? identity.displayName : status}</small>
+      </div>`;
+  }).join("");
+}
+
+function renderStaticCafeRoom() {
+  const openSeats = staticSeatSlots.filter((slot) => !leaseForSeat(slot.seat_id - 1)).length;
+  const roomMode = state.localRoom ? "本地岛民房间" : "在线陪伴房间";
+  app.innerHTML = `
+    <section class="view room static-seat-room">
+      ${topbar({ back: "back-island", showPresence: false })}
+      ${state.currentSeatId && state.sessionStartedAt ? renderSessionHud("room") : ""}
+      <div class="room-stage">
+        <img class="scene-image" src="${scenes.cafe.image}" alt="四时咖啡馆六座静态房间" />
+        <div class="room-title">${regionIcon("city", "room-region-icon")}<span>四时咖啡馆 · ${roomMode}</span></div>
+        <div class="seat-layer" aria-label="六个固定座位">
+          <div class="static-occupants">${renderStaticCafeOccupants()}</div>
+          <div class="seat-markers">${staticSeatSlots.map((slot) => renderSeat([slot.hit_area[0], slot.hit_area[1], false], slot.seat_id - 1, "cafe")).join("")}</div>
+        </div>
+        <div class="room-footer">
+          <div class="room-footer-copy">
+            <strong>${state.isTransitioning ? "正在为你留座…" : "点击一个空位坐下"}</strong>
+            <span>${state.isTransitioning ? "确认成功后会直接进入专注设置" : `无需移动角色 · 还剩 ${openSeats} 个空位`}</span>
+          </div>
+          <span class="room-sync-label">${state.localRoom ? "岛民 NPC · 不计入真人在线" : `${cafeVisibleLeases().filter((lease) => lease.memberType !== "npc").length} 人正在房间里`}</span>
+        </div>
+      </div>
+    </section>`;
+  requestAnimationFrame(() => startCafePresence());
 }
 
 function renderRoom() {
   const scene = scenes[state.sceneId];
+  if (scene.id === "cafe" && !state.cafeDebugMode.enabled) {
+    renderStaticCafeRoom();
+    return;
+  }
   const room = scene.rooms.find((item) => item.id === state.roomId) || scene.rooms[0];
   const animatedCafe = scene.id === "cafe";
   const editableLibrary = scene.id === "library";
@@ -1753,48 +2566,79 @@ async function occupySelectedSeat() {
   if (footerNote) footerNote.textContent = "座位确认后，你的小角色会坐下并开始轻微专注动画";
 
   try {
-    if (fromSeatId) {
-      await api(`/api/sessions/${identity.sessionId}/switch-seat`, {
-        method: "POST",
-        body: JSON.stringify(identityBody({ roomId: currentRoomApiId(), fromSeatId, newSeatId: targetSeatId })),
-      });
-      state.switchingFromSeatId = fromSeatId;
+    if (state.localRoom) {
+      const otherLeases = state.roomPresence.leases.filter((lease) => lease.sessionId !== identity.sessionId);
+      state.roomPresence = {
+        leases: [...otherLeases, {
+          roomId: "cafe-local",
+          seatId: targetSeatId,
+          sessionId: identity.sessionId,
+          guestId: identity.guestId,
+          displayName: identity.displayName,
+          avatarSkin: identity.avatarSkin,
+          memberType: "human",
+          state: "occupied",
+          activity: "已入座",
+          focusStartedAt: null,
+        }],
+        serverNow: Date.now(),
+      };
     } else {
-      await api(`/api/rooms/${currentRoomApiId()}/seats/${targetSeatId}/reserve`, {
+      if (fromSeatId) {
+        await api(`/api/sessions/${identity.sessionId}/switch-seat`, {
+          method: "POST",
+          body: JSON.stringify(identityBody({ roomId: currentRoomApiId(), fromSeatId, newSeatId: targetSeatId })),
+        });
+        state.switchingFromSeatId = fromSeatId;
+      } else {
+        await api(`/api/rooms/${currentRoomApiId()}/seats/${targetSeatId}/reserve`, {
+          method: "POST",
+          body: JSON.stringify(identityBody()),
+        });
+      }
+      await api(`/api/sessions/${identity.sessionId}/occupy`, {
         method: "POST",
-        body: JSON.stringify(identityBody()),
+        body: JSON.stringify({ roomId: currentRoomApiId(), seatId: targetSeatId }),
       });
+      await syncCafeState({ refreshMarkers: false });
     }
-    await api(`/api/sessions/${identity.sessionId}/occupy`, {
-      method: "POST",
-      body: JSON.stringify({ roomId: currentRoomApiId(), seatId: targetSeatId }),
-    });
     state.currentSeatId = targetSeatId;
     state.switchingFromSeatId = null;
-    await syncCafeState({ refreshMarkers: false });
-    syncCafeSceneObjectLayers();
-    syncCafeSeatActorLayers();
-    // A genuinely new sit-down starts a fresh focus clock. Switching seats keeps
-    // the current session continuous, but stale values from an earlier visit must
-    // never leak into a newly occupied seat.
     if (!fromSeatId) {
       stopTicker();
+      state.timerMode = preferences.defaultTimerMode;
       state.durationSeconds = Math.max(0, state.timerMode * 60);
       state.remainingSeconds = state.durationSeconds;
       state.elapsedSeconds = 0;
-      state.sessionStartedAt = Date.now();
+      state.sessionStartedAt = null;
+      state.isRunning = false;
+      state.sessionPhase = "focus";
+      state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
+      state.restRemainingSeconds = state.restDurationSeconds;
+      state.restStartedAt = null;
+      state.restCustomOpen = false;
+      state.nextFocusMode = 25;
       state.sessionResult = null;
       lastTick = null;
       localStorage.removeItem(STORAGE_KEYS.activeSession);
     }
-    startFocusFromSeat();
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    state.isTransitioning = false;
+    renderRoom();
+    const reduceMotion = preferences.reduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!reduceMotion) {
       await new Promise((resolve) => window.setTimeout(resolve, CAFE_STATE_LAYER_SETTLE_MS));
     }
-    state.isTransitioning = false;
-    beginImmersiveAutoEnter();
-    renderRoom();
+    state.sessionPanelOpen = false;
+    state.focusImageChoice = preferences.rememberLastFocusView ? preferences.lastFocusView : "window";
+    if (!preferences.rememberLastSound) {
+      const defaults = defaultPreferences();
+      state.sounds = { ...defaults.sounds };
+      state.musicTrack = defaults.musicTrack;
+      state.soundVolumes = { ...defaults.soundVolumes };
+    }
+    state.view = "focus";
+    if (!fromSeatId) startFocusFromSeat();
+    render();
     return;
   } catch (error) {
     state.isTransitioning = false;
@@ -1804,7 +2648,7 @@ async function occupySelectedSeat() {
     } else {
       showToast("座位连接暂时不稳定，请再试一次");
     }
-    await syncCafeState();
+    if (!state.localRoom) await syncCafeState();
     renderRoom();
     return;
   }
@@ -1817,91 +2661,163 @@ function renderFocus() {
   const scene = scenes[state.sceneId];
   const room = scene.rooms.find((item) => item.id === state.roomId) || scene.rooms[0];
   const focusImage = selectedFocusImage(scene);
+  const resting = state.sessionPhase === "rest";
   app.innerHTML = `
-    <section class="view focus">
+    <section class="view focus ${resting ? "is-resting" : ""}">
       <img class="scene-image" data-focus-scene-image src="${focusImage}" alt="坐在${room.name}${state.selectedSeat + 1}号座位看到的沉浸式工作视角" />
-      ${topbar({ back: "finish-session", showPresence: false })}
-      ${renderSessionHud("focus")}
-      <div class="immersive-seat-caption">${scene.name} · ${room.name} · ${state.selectedSeat + 1} 号座位</div>
+      ${resting ? '<div class="rest-scene-veil" aria-hidden="true"></div>' : ""}
+      <header class="focus-header" aria-label="沉浸专注导航">
+        <button class="focus-exit-button" type="button" data-action="finish-session" aria-label="退出专注">
+          <span aria-hidden="true">←</span><strong>${resting ? "退出房间" : "退出专注"}</strong>
+        </button>
+        <div class="focus-header-actions">
+          ${resting ? `<div class="rest-next-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg><span>下一轮 · ${state.nextFocusMode} 分钟</span></div>` : ""}
+          <button class="focus-profile-button" type="button" data-action="profile" aria-label="打开个人中心" title="个人中心">${profileAvatarMarkup()}</button>
+        </div>
+      </header>
+      ${resting ? renderRestStage() : renderSessionHud("focus")}
     </section>`;
   persistActiveSession();
-  if (state.isRunning) startTicker();
+  if (state.isRunning || resting) startTicker();
   if (scene.id === "cafe") {
     window.clearInterval(heartbeatTimer);
     heartbeatTimer = window.setInterval(sendHeartbeat, 15000);
     sendHeartbeat();
   }
+  scheduleHudFade();
+}
+
+function scheduleHudFade() {
+  window.clearTimeout(hudIdleTimer);
+  document.body.classList.remove("hud-idle");
+  if (!preferences.hudAutoHide || state.view !== "focus" || state.sessionPanelOpen || state.sessionPhase === "rest" || state.personalCenter.open) return;
+  hudIdleTimer = window.setTimeout(() => {
+    if (state.view === "focus" && !state.sessionPanelOpen) document.body.classList.add("hud-idle");
+  }, 5000);
 }
 
 function selectedFocusImage(scene = scenes[state.sceneId]) {
-  const choices = {
+  if (scene.id !== "cafe") return scene.image;
+  const focusImages = {
     window: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
     bar: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
-    sofa: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`,
+    night: `${ASSET_BASE}20261015-晴朗月夜学习场景.png`,
+    lounge: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`,
   };
-  if (state.focusImageChoice !== "seat" && choices[state.focusImageChoice]) return choices[state.focusImageChoice];
-  return scene.focusViews?.[state.selectedSeat + 1] || scene.image;
+  return focusImages[state.focusImageChoice] || focusImages.window;
 }
 
 function renderSessionHud(context = "focus") {
-  const companionCount = Math.max(0, cafeVisibleLeases().length - (state.currentSeatId ? 1 : 0));
-  const timerLabel = state.timerMode === -1 ? "自由专注" : state.timerMode === 0 ? "正计时" : `${state.timerMode} 分钟倒计时`;
+  const timerLabel = state.timerMode === 0 ? "自由正计时" : `${state.timerMode} 分钟倒计时`;
+  const timerHasStarted = Boolean(state.sessionStartedAt);
+  const timerActionLabel = state.isRunning ? "暂停" : timerHasStarted ? "继续" : "开始";
+  const allSoundsMuted = !state.sounds.ambient && !state.sounds.white && !state.sounds.music;
   return `
     <aside class="session-hud session-hud-${context} ${state.sessionPanelOpen ? "is-open" : ""}" aria-label="专注计时与设置">
-      <button class="session-clock-button" type="button" data-action="toggle-session-panel" aria-expanded="${state.sessionPanelOpen}">
+      <div class="immersive-timer" aria-live="off">
         <strong data-session-clock>${formatTime()}</strong>
         <small>${timerLabel}</small>
-      </button>
+      </div>
       ${state.sessionPanelOpen ? `
-        <section class="session-control-panel">
-          <header><div><strong>专注设置</strong><small>计时已经开始，修改后立即生效</small></div><button type="button" data-action="toggle-session-panel" aria-label="关闭设置">×</button></header>
+        <section class="session-control-panel" role="dialog" aria-modal="false" aria-labelledby="focus-settings-title">
+          <header><div><strong id="focus-settings-title">专注设置</strong><small>${timerHasStarted ? "本次计时进行中" : "选择专注方式，然后开始"}</small></div><button type="button" data-action="toggle-session-panel" aria-label="关闭设置">×</button></header>
           <div class="session-setting-group">
-            <span>计时方式</span>
+            <span>计时选项</span>
             <div class="session-choice-row">
-              ${modeButton(25, "25 分钟倒计时")}
-              ${modeButton(50, "50 分钟倒计时")}
-              ${modeButton(0, "正计时")}
-              ${modeButton(-1, "自由专注")}
+              ${modeButton(25, "25 分钟")}
+              ${modeButton(50, "50 分钟")}
+              ${modeButton(0, "自由正计时")}
             </div>
           </div>
           <div class="session-setting-group">
-            <span>沉浸画面</span>
-            <div class="session-choice-row compact">
-              ${focusViewButton("seat", "当前座位")}
-              ${focusViewButton("window", "雨窗")}
-              ${focusViewButton("bar", "吧台")}
-              ${focusViewButton("sofa", "沙发")}
+            <span>声音设置</span>
+            <div class="environment-sound-grid" aria-label="声音设置">
+              ${soundButton("mute", "⊘", "无声音", allSoundsMuted)}
+              ${Object.entries(FOCUS_MUSIC_TRACKS).map(([key, track], index) => soundButton(key, String(index + 1).padStart(2, "0"), track.name)).join("")}
+              ${soundButton("ambient", "♫", "咖啡馆")}
+              ${soundButton("white", "≈", "白噪音")}
             </div>
           </div>
           <div class="session-setting-group">
-            <span>声音</span>
-            <div class="sound-controls" aria-label="声音设置">
-              ${soundButton("ambient", "♫", "环境音")}
-              ${soundButton("presence", "◌", "陪伴感")}
-              ${soundButton("white", "≈", "柔和底噪")}
-              ${soundButton("music", "♪", "背景音乐")}
+            <span>场景设置</span>
+            <div class="focus-scene-grid" aria-label="专注场景设置">
+              ${focusViewButton("window", "窗边视角", `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`)}
+              ${focusViewButton("bar", "吧台一角", `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`)}
+              ${focusViewButton("night", "月夜咖啡馆", `${ASSET_BASE}20261015-晴朗月夜学习场景.png`)}
+              ${focusViewButton("lounge", "安静角落", `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`)}
             </div>
-          </div>
-          <p class="session-companions"><i></i><span>${companionCount} 位真实岛民正在陪伴</span></p>
-          <div class="session-panel-actions">
-            <button type="button" data-action="toggle-timer">${state.isRunning ? "暂停" : "继续"}</button>
-            ${state.sceneId === "cafe" ? '<button type="button" data-action="switch-seat">换座</button>' : ""}
-            <button type="button" class="danger" data-action="finish-session">结束</button>
           </div>
         </section>` : ""}
+      <nav class="focus-control-dock" aria-label="专注快捷操作">
+        <button class="focus-dock-button ${state.isRunning ? "is-active" : ""}" type="button" data-action="toggle-timer" aria-label="${timerActionLabel}">
+          <span class="focus-dock-icon" aria-hidden="true">${state.isRunning ? `<svg viewBox="0 0 24 24"><path d="M9 7v10M15 7v10"/></svg>` : `<svg viewBox="0 0 24 24"><path d="m9 7 8 5-8 5z"/></svg>`}</span><small>${timerActionLabel}</small>
+        </button>
+        <button class="focus-dock-button ${state.sessionPanelOpen ? "is-active" : ""}" type="button" data-action="toggle-session-panel" aria-label="专注设置" aria-expanded="${state.sessionPanelOpen}">
+          <span class="focus-dock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a7 7 0 0 0-2.1-1.2L14 3h-4l-.4 2.7a7 7 0 0 0-2.1 1.2l-2.4-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 2.1 1.2L10 21h4l.4-2.7a7 7 0 0 0 2.1-1.2l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z"/></svg></span><small>设置</small>
+        </button>
+        <button class="focus-dock-button is-danger" type="button" data-action="finish-session" aria-label="结束专注">
+          <span class="focus-dock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 8h8v8H8z"/></svg></span><small>结束</small>
+        </button>
+      </nav>
     </aside>`;
+}
+
+function renderRestStage() {
+  const restMinutes = Math.max(1, Math.round(state.restDurationSeconds / 60));
+  const hasPresetDuration = REST_PRESET_MINUTES.includes(restMinutes) && !state.restCustomOpen;
+  return `
+    <section class="rest-stage" role="dialog" aria-modal="false" aria-labelledby="rest-stage-title">
+      <article class="rest-card">
+        <div class="rest-bell" aria-hidden="true">
+          <span class="rest-bell-wave rest-bell-wave-left"></span>
+          <svg viewBox="0 0 24 24"><path d="M7.5 10.3a4.5 4.5 0 0 1 9 0c0 5.2 2.1 5.5 2.1 5.5H5.4s2.1-.3 2.1-5.5Z"/><path d="M10 18a2.2 2.2 0 0 0 4 0"/></svg>
+          <span class="rest-bell-wave rest-bell-wave-right"></span>
+        </div>
+        <div class="rest-complete-pill">叮 · 本轮专注已完成</div>
+        <h1 id="rest-stage-title">起来走一走吧</h1>
+        <p class="rest-description">喝口水、伸展一下，${restMinutes} 分钟后再回来。</p>
+        <div class="rest-divider" aria-hidden="true"><span></span></div>
+        <div class="rest-clock">
+          <strong data-rest-clock>${formatRestTime()}</strong>
+          <small>休息倒计时</small>
+        </div>
+        <section class="rest-duration-setting" aria-labelledby="rest-duration-title">
+          <h2 id="rest-duration-title">休息时长</h2>
+          <div class="rest-duration-options">
+            ${REST_PRESET_MINUTES.map((minutes) => `<button type="button" class="rest-duration-button ${hasPresetDuration && restMinutes === minutes ? "active" : ""}" data-rest-minutes="${minutes}" aria-pressed="${hasPresetDuration && restMinutes === minutes}">${minutes === 5 && hasPresetDuration ? '<span aria-hidden="true">✓</span>' : ""}${minutes} 分钟</button>`).join("")}
+            <button type="button" class="rest-duration-button ${state.restCustomOpen || !REST_PRESET_MINUTES.includes(restMinutes) ? "active" : ""}" data-rest-minutes="custom" aria-pressed="${state.restCustomOpen || !REST_PRESET_MINUTES.includes(restMinutes)}">自定义</button>
+          </div>
+          ${state.restCustomOpen ? `<div class="rest-custom-duration"><label for="rest-custom-minutes">输入休息时间</label><div><input id="rest-custom-minutes" data-rest-custom-input type="number" min="1" max="60" step="1" value="${restMinutes}" inputmode="numeric" /><span>分钟</span><button type="button" data-action="apply-custom-rest">应用</button></div></div>` : ""}
+          <div class="rest-auto-next"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a7 7 0 1 0 1 7"/><path d="m18 4 .2 4-4-.2"/></svg><span>休息结束后自动开始下一轮 ${state.nextFocusMode} 分钟专注</span></div>
+        </section>
+        <footer class="rest-actions">
+          <button type="button" class="rest-skip-button" data-action="skip-rest">跳过休息</button>
+          <button type="button" class="rest-continue-button" data-action="continue-rest">继续休息</button>
+        </footer>
+      </article>
+    </section>`;
+}
+
+function formatRestTime() {
+  const total = Math.max(0, state.restRemainingSeconds);
+  const minutes = Math.floor(total / 60);
+  const seconds = Math.floor(total % 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function modeButton(value, label) {
   return `<button class="mode-button ${state.timerMode === value ? "active" : ""}" data-mode="${value}">${label}</button>`;
 }
 
-function focusViewButton(value, label) {
-  return `<button class="focus-view-button ${state.focusImageChoice === value ? "active" : ""}" data-focus-view="${value}">${label}</button>`;
+function focusViewButton(value, label, image) {
+  return `<button type="button" class="focus-view-button ${state.focusImageChoice === value ? "active" : ""}" data-focus-view="${value}" aria-pressed="${state.focusImageChoice === value}"><img src="${image}" alt="" /><small>${label}</small></button>`;
 }
 
-function soundButton(key, icon, label) {
-  return `<button class="sound-toggle ${state.sounds[key] ? "on" : ""}" data-sound="${key}"><span>${icon}</span><small>${label}</small></button>`;
+function soundButton(key, icon, label, forcedActive = null) {
+  const isMusicTrack = Boolean(FOCUS_MUSIC_TRACKS[key]);
+  const isActive = forcedActive ?? (isMusicTrack ? state.sounds.music && state.musicTrack === key : Boolean(state.sounds[key]));
+  const image = SOUND_OPTION_ART[key] || SOUND_OPTION_ART.ambient;
+  return `<button type="button" class="environment-sound-button ${isMusicTrack ? "is-music-track" : ""} ${key === "mute" ? "is-muted-option" : ""} ${isActive ? "active" : ""}" data-sound="${key}" aria-pressed="${isActive}"><span class="sound-option-thumbnail" aria-hidden="true"><img src="${image}" alt="" /><i>${icon}</i></span><small>${label}</small></button>`;
 }
 
 function renderSummary() {
@@ -1909,31 +2825,56 @@ function renderSummary() {
   const result = state.sessionResult || buildSessionResult("ended_early");
   const minutes = Math.floor(result.elapsedSeconds / 60);
   const seconds = result.elapsedSeconds % 60;
-  const sessions = readHistory().filter((item) => item.elapsedSeconds > 0).length;
+  const history = readHistory().filter((item) => item.elapsedSeconds > 0);
+  const sessions = history.length;
+  const streak = getFocusStreak(history);
   const summaryCopy = getSummaryCopy(result.status);
+  const durationLabel = minutes > 0 ? `${String(minutes).padStart(2, "0")} 分钟` : `${String(seconds).padStart(2, "0")} 秒`;
   app.innerHTML = `
     <section class="view summary">
-      <div class="summary-card">
+      <img class="summary-island-background" src="${islandImage}" alt="" />
+      ${streak > 0 ? `<div class="summary-streak-badge" aria-label="连续专注 ${streak} 天"><span aria-hidden="true">♦</span>连续专注 <strong>${String(streak).padStart(2, "0")}</strong> 天</div>` : ""}
+      <article class="summary-card">
         <div class="summary-symbol ${result.status === "not_started" ? "quiet" : ""}">${summaryCopy.symbol}</div>
         <p class="eyebrow">${summaryCopy.eyebrow}</p>
         <h1>${summaryCopy.title}</h1>
-        <p>${summaryCopy.description.replace("{scene}", scene.name)}</p>
+        <p class="summary-description">${summaryCopy.description.replace("{scene}", scene.name)}</p>
+        <div class="summary-divider" aria-hidden="true"><span></span></div>
         <div class="summary-stats">
-          <div class="summary-stat"><strong>${minutes > 0 ? `${minutes} 分钟` : `${seconds} 秒`}</strong><span>本次专注</span></div>
-          <div class="summary-stat"><strong>${scene.shortName}</strong><span>停留场景</span></div>
-          <div class="summary-stat"><strong>${sessions} 次</strong><span>已记录专注</span></div>
+          <div class="summary-stat"><span class="summary-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg></span><div><strong>${durationLabel}</strong><span>本次专注</span></div></div>
+          <div class="summary-stat"><span class="summary-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 9h11v5a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V9Z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16M8 5c0 1 1 1 1 2M12 5c0 1 1 1 1 2"/></svg></span><div><strong>${scene.name}</strong><span>停留场景</span></div></div>
+          <div class="summary-stat"><span class="summary-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg></span><div><strong>${sessions} 次</strong><span>累计完成</span></div></div>
         </div>
-        <div class="feedback-title">刚才的氛围有没有让你更容易专注？</div>
+        <div class="feedback-title">这次专注时的状态如何？</div>
         <div class="feedback-options">
-          ${[["no", "😶", "没有"], ["some", "🙂", "有一点"], ["yes", "😌", "很明显"]].map(([value, icon, label]) => `<button class="feedback-button ${state.feedback === value ? "selected" : ""}" data-feedback="${value}" aria-label="${label}">${icon}</button>`).join("")}
+          ${[["no", "没有"], ["some", "有一点"], ["yes", "很明显"]].map(([value, label]) => `<button class="feedback-button ${state.feedback === value ? "selected" : ""}" data-feedback="${value}" aria-label="${label}" aria-pressed="${state.feedback === value}">${feedbackFaceIcon(value)}<span>${label}</span></button>`).join("")}
         </div>
         <div class="summary-actions">
-          <button class="primary-button" data-action="retry-session">再来一次</button>
+          <button class="text-button" data-action="return-island"><span aria-hidden="true">⚑</span>回到海岛</button>
           <button class="secondary-button" data-action="return-room">返回房间</button>
-          <button class="text-button" data-action="return-island">回到海岛</button>
+          <button class="primary-button" data-action="retry-session">再来一次 <span aria-hidden="true">→</span></button>
         </div>
-      </div>
+      </article>
     </section>`;
+}
+
+function feedbackFaceIcon(value) {
+  const mouth = value === "yes" ? '<path d="M8.5 13.5c1.8 2 5.2 2 7 0"/>' : value === "some" ? '<path d="M9 14c1.7 1.2 4.3 1.2 6 0"/>' : '<path d="M9 15h6"/>';
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r=".7" class="face-eye"/><circle cx="15" cy="10" r=".7" class="face-eye"/>${mouth}</svg>`;
+}
+
+function getFocusStreak(history) {
+  const activeDays = new Set(history.map((item) => new Date(item.endedAt || item.startedAt || 0)).filter((date) => !Number.isNaN(date.getTime())).map((date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`));
+  if (!activeDays.size) return 0;
+  const cursor = new Date();
+  const dayKey = (date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  if (!activeDays.has(dayKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (activeDays.has(dayKey(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
 }
 
 function getSummaryCopy(status) {
@@ -1979,18 +2920,21 @@ function formatTime() {
 
 function setTimerMode(mode) {
   if (state.isRunning) syncTimerFromClock();
+  state.sessionPhase = "focus";
   state.timerMode = mode;
   state.durationSeconds = Math.max(0, mode * 60);
   state.remainingSeconds = state.durationSeconds;
   state.elapsedSeconds = 0;
-  state.sessionStartedAt = Date.now();
+  state.sessionStartedAt = null;
+  state.isRunning = false;
   state.sessionResult = null;
-  lastTick = Date.now();
+  lastTick = null;
   if (state.view === "room") renderRoom();
   else renderFocus();
 }
 
 function toggleTimer() {
+  const timerHadStarted = Boolean(state.sessionStartedAt);
   if (state.isRunning) {
     syncTimerFromClock();
     state.isRunning = false;
@@ -2004,10 +2948,11 @@ function toggleTimer() {
     startTicker();
     updateAudio();
     persistActiveSession(true);
+    sendHeartbeat();
   }
-  document.querySelectorAll('[data-action="toggle-timer"]').forEach((button) => {
-    button.textContent = state.isRunning ? "暂停" : "继续";
-  });
+  if (!timerHadStarted && state.isRunning) state.sessionPanelOpen = false;
+  if (state.view === "focus") renderFocus();
+  else renderRoom();
 }
 
 function startTicker() {
@@ -2018,11 +2963,15 @@ function startTicker() {
     document.querySelectorAll("[data-session-clock]").forEach((timerElement) => {
       timerElement.textContent = formatTime();
     });
+    document.querySelectorAll("[data-rest-clock]").forEach((timerElement) => {
+      timerElement.textContent = formatRestTime();
+    });
     if (Date.now() - lastPersistAt >= 5000) persistActiveSession();
   }, 1000);
 }
 
 function syncTimerFromClock() {
+  if (state.sessionPhase === "rest") return syncRestTimerFromClock();
   if (!state.isRunning || !lastTick) return false;
   const now = Date.now();
   const delta = Math.floor((now - lastTick) / 1000);
@@ -2040,16 +2989,42 @@ function syncTimerFromClock() {
   return false;
 }
 
+function syncRestTimerFromClock() {
+  if (!lastTick) return false;
+  const now = Date.now();
+  const delta = Math.floor((now - lastTick) / 1000);
+  if (delta < 1) return false;
+  lastTick += delta * 1000;
+  state.restRemainingSeconds = Math.max(0, state.restRemainingSeconds - delta);
+  if (state.restRemainingSeconds === 0) {
+    startNextFocusSession();
+    return true;
+  }
+  return false;
+}
+
 function stopTicker() {
   if (ticker) window.clearInterval(ticker);
   ticker = null;
 }
 
 function stopTickerIfNeeded() {
-  if (state.view !== "focus" && !state.awaitingImmersiveFocus) stopTicker();
+  if (!["focus", "room"].includes(state.view) && !state.awaitingImmersiveFocus) stopTicker();
 }
 
 async function finishSession(forcedStatus = null) {
+  if (state.sessionPhase === "rest") {
+    state.restStartedAt = null;
+    state.restCustomOpen = false;
+    stopTicker();
+    localStorage.removeItem(STORAGE_KEYS.activeSession);
+    await releaseSeat();
+    window.clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+    state.view = "summary";
+    render();
+    return;
+  }
   if (state.isRunning && !forcedStatus && syncTimerFromClock()) return;
   state.isRunning = false;
   state.sessionPanelOpen = false;
@@ -2059,12 +3034,89 @@ async function finishSession(forcedStatus = null) {
   const status = forcedStatus || (state.elapsedSeconds === 0 ? "not_started" : state.timerMode <= 0 ? "free_completed" : "ended_early");
   state.sessionResult = buildSessionResult(status);
   if (state.elapsedSeconds > 0) saveSessionResult(state.sessionResult);
+  if (status === "completed" && [25, 50].includes(state.timerMode)) {
+    notifyFocusComplete();
+    beginRestStage(state.timerMode);
+    return;
+  }
   localStorage.removeItem(STORAGE_KEYS.activeSession);
   await releaseSeat();
   window.clearInterval(heartbeatTimer);
   heartbeatTimer = null;
   state.view = "summary";
   render();
+}
+
+function beginRestStage(nextFocusMode) {
+  state.sessionPhase = "rest";
+  state.nextFocusMode = [25, 50].includes(nextFocusMode) ? nextFocusMode : 25;
+  state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
+  state.restRemainingSeconds = state.restDurationSeconds;
+  state.restStartedAt = Date.now();
+  state.restCustomOpen = false;
+  state.isRunning = false;
+  state.sessionPanelOpen = false;
+  lastTick = Date.now();
+  document.title = "休息一下 · 专注岛";
+  persistActiveSession(true);
+  renderFocus();
+}
+
+function setRestDuration(minutes) {
+  const nextMinutes = Math.min(60, Math.max(1, Math.round(Number(minutes) || DEFAULT_REST_MINUTES)));
+  state.restDurationSeconds = nextMinutes * 60;
+  state.restRemainingSeconds = state.restDurationSeconds;
+  state.restStartedAt = Date.now();
+  state.restCustomOpen = false;
+  lastTick = Date.now();
+  persistActiveSession(true);
+  renderFocus();
+}
+
+function startNextFocusSession() {
+  stopTicker();
+  state.sessionPhase = "focus";
+  state.timerMode = [25, 50].includes(state.nextFocusMode) ? state.nextFocusMode : 25;
+  state.durationSeconds = state.timerMode * 60;
+  state.remainingSeconds = state.durationSeconds;
+  state.elapsedSeconds = 0;
+  state.sessionStartedAt = Date.now();
+  state.sessionResult = null;
+  state.restStartedAt = null;
+  state.restCustomOpen = false;
+  state.isRunning = true;
+  state.sessionPanelOpen = false;
+  lastTick = Date.now();
+  document.title = "专注中 · 专注岛";
+  renderFocus();
+  updateAudio();
+  persistActiveSession(true);
+  sendHeartbeat();
+}
+
+function notifyFocusComplete() {
+  document.title = "专注完成 · 专注岛";
+  if (preferences.desktopNotifications && "Notification" in window && Notification.permission === "granted") {
+    new Notification("专注完成", { body: "这一段时间已经完成，休息一下吧。" });
+  }
+  if (!preferences.completionSound) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  const context = new AudioCtor();
+  const gain = context.createGain();
+  gain.gain.setValueAtTime(0.0001, context.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.04);
+  gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.7);
+  gain.connect(context.destination);
+  [523.25, 659.25].forEach((frequency, index) => {
+    const oscillator = context.createOscillator();
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    oscillator.connect(gain);
+    oscillator.start(context.currentTime + index * 0.12);
+    oscillator.stop(context.currentTime + 0.72);
+  });
+  window.setTimeout(() => context.close(), 900);
 }
 
 function buildSessionResult(status) {
@@ -2081,6 +3133,7 @@ function buildSessionResult(status) {
     endedAt: Date.now(),
     status,
     sounds: { ...state.sounds },
+    musicTrack: state.musicTrack,
     feedback: state.feedback,
   };
 }
@@ -2101,21 +3154,30 @@ function readHistory() {
 }
 
 function persistActiveSession(force = false) {
-  if (state.view !== "focus" || !state.sceneId || state.selectedSeat === null) return;
+  if (!["focus", "room"].includes(state.view) || !state.sceneId || state.selectedSeat === null || !state.currentSeatId) return;
   const now = Date.now();
   if (!force && now - lastPersistAt < 1000) return;
   localStorage.setItem(STORAGE_KEYS.activeSession, JSON.stringify({
     sceneId: state.sceneId,
     roomId: state.roomId,
+    localRoom: state.localRoom,
     selectedSeat: state.selectedSeat,
     timerMode: state.timerMode,
     durationSeconds: state.durationSeconds,
     remainingSeconds: state.remainingSeconds,
     elapsedSeconds: state.elapsedSeconds,
     isRunning: state.isRunning,
+    sessionPhase: state.sessionPhase,
+    restDurationSeconds: state.restDurationSeconds,
+    restRemainingSeconds: state.restRemainingSeconds,
+    restStartedAt: state.restStartedAt,
+    nextFocusMode: state.nextFocusMode,
     sessionStartedAt: state.sessionStartedAt,
     companions: state.companions,
+    focusImageChoice: state.focusImageChoice,
     sounds: state.sounds,
+    musicTrack: state.musicTrack,
+    soundVolumes: state.soundVolumes,
     savedAt: now,
   }));
   lastPersistAt = now;
@@ -2130,17 +3192,61 @@ function restoreActiveSession() {
       view: "focus",
       sceneId: saved.sceneId,
       roomId: saved.roomId,
+      localRoom: Boolean(saved.localRoom),
       selectedSeat: saved.selectedSeat,
+      currentSeatId: saved.selectedSeat + 1,
       timerMode: saved.timerMode,
       durationSeconds: saved.durationSeconds,
       remainingSeconds: saved.remainingSeconds,
       elapsedSeconds: saved.elapsedSeconds,
       isRunning: Boolean(saved.isRunning),
+      sessionPhase: saved.sessionPhase === "rest" ? "rest" : "focus",
+      restDurationSeconds: Number(saved.restDurationSeconds) || DEFAULT_REST_MINUTES * 60,
+      restRemainingSeconds: Number(saved.restRemainingSeconds) || DEFAULT_REST_MINUTES * 60,
+      restStartedAt: saved.restStartedAt || null,
+      restCustomOpen: false,
+      nextFocusMode: [25, 50].includes(Number(saved.nextFocusMode)) ? Number(saved.nextFocusMode) : 25,
       sessionStartedAt: saved.sessionStartedAt,
       companions: saved.companions || 6,
+      focusImageChoice: saved.focusImageChoice || "window",
       sounds: { ...state.sounds, ...saved.sounds },
+      musicTrack: FOCUS_MUSIC_TRACKS[saved.musicTrack] ? saved.musicTrack : "rainy-notes",
+      soundVolumes: { ...state.soundVolumes, ...saved.soundVolumes },
+      sessionPanelOpen: false,
     });
-    if (state.isRunning) {
+    if (state.localRoom) {
+      state.roomPresence = {
+        leases: [...localNpcLeases(), {
+          roomId: "cafe-local",
+          seatId: saved.selectedSeat + 1,
+          sessionId: identity.sessionId,
+          guestId: identity.guestId,
+          displayName: identity.displayName,
+          avatarSkin: identity.avatarSkin,
+          memberType: "human",
+          state: "occupied",
+          activity: saved.sessionPhase === "rest" ? "休息中" : saved.isRunning ? "专注计时中" : "已入座",
+          focusStartedAt: saved.sessionStartedAt,
+        }],
+        serverNow: Date.now(),
+      };
+    }
+    if (state.sessionPhase === "rest") {
+      const offlineSeconds = Math.max(0, Math.floor((Date.now() - saved.savedAt) / 1000));
+      state.restRemainingSeconds = Math.max(0, state.restRemainingSeconds - offlineSeconds);
+      if (state.restRemainingSeconds === 0) {
+        state.sessionPhase = "focus";
+        state.timerMode = state.nextFocusMode;
+        state.durationSeconds = state.timerMode * 60;
+        state.remainingSeconds = state.durationSeconds;
+        state.elapsedSeconds = 0;
+        state.sessionStartedAt = Date.now();
+        state.sessionResult = null;
+        state.restStartedAt = null;
+        state.isRunning = true;
+      }
+      lastTick = Date.now();
+    } else if (state.isRunning) {
       const offlineSeconds = Math.max(0, Math.floor((Date.now() - saved.savedAt) / 1000));
       const appliedOfflineSeconds = state.timerMode > 0 ? Math.min(offlineSeconds, state.remainingSeconds) : offlineSeconds;
       state.elapsedSeconds += appliedOfflineSeconds;
@@ -2150,8 +3256,12 @@ function restoreActiveSession() {
           state.isRunning = false;
           state.sessionResult = buildSessionResult("completed");
           saveSessionResult(state.sessionResult);
-          localStorage.removeItem(STORAGE_KEYS.activeSession);
-          state.view = "summary";
+          state.sessionPhase = "rest";
+          state.nextFocusMode = [25, 50].includes(state.timerMode) ? state.timerMode : 25;
+          state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
+          state.restRemainingSeconds = Math.max(1, state.restDurationSeconds - Math.max(0, offlineSeconds - appliedOfflineSeconds));
+          state.restStartedAt = Date.now();
+          lastTick = Date.now();
         }
       }
     }
@@ -2163,12 +3273,18 @@ function restoreActiveSession() {
 function resetTimerState({ keepMode = true } = {}) {
   state.isRunning = false;
   clearImmersiveAutoEnter();
+  state.sessionPhase = "focus";
   state.timerMode = keepMode ? state.timerMode : 25;
   state.durationSeconds = Math.max(0, state.timerMode * 60);
   state.remainingSeconds = state.durationSeconds;
   state.elapsedSeconds = 0;
   state.sessionStartedAt = null;
   state.sessionResult = null;
+  state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
+  state.restRemainingSeconds = state.restDurationSeconds;
+  state.restStartedAt = null;
+  state.restCustomOpen = false;
+  state.nextFocusMode = [25, 50].includes(state.timerMode) ? state.timerMode : 25;
   state.feedback = null;
   lastTick = null;
   localStorage.removeItem(STORAGE_KEYS.activeSession);
@@ -2177,14 +3293,14 @@ function resetTimerState({ keepMode = true } = {}) {
 function retrySession() {
   resetTimerState();
   state.selectedSeat = null;
-  state.view = "room";
+  state.view = roomViewForScene();
   render();
 }
 
 function returnRoom() {
   resetTimerState();
   state.selectedSeat = null;
-  state.view = "room";
+  state.view = roomViewForScene();
   render();
 }
 
@@ -2197,6 +3313,232 @@ function returnIsland() {
   state.selectedSeat = null;
   render();
 }
+
+function isRoom3DInteractionEnvelope(message) {
+  return Boolean(message)
+    && typeof message === "object"
+    && message.contract_version === ROOM_3D_CONTRACT_VERSION
+    && ROOM_3D_EVENT_TYPES.has(message.event_type)
+    && typeof message.interaction_id === "string"
+    && message.interaction_id.length > 0
+    && typeof message.room_id === "string"
+    && typeof message.seat_id === "string"
+    && typeof message.look_id === "string"
+    && Number.isSafeInteger(message.lease_revision)
+    && Number.isSafeInteger(message.event_sequence)
+    && message.event_sequence >= 1
+    && typeof message.server_time === "number"
+    && message.payload
+    && typeof message.payload === "object";
+}
+
+function isCurrentRoom3DInteraction(message) {
+  if (!isRoom3DInteractionEnvelope(message) || !room3DInteraction) return false;
+  return message.interaction_id === room3DInteraction.interaction_id
+    && message.event_sequence > room3DInteraction.event_sequence
+    && message.lease_revision >= room3DInteraction.lease_revision;
+}
+
+function room3DResponse(source, eventType, payload = {}, { leaseRevision } = {}) {
+  return {
+    contract_version: ROOM_3D_CONTRACT_VERSION,
+    event_type: eventType,
+    interaction_id: source.interaction_id,
+    room_id: currentRoomApiId() || source.room_id,
+    seat_id: source.seat_id,
+    look_id: source.look_id,
+    lease_revision: leaseRevision ?? source.lease_revision,
+    event_sequence: source.event_sequence + 1,
+    server_time: Date.now(),
+    payload: { service_seat_id: ROOM_3D_SERVICE_SEAT_ID, ...payload },
+  };
+}
+
+function deliverRoom3DResponse(message) {
+  room3DInteraction = message;
+  localStorage.setItem(ROOM_3D_RESPONSE_STORAGE_KEY, JSON.stringify(message));
+  const frame = document.querySelector("[data-godot-room-frame]");
+  if (frame?.contentWindow) {
+    frame.contentWindow.postMessage(message, new URL(frame.src, window.location.href).origin);
+  }
+}
+
+function stopRoom3DLeaseHeartbeat() {
+  window.clearInterval(room3DLeaseHeartbeatTimer);
+  room3DLeaseHeartbeatTimer = null;
+}
+
+async function renewRoom3DLease() {
+  if (!room3DInteraction || state.localRoom) return;
+  try {
+    await api(`/api/sessions/${identity.sessionId}/heartbeat`, {
+      method: "POST",
+      body: JSON.stringify({ activity: "正在走向座位", focusing: false }),
+    });
+  } catch (_) {
+    stopRoom3DLeaseHeartbeat();
+  }
+}
+
+function startRoom3DLeaseHeartbeat() {
+  stopRoom3DLeaseHeartbeat();
+  room3DLeaseHeartbeatTimer = window.setInterval(renewRoom3DLease, ROOM_3D_LEASE_HEARTBEAT_MS);
+}
+
+async function releaseRoom3DLease() {
+  stopRoom3DLeaseHeartbeat();
+  room3DInteraction = null;
+  localStorage.removeItem(ROOM_3D_RESPONSE_STORAGE_KEY);
+  await releaseSeat({ force: true });
+}
+
+async function handleRoom3DTransaction(message) {
+  if (!isRoom3DInteractionEnvelope(message)) return;
+  const serviceSeatId = Number(message.payload?.service_seat_id);
+  if (serviceSeatId !== ROOM_3D_SERVICE_SEAT_ID) return;
+
+  if (message.event_type === "seat_intent") {
+    if (state.view !== "godot-room" || state.localRoom) {
+      deliverRoom3DResponse(room3DResponse(message, "seat_reservation_denied", { reason: "online_authority_unavailable" }));
+      return;
+    }
+    if (room3DInteraction && room3DInteraction.interaction_id !== message.interaction_id) {
+      await releaseRoom3DLease();
+    }
+    room3DInteraction = message;
+    try {
+      const result = await api(`/api/rooms/${currentRoomApiId()}/seats/${serviceSeatId}/reserve`, {
+        method: "POST",
+        body: JSON.stringify(identityBody()),
+      });
+      const granted = room3DResponse(message, "seat_reservation_granted", {
+        expires_at: result.expiresAt,
+      }, { leaseRevision: message.lease_revision + 1 });
+      deliverRoom3DResponse(granted);
+      startRoom3DLeaseHeartbeat();
+    } catch (error) {
+      deliverRoom3DResponse(room3DResponse(message, "seat_reservation_denied", {
+        reason: error.message || "reservation_failed",
+      }, { leaseRevision: message.lease_revision + 1 }));
+    }
+    return;
+  }
+
+  if (!isCurrentRoom3DInteraction(message)) return;
+  room3DInteraction = message;
+
+  if (message.event_type === "seat_sequence_started") return;
+
+  if (message.event_type === "seat_contact_completed") {
+    try {
+      const result = await api(`/api/sessions/${identity.sessionId}/occupy`, {
+        method: "POST",
+        body: JSON.stringify({ roomId: currentRoomApiId(), seatId: serviceSeatId }),
+      });
+      state.currentSeatId = serviceSeatId;
+      state.selectedSeat = serviceSeatId - 1;
+      const confirmed = room3DResponse(message, "seat_occupation_confirmed", {
+        expires_at: result.expiresAt,
+      });
+      deliverRoom3DResponse(confirmed);
+      stopRoom3DLeaseHeartbeat();
+      window.clearInterval(heartbeatTimer);
+      heartbeatTimer = window.setInterval(sendHeartbeat, 15000);
+    } catch (error) {
+      const failed = room3DResponse(message, "seat_occupation_failed", {
+        reason: error.message || "occupation_failed",
+      });
+      await releaseRoom3DLease();
+      deliverRoom3DResponse(failed);
+    }
+    return;
+  }
+
+  if (message.event_type === "focus_autostart_requested") {
+    try {
+      state.timerMode = 25;
+      state.durationSeconds = 25 * 60;
+      state.remainingSeconds = 25 * 60;
+      state.elapsedSeconds = 0;
+      state.sessionPhase = "focus";
+      state.sessionStartedAt = Date.now();
+      state.isRunning = true;
+      lastTick = state.sessionStartedAt;
+      await api(`/api/sessions/${identity.sessionId}/heartbeat`, {
+        method: "POST",
+        body: JSON.stringify({ activity: "专注计时中", focusing: true }),
+      });
+      deliverRoom3DResponse(room3DResponse(message, "focus_autostart_confirmed", {
+        focus_started_at: state.sessionStartedAt,
+      }));
+    } catch (error) {
+      state.isRunning = false;
+      state.sessionStartedAt = null;
+      deliverRoom3DResponse(room3DResponse(message, "focus_autostart_failed", {
+        reason: error.message || "focus_start_failed",
+      }));
+    }
+    return;
+  }
+
+  if (["seat_sequence_failed", "seat_release_requested"].includes(message.event_type)) {
+    await releaseRoom3DLease();
+  }
+}
+
+window.addEventListener("message", (event) => {
+  const frame = document.querySelector("[data-godot-room-frame]");
+  if (!frame || event.source !== frame.contentWindow) return;
+  if (event.origin !== new URL(frame.src, window.location.href).origin) return;
+  const message = event.data;
+  if (!message || typeof message !== "object") return;
+
+  if (isRoom3DInteractionEnvelope(message)) {
+    void handleRoom3DTransaction(message);
+    return;
+  }
+
+  if (message.type === "focus-island-godot-ready") {
+    if (godotRoomReadyTimer) window.clearTimeout(godotRoomReadyTimer);
+    godotRoomReadyTimer = null;
+    document.querySelector("[data-godot-room-loading]")?.classList.add("is-hidden");
+    return;
+  }
+
+  if (message.type === "focus-island-room-exit") {
+    state.view = "island";
+    state.roomId = null;
+    state.selectedSeat = null;
+    render();
+    return;
+  }
+
+  if (message.type !== "focus-island-room-focus") return;
+  const context = message.payload || {};
+  const seatMatch = String(context.seat_id || "").match(/(\d+)$/);
+  const seatNumber = Number(context.service_seat_id) || (seatMatch ? Number(seatMatch[1]) : ROOM_3D_SERVICE_SEAT_ID);
+  state.sceneId = "cafe";
+  state.roomId = state.roomId || "cafe-rain";
+  state.selectedSeat = Math.max(0, Math.min(scenes.cafe.seats.length - 1, seatNumber - 1));
+  state.timerMode = 25;
+  state.durationSeconds = 25 * 60;
+  state.remainingSeconds = 25 * 60;
+  state.elapsedSeconds = 0;
+  state.sessionStartedAt = state.sessionStartedAt || Date.now();
+  state.sessionResult = null;
+  state.sessionPhase = "focus";
+  state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
+  state.restRemainingSeconds = state.restDurationSeconds;
+  state.restStartedAt = null;
+  state.restCustomOpen = false;
+  state.nextFocusMode = 25;
+  state.sessionPanelOpen = false;
+  state.focusImageChoice = "seat";
+  state.isRunning = true;
+  lastTick = Date.now();
+  state.view = "focus";
+  render();
+});
 
 function initAudio() {
   if (audioContext) return;
@@ -2222,32 +3564,74 @@ function initAudio() {
   noiseGain.gain.value = 0;
   noiseSource.connect(noiseFilter).connect(noiseGain).connect(audioContext.destination);
   noiseSource.start();
+
+  const whiteBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const whiteData = whiteBuffer.getChannelData(0);
+  for (let index = 0; index < bufferSize; index += 1) whiteData[index] = Math.random() * 2 - 1;
+  whiteNoiseSource = audioContext.createBufferSource();
+  whiteNoiseSource.buffer = whiteBuffer;
+  whiteNoiseSource.loop = true;
+  whiteNoiseGain = audioContext.createGain();
+  whiteNoiseGain.gain.value = 0;
+  whiteNoiseSource.connect(whiteNoiseGain).connect(audioContext.destination);
+  whiteNoiseSource.start();
+
 }
 
 function updateAudio() {
   initAudio();
-  if (!audioContext || !noiseGain) return;
-  audioContext.resume();
-  const base = state.sounds.ambient ? 0.025 : 0;
-  const white = state.sounds.white ? 0.012 : 0;
-  noiseGain.gain.setTargetAtTime(base + white, audioContext.currentTime, 0.5);
-  if (noiseFilter) noiseFilter.frequency.setTargetAtTime(state.sounds.white ? 1400 : scenes[state.sceneId].filter, audioContext.currentTime, 0.6);
+  if (audioContext && noiseGain) {
+    audioContext.resume();
+    noiseGain.gain.setTargetAtTime(state.sounds.ambient ? CAFE_AMBIENT_GAIN * state.soundVolumes.ambient / 100 : 0, audioContext.currentTime, 0.5);
+    whiteNoiseGain?.gain.setTargetAtTime(state.sounds.white ? 0.03 * state.soundVolumes.white / 100 : 0, audioContext.currentTime, 0.5);
+    if (noiseFilter) noiseFilter.frequency.setTargetAtTime(scenes[state.sceneId].filter, audioContext.currentTime, 0.6);
+  }
+  updateMusicAudio();
+}
+
+function updateMusicAudio() {
+  const track = FOCUS_MUSIC_TRACKS[state.musicTrack];
+  if (!state.sounds.music || !state.isRunning || !track) {
+    musicAudio?.pause();
+    return;
+  }
+  if (!musicAudio || loadedMusicTrack !== state.musicTrack) {
+    musicAudio?.pause();
+    musicAudio = new Audio(track.src);
+    musicAudio.loop = true;
+    musicAudio.preload = "metadata";
+    loadedMusicTrack = state.musicTrack;
+  }
+  musicAudio.volume = Math.min(0.9, Math.max(0, state.soundVolumes.music / 100 * MUSIC_VOLUME_BOOST));
+  musicAudio.play().catch(() => {});
 }
 
 function suspendAudio() {
-  if (!audioContext || !noiseGain) return;
-  noiseGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.25);
+  if (audioContext && noiseGain) {
+    noiseGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.25);
+    whiteNoiseGain?.gain.setTargetAtTime(0, audioContext.currentTime, 0.25);
+  }
+  musicAudio?.pause();
 }
 
 function stopAudio() {
   if (noiseSource) {
     try { noiseSource.stop(); } catch (_) { /* already stopped */ }
   }
+  if (whiteNoiseSource) {
+    try { whiteNoiseSource.stop(); } catch (_) { /* already stopped */ }
+  }
+  musicAudio?.pause();
+  if (musicAudio) musicAudio.src = "";
   if (audioContext) audioContext.close();
   audioContext = null;
   noiseSource = null;
   noiseGain = null;
   noiseFilter = null;
+  whiteNoiseSource = null;
+  whiteNoiseGain = null;
+  musicAudio = null;
+  loadedMusicTrack = null;
 }
 
 function showToast(message) {
@@ -2280,44 +3664,25 @@ async function copyTextToClipboard(text) {
   }
 }
 
-function refreshPopulationDisplay() {
-  document.querySelectorAll(".global-online-count").forEach((element) => {
-    element.textContent = state.onlineIslanders;
-    element.classList.remove("count-updated");
-    requestAnimationFrame(() => element.classList.add("count-updated"));
-  });
-  document.querySelectorAll(".global-focus-count").forEach((element) => {
-    element.textContent = state.focusedIslanders;
-    element.classList.remove("count-updated");
-    requestAnimationFrame(() => element.classList.add("count-updated"));
-  });
-}
-
-function schedulePopulationChange() {
-  window.clearTimeout(populationTimer);
-  const delay = 4500 + Math.random() * 3000;
-  populationTimer = window.setTimeout(() => {
-    const focusChanges = [-3, -2, -1, 1, 2, 3];
-    const onlineChanges = [-3, -2, -1, 1, 2, 3];
-    const focusDelta = focusChanges[Math.floor(Math.random() * focusChanges.length)];
-    const onlineDelta = onlineChanges[Math.floor(Math.random() * onlineChanges.length)];
-    state.onlineIslanders = Math.max(124, Math.min(152, state.onlineIslanders + onlineDelta));
-    state.focusedIslanders = Math.max(106, Math.min(138, state.focusedIslanders + focusDelta));
-    state.focusedIslanders = Math.min(state.focusedIslanders, state.onlineIslanders - 8);
-    refreshPopulationDisplay();
-    schedulePopulationChange();
-  }, delay);
-}
-
 document.addEventListener("click", (event) => {
+  const clickedOutsideFocusSettings = state.view === "focus"
+    && state.sessionPanelOpen
+    && !event.target.closest(".session-control-panel")
+    && !event.target.closest("[data-action]");
+  if (clickedOutsideFocusSettings) {
+    state.sessionPanelOpen = false;
+    renderFocus();
+    return;
+  }
+
   const sceneButton = event.target.closest("[data-scene]");
   if (sceneButton) {
     state.libraryCurrentSeatId = null;
     state.sceneId = sceneButton.dataset.scene;
     state.roomId = null;
     state.roomPreviewId = null;
-    state.view = "rooms";
-    render();
+    if (state.sceneId === "cafe") enterCafeRoom();
+    else showToast("这个场景即将开放");
     return;
   }
 
@@ -2354,7 +3719,7 @@ document.addEventListener("click", (event) => {
   const seatButton = event.target.closest("[data-seat]");
   if (seatButton) {
     state.selectedSeat = Number(seatButton.dataset.seat);
-    if (state.sceneId === "cafe") updateCafeSeatSelection();
+    if (state.sceneId === "cafe") occupySelectedSeat();
     else renderRoom();
     return;
   }
@@ -2365,21 +3730,65 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const restDurationButton = event.target.closest("[data-rest-minutes]");
+  if (restDurationButton) {
+    const value = restDurationButton.dataset.restMinutes;
+    if (value === "custom") {
+      state.restCustomOpen = true;
+      renderFocus();
+      window.setTimeout(() => document.querySelector("[data-rest-custom-input]")?.focus(), 0);
+    } else {
+      setRestDuration(Number(value));
+    }
+    return;
+  }
+
   const soundButtonElement = event.target.closest("[data-sound]");
   if (soundButtonElement) {
     const key = soundButtonElement.dataset.sound;
-    state.sounds[key] = !state.sounds[key];
-    soundButtonElement.classList.toggle("on", state.sounds[key]);
+    Object.keys(state.sounds).forEach((soundKey) => { state.sounds[soundKey] = false; });
+    if (FOCUS_MUSIC_TRACKS[key]) {
+      state.sounds.music = true;
+      state.musicTrack = key;
+    } else if (key !== "mute") {
+      state.sounds[key] = true;
+    }
     if (state.isRunning) updateAudio();
+    saveSoundPreferencesFromState();
     persistActiveSession(true);
+    document.querySelectorAll("[data-sound]").forEach((button) => {
+      const buttonKey = button.dataset.sound;
+      const isMusicTrack = Boolean(FOCUS_MUSIC_TRACKS[buttonKey]);
+      const active = buttonKey === "mute"
+        ? !state.sounds.ambient && !state.sounds.white && !state.sounds.music
+        : isMusicTrack
+          ? state.sounds.music && state.musicTrack === buttonKey
+          : Boolean(state.sounds[buttonKey]);
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
     return;
   }
 
   const focusViewButtonElement = event.target.closest("[data-focus-view]");
   if (focusViewButtonElement) {
     state.focusImageChoice = focusViewButtonElement.dataset.focusView;
-    if (state.view === "focus") renderFocus();
-    else renderRoom();
+    if (preferences.rememberLastFocusView) {
+      preferences.lastFocusView = state.focusImageChoice;
+      savePreferences();
+    }
+    if (state.view === "focus") {
+      const focusImageElement = document.querySelector("[data-focus-scene-image]");
+      if (focusImageElement) focusImageElement.src = selectedFocusImage();
+      document.querySelectorAll("[data-focus-view]").forEach((button) => {
+        const active = button.dataset.focusView === state.focusImageChoice;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+      persistActiveSession(true);
+    } else {
+      renderRoom();
+    }
     return;
   }
 
@@ -2390,8 +3799,100 @@ document.addEventListener("click", (event) => {
       state.sessionResult.feedback = state.feedback;
       saveSessionResult(state.sessionResult);
     }
-    document.querySelectorAll("[data-feedback]").forEach((button) => button.classList.toggle("selected", button === feedbackButton));
+    document.querySelectorAll("[data-feedback]").forEach((button) => {
+      const selected = button === feedbackButton;
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
     showToast("谢谢，你的感受已经记下了");
+    return;
+  }
+
+  const profileTabButton = event.target.closest("[data-profile-tab]");
+  if (profileTabButton) {
+    state.personalCenter.tab = profileTabButton.dataset.profileTab;
+    state.personalCenter.confirmAction = null;
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileMonthButton = event.target.closest("[data-profile-month-delta]");
+  if (profileMonthButton) {
+    const [year, month] = state.personalCenter.monthKey.split("-").map(Number);
+    const next = new Date(Date.UTC(year, month - 1 + Number(profileMonthButton.dataset.profileMonthDelta), 1));
+    state.personalCenter.monthKey = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+    state.personalCenter.selectedDate = `${state.personalCenter.monthKey}-01`;
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileDateButton = event.target.closest("[data-profile-date]");
+  if (profileDateButton) {
+    state.personalCenter.selectedDate = profileDateButton.dataset.profileDate;
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileTimerButton = event.target.closest("[data-preference-timer]");
+  if (profileTimerButton) {
+    preferences.defaultTimerMode = Number(profileTimerButton.dataset.preferenceTimer);
+    savePreferences();
+    renderPersonalCenter();
+    return;
+  }
+
+  const preferenceToggle = event.target.closest("[data-preference-toggle]");
+  if (preferenceToggle) {
+    const key = preferenceToggle.dataset.preferenceToggle;
+    const nextValue = !Boolean(preferences[key]);
+    if (key === "desktopNotifications" && nextValue && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().then((permission) => {
+        preferences.desktopNotifications = permission === "granted";
+        savePreferences();
+        renderPersonalCenter();
+      }).catch(() => showToast("暂时无法申请通知权限"));
+      return;
+    }
+    preferences[key] = nextValue;
+    savePreferences();
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileSoundToggle = event.target.closest("[data-profile-sound-toggle]");
+  if (profileSoundToggle) {
+    const key = profileSoundToggle.dataset.profileSoundToggle;
+    state.sounds[key] = !state.sounds[key];
+    saveSoundPreferencesFromState();
+    if (state.isRunning) updateAudio();
+    persistActiveSession(true);
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileMusicButton = event.target.closest("[data-profile-music]");
+  if (profileMusicButton) {
+    state.musicTrack = profileMusicButton.dataset.profileMusic;
+    state.sounds.music = true;
+    saveSoundPreferencesFromState();
+    if (state.isRunning) updateAudio();
+    persistActiveSession(true);
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileAvatarButton = event.target.closest("[data-profile-avatar]");
+  if (profileAvatarButton) {
+    identity.avatarSkin = Number(profileAvatarButton.dataset.profileAvatar);
+    persistIdentity();
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileConfirmButton = event.target.closest("[data-confirm-profile]");
+  if (profileConfirmButton) {
+    state.personalCenter.confirmAction = profileConfirmButton.dataset.confirmProfile;
+    renderPersonalCenter();
     return;
   }
 
@@ -2413,6 +3914,50 @@ document.addEventListener("click", (event) => {
   if (!actionElement) return;
   const action = actionElement.dataset.action;
 
+  if (action === "profile") {
+    openPersonalCenter();
+    return;
+  }
+  if (action === "close-personal-center" || action === "return-active-focus") {
+    closePersonalCenter();
+    return;
+  }
+  if (action === "profile-start-focus") {
+    closePersonalCenter();
+    state.view = "island";
+    render();
+    return;
+  }
+  if (action === "resume-focus-session") {
+    closePersonalCenter();
+    restoreActiveSession();
+    render();
+    return;
+  }
+  if (action === "save-profile-identity") {
+    const input = document.querySelector("[data-profile-name]");
+    const value = String(input?.value || "").trim();
+    if (!value || value.length > 16 || /[\u0000-\u001f\u007f]/.test(value)) {
+      showToast("昵称需为 1–16 个有效字符");
+      input?.focus();
+      return;
+    }
+    identity.displayName = value;
+    persistIdentity();
+    renderPersonalCenter();
+    showToast("昵称已保存");
+    return;
+  }
+  if (action === "cancel-profile-confirm") {
+    state.personalCenter.confirmAction = null;
+    renderPersonalCenter();
+    return;
+  }
+  if (action === "execute-profile-confirm") {
+    executeProfileDataAction();
+    return;
+  }
+
   if (action === "enter-island") {
     window.scrollTo({ top: 0, behavior: "auto" });
     state.view = "island";
@@ -2422,7 +3967,12 @@ document.addEventListener("click", (event) => {
     document.querySelector("#story")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   if (action === "back-island") {
+    if (state.currentSeatId) releaseSeat();
+    stopRoomPresence();
     state.view = "island";
+    state.roomId = null;
+    state.localRoom = false;
+    state.selectedSeat = null;
     state.roomPreviewId = null;
     render();
   }
@@ -2442,7 +3992,7 @@ document.addEventListener("click", (event) => {
   if (action === "enter-preview-room") {
     state.roomId = state.roomPreviewId || scenes[state.sceneId].rooms[0].id;
     state.selectedSeat = null;
-    state.view = "room";
+    state.view = roomViewForScene();
     render();
   }
   if (action === "enter-immersive-focus") enterImmersiveFocus();
@@ -2456,15 +4006,20 @@ document.addEventListener("click", (event) => {
     else renderRoom();
   }
   if (action === "toggle-timer") toggleTimer();
-  if (action === "switch-seat") {
-    syncTimerFromClock();
-    state.isRunning = false;
+  if (action === "apply-custom-rest") {
+    const customInput = document.querySelector("[data-rest-custom-input]");
+    setRestDuration(customInput?.value);
+  }
+  if (action === "skip-rest") startNextFocusSession();
+  if (action === "continue-rest") {
+    state.restCustomOpen = false;
+    renderFocus();
+    showToast(`${Math.max(1, Math.ceil(state.restRemainingSeconds / 60))} 分钟后提醒你开始下一轮专注`);
+  }
+  if (action === "toggle-room-view") {
+    if (state.isRunning) syncTimerFromClock();
     state.sessionPanelOpen = false;
-    clearImmersiveAutoEnter();
-    stopTicker();
-    suspendAudio();
-    state.selectedSeat = null;
-    state.view = "room";
+    state.view = state.view === "focus" ? "room" : "focus";
     render();
   }
   if (action === "finish-session") finishSession();
@@ -2612,12 +4167,22 @@ document.addEventListener("click", (event) => {
       showToast(success ? "角色参数 JSON 已复制" : "复制失败，请手动记录参数");
     });
   }
-  if (action === "profile") showToast("个人中心将用于设置、偏好与语言切换，后续开放");
   if (action === "locked-room") showToast("首期先把临窗雨声做完整，另外两个房间会沿用同一套引擎");
   if (action === "locked") showToast("这个区域还在建设中，内测后会根据投票决定优先开放顺序");
 });
 
 document.addEventListener("input", (event) => {
+  const profileVolumeInput = event.target.closest?.("[data-profile-volume]");
+  if (profileVolumeInput) {
+    const key = profileVolumeInput.dataset.profileVolume;
+    state.soundVolumes[key] = clampVolume(profileVolumeInput.value, state.soundVolumes[key]);
+    preferences.soundVolumes = { ...state.soundVolumes };
+    savePreferences();
+    document.querySelector(`[data-profile-volume-value="${key}"]`)?.replaceChildren(`${state.soundVolumes[key]}%`);
+    if (state.isRunning) updateAudio();
+    persistActiveSession(true);
+    return;
+  }
   const libraryObjectInput = event.target.closest("[data-library-object-input]");
   if (libraryObjectInput) {
     const field = libraryObjectInput.dataset.libraryObjectInput;
@@ -2634,6 +4199,23 @@ document.addEventListener("input", (event) => {
   if (!input) return;
   const field = input.dataset.tuneInput;
   updateCafeSpriteTuning(state.cafeSpriteTuning.activeSeatId, { [field]: Number(input.value) });
+});
+
+document.addEventListener("input", (event) => {
+  const volumeInput = event.target.closest?.("[data-sound-volume]");
+  if (!volumeInput) return;
+  const key = volumeInput.dataset.soundVolume;
+  state.soundVolumes[key] = Number(volumeInput.value);
+  saveSoundPreferencesFromState();
+  if (state.isRunning) updateAudio();
+  persistActiveSession(true);
+});
+
+document.addEventListener("change", (event) => {
+  const profileFilter = event.target.closest?.("[data-profile-filter]");
+  if (!profileFilter) return;
+  state.personalCenter.filters[profileFilter.dataset.profileFilter] = profileFilter.value;
+  renderPersonalCenter();
 });
 
 document.addEventListener("pointerdown", (event) => {
@@ -2695,6 +4277,18 @@ document.addEventListener("pointerup", endCafeSceneObjectDrag);
 document.addEventListener("pointercancel", endCafeSceneObjectDrag);
 
 document.addEventListener("keydown", (event) => {
+  if (state.personalCenter.open) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (state.personalCenter.confirmAction) {
+        state.personalCenter.confirmAction = null;
+        renderPersonalCenter();
+      } else {
+        closePersonalCenter();
+      }
+    }
+    return;
+  }
   if (state.view !== "room" || !["cafe", "library"].includes(state.sceneId)) return;
   const libraryEditorActive = state.sceneId === "library" && state.libraryDebugMode.enabled;
   if (!libraryEditorActive && !state.cafeSpriteTuning.enabled && !state.cafeDebugMode.enabled) return;
@@ -2737,26 +4331,38 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("visibilitychange", () => {
-  if (state.view !== "focus" || !state.isRunning) return;
+  if (!["focus", "room"].includes(state.view) || (!state.isRunning && state.sessionPhase !== "rest")) return;
   if (syncTimerFromClock()) return;
   persistActiveSession(true);
   if (!document.hidden) {
-    const timerElement = document.querySelector("#timer");
-    if (timerElement) timerElement.textContent = formatTime();
+    document.querySelectorAll("[data-session-clock]").forEach((timerElement) => { timerElement.textContent = formatTime(); });
+    document.querySelectorAll("[data-rest-clock]").forEach((timerElement) => { timerElement.textContent = formatRestTime(); });
   }
 });
 
 window.addEventListener("pagehide", () => {
-  if (state.view === "focus" && state.isRunning) syncTimerFromClock();
+  if (["focus", "room"].includes(state.view) && (state.isRunning || state.sessionPhase === "rest")) syncTimerFromClock();
   persistActiveSession(true);
-  releaseSeat({ beacon: true });
 });
 window.addEventListener("beforeunload", () => {
-  window.clearTimeout(populationTimer);
   persistActiveSession(true);
   stopAudio();
 });
 
+window.addEventListener("focus-island:room-change", (event) => {
+  if (event.detail?.roomId === currentRoomApiId()) void syncCafeState();
+});
+window.addEventListener("focus-island:realtime-ready", (event) => {
+  if (event.detail?.roomId === currentRoomApiId()) void syncCafeState();
+});
+window.addEventListener("focus-island:realtime-offline", () => {
+  const syncLabel = document.querySelector(".room-sync-label");
+  if (syncLabel) syncLabel.textContent = "实时连接中断，已启用快照校准";
+});
+
+document.addEventListener("pointermove", () => scheduleHudFade(), { passive: true });
+document.addEventListener("keydown", () => scheduleHudFade());
+
+applyPreferencesToState();
 restoreActiveSession();
 render();
-schedulePopulationChange();

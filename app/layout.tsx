@@ -17,7 +17,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="zh-CN">
       <head>
-        <link rel="stylesheet" href="/styles.css?v=13" />
+        <link rel="stylesheet" href="/styles.css?v=21" />
       </head>
       <body>{children}</body>
     </html>
