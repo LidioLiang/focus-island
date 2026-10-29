@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "专注岛 · Focus Isle",
-  description: "像进入游戏一样，找一个安静的位置开始专注。",
+  title: "Focus Isle",
+  description: "Step into a calm space, pick a seat, and get to work.",
 };
 
 export const viewport: Viewport = {
@@ -15,11 +16,16 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="stylesheet" href="/styles.css?v=11" />
+        <link rel="stylesheet" href="/styles.css?v=32" />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Script src="/vendor/i18next.min.js?v=26.4.2" strategy="beforeInteractive" />
+        <Script src="/locales/en.js?v=9" strategy="beforeInteractive" />
+        <Script src="/i18n.js?v=8" strategy="beforeInteractive" />
+      </body>
     </html>
   );
 }

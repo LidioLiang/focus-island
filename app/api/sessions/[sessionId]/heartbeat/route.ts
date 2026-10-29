@@ -1,20 +1,18 @@
-import { db, json, OCCUPIED_TTL_MS } from "@/lib/presence";
+import { z } from "zod";
+import { authenticatedSupabase, json, legacyLease, rpcError } from "@/lib/presence";
+
+const schema = z.object({ activity: z.string().trim().min(1).max(40).default("安静专注"), focusing: z.boolean().default(false) });
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await context.params;
-  const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-  const activity = String(body.activity || "安静专注").slice(0, 40);
-  const now = Date.now();
-  const expiresAt = now + OCCUPIED_TTL_MS;
-  const database = db();
-  await database.batch([
-    database.prepare("UPDATE room_sessions SET heartbeat_at=?, lease_expires_at=?, activity=? WHERE id=?")
-      .bind(now, expiresAt, activity, sessionId),
-    database.prepare("UPDATE seat_leases SET heartbeat_at=?, expires_at=?, activity=? WHERE session_id=?")
-      .bind(now, expiresAt, activity, sessionId),
-  ]);
-  const lease = await database.prepare("SELECT room_id, seat_id, state, focus_started_at FROM seat_leases WHERE session_id=? ORDER BY CASE state WHEN 'occupied' THEN 0 ELSE 1 END LIMIT 1")
-    .bind(sessionId).first();
-  if (!lease) return json({ error: "session_expired" }, { status: 404 });
-  return json({ ok: true, lease, serverNow: now, expiresAt });
+  if (!z.string().uuid().safeParse(sessionId).success) return json({ error: "invalid_session" }, { status: 400 });
+  const parsed = schema.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) return json({ error: "invalid_request" }, { status: 400 });
+  const auth = await authenticatedSupabase();
+  if (!auth) return json({ error: "authentication_required" }, { status: 401 });
+  const { data, error } = await auth.supabase.rpc("heartbeat_session", { p_session_id: sessionId, p_activity: parsed.data.activity, p_focusing: parsed.data.focusing });
+  if (error) return rpcError(error);
+  const payload = data as { lease: Record<string, unknown>; server_now: string };
+  const lease = legacyLease(payload.lease);
+  return json({ ok: true, lease, serverNow: Date.parse(payload.server_now), expiresAt: lease.expiresAt });
 }

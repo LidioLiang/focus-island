@@ -1,0 +1,19 @@
+# Minimal immutable snapshot of the internal Godot room contract.
+# Production does not ship or load the Godot project or Web export.
+seat_profile_id = &"bar_stool"
+seat_profile_id = &"window_wood_chair"
+seat_profile_id = &"lounge_armchair"
+activity_profile_id = &"computer_focus"
+activity_profile_id = &"reading_focus"
+service_seat_id = 1
+service_seat_id = 2
+service_seat_id = 3
+service_seat_id = 4
+service_seat_id = 5
+service_seat_id = 6
+service_seat_id = 0
+selectable = false
+privacy_reserved = true
+service_seat_id = 0
+selectable = false
+privacy_reserved = true

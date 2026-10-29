@@ -38,15 +38,6 @@ yarn-error.log*
 # typescript
 next-env.d.ts
 
-# Maintained Vite plugin and worker sources.
-!/build/
-/build/*
-!/build/connector-preview-plugin.mjs
-!/build/connector-preview-worker.mjs
-!/build/sites-vite-plugin.LICENSE
-!/build/sites-vite-plugin.ts
-!/build/sites-worker.ts
-
 /dist/
 /.wrangler/
 # Checkout-local execution profile and tool state; never publish them.
@@ -55,3 +46,12 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
+
+# Internal R&D exports and local verification artifacts are not deployable assets.
+/public/godot-room/
+/public/godot-room-3d/
+/public/assets/audio/*.mp3
+/20261026-静态选座坐姿验证.html
+/20261027-1-1号位人物图重叠检查.html
+/scripts/local-room3d-proxy.mjs
+/public/.assetsignore
