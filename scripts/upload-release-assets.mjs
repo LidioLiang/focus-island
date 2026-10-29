@@ -12,7 +12,7 @@ if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE
 
 const supabase = createClient(url, key, { auth: { persistSession: false } });
 const files = ["rainy-notes", "warm-reverie", "moonlit-walk", "island-breeze"]
-  .map((slug) => resolve(sourceDir, `20261022-focus-music-${slug}.mp3`));
+  .map((slug) => resolve(sourceDir, `20261028-focus-music-${slug}.mp3`));
 
 for (const file of files) {
   await access(file);

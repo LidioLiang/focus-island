@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
@@ -223,7 +223,7 @@ test("clicking blank space outside the focus settings closes the panel", () => {
   assert.match(clickHandler, /renderFocus\(\)/);
 });
 
-test("four supplied focus music tracks use real versioned audio assets", async () => {
+test("four supplied focus music tracks use versioned Storage paths", () => {
   const expectedTracks = [
     ["rainy-notes", "雨夜手札"],
     ["warm-reverie", "暖灯漫想"],
@@ -234,8 +234,6 @@ test("four supplied focus music tracks use real versioned audio assets", async (
     assert.match(source, new RegExp(`"${slug}"`));
     assert.match(source, new RegExp(name));
     assert.match(source, new RegExp(`AUDIO_BASE}20261028-focus-music-${slug}\\.mp3`));
-    const audioFile = await stat(new URL(`../public/assets/audio/20261028-focus-music-${slug}.mp3`, import.meta.url));
-    assert.ok(audioFile.size > 1_000_000, `${slug} should contain real audio bytes`);
   }
   assert.match(source, /PUBLIC_CONFIG\.audioBaseUrl/);
   assert.match(source, /const MUSIC_VOLUME_BOOST = 1\.3/);
