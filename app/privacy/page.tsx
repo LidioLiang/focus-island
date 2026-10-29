@@ -1,4 +1,4 @@
-export const metadata = { title: "隐私政策 · 专注岛" };
+export const metadata = { title: "Privacy Policy · Focus Isle" };
 
 export default function PrivacyPage() {
   const support = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "请通过产品页面公布的客服方式联系";

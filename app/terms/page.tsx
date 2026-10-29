@@ -1,4 +1,4 @@
-export const metadata = { title: "服务条款 · 专注岛" };
+export const metadata = { title: "Terms of Service · Focus Isle" };
 
 export default function TermsPage() {
   return <main className="legal-page"><article>
