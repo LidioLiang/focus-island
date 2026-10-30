@@ -15,5 +15,10 @@ export async function POST(request: Request) {
   const { data, error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password, options: { captchaToken: parsed.data.captchaToken || undefined } });
   if (error || !data.user) return json({ error: authError(error) }, { status: 401 });
   if (!data.user.email_confirmed_at) return json({ error: "email_verification_required" }, { status: 403 });
+  const { error: accessError } = await supabase.rpc("get_my_access_status");
+  if (accessError?.message.includes("closed_beta_full")) {
+    await supabase.auth.signOut();
+    return json({ error: "closed_beta_full" }, { status: 403 });
+  }
   return json({ ok: true, userId: data.user.id, email: data.user.email, developer: isDeveloper(data.user) });
 }

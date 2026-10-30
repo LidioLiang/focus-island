@@ -706,6 +706,8 @@ Object.assign(window.__FOCUS_ISLAND_LOCALES__.en, {
   "注册后免费专注一次": "Create an account for one free session",
   "每个已验证邮箱账号可免费完成一次最长 25 分钟专注。": "Each verified email account includes one free focus session of up to 25 minutes.",
   "请先注册或登录邮箱账号。": "Create an account or sign in with your email first.",
+  "本轮 100 名封闭测试名额已满，感谢关注。": "This 100-person closed beta is full. Thanks for your interest.",
+  "这批 50 个终身体验名额已领完": "All 50 lifetime access invitations have been claimed.",
   "注册并验证邮箱": "Create account and verify email",
   "已有账号？登录": "Already have an account? Sign in",
   "继续留在岛上专注": "Keep focusing on the island",

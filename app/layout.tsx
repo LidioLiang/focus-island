@@ -24,7 +24,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         {children}
         <Script src="/vendor/i18next.min.js?v=26.4.2" strategy="beforeInteractive" />
         <Script src="/locales/en.js?v=10" strategy="beforeInteractive" />
-        <Script src="/i18n.js?v=8" strategy="beforeInteractive" />
+        <Script src="/i18n.js?v=9" strategy="afterInteractive" />
       </body>
     </html>
   );

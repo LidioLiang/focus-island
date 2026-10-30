@@ -625,7 +625,7 @@ async function claimPendingLifetimeInvite() {
   } catch (error) {
     if (error.status === 401 || error.message === "email_verification_required") return null;
     state.pendingLifetimeInvite = false;
-    showToast(error.message === "invitation_exhausted" ? "这批 500 个终身体验名额已领完" : "邀请链接无效或已失效");
+    showToast(error.message === "invitation_exhausted" ? "这批 50 个终身体验名额已领完" : "邀请链接无效或已失效");
     return null;
   }
 }
@@ -683,6 +683,7 @@ function authErrorCopy(code) {
     invalid_registration: "密码至少 10 位，并同时包含大小写字母、数字和符号。",
     captcha_required: "请先完成人机验证。",
     rate_limited: "尝试次数过多，请稍后再试。",
+    closed_beta_full: "本轮 100 名封闭测试名额已满，感谢关注。",
     access_service_unavailable: "暂时无法验证使用资格，请稍后再试。",
     invalid_current_password: "当前密码不正确。",
     current_password_required: "请输入当前密码后再修改。",

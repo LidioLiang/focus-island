@@ -44,6 +44,15 @@ export async function GET() {
     return response;
   }
 
+  if (error?.message.includes("closed_beta_full")) {
+    return json({
+      ...deniedAccess("closed_beta_full"),
+      authenticated: true,
+      emailVerified: true,
+      accountType: "permanent",
+    }, { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
+
   const cookieStore = await cookies();
   const snapshot = verifyAccessSnapshot(cookieStore.get(ACCESS_COOKIE_NAME)?.value, auth.user.id);
   if (snapshot && !auth.user.is_anonymous && auth.user.email_confirmed_at) {

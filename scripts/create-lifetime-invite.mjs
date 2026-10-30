@@ -16,8 +16,8 @@ const configuration = await loadConfiguration();
 const url = configuration.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = configuration.SUPABASE_SERVICE_ROLE_KEY;
 const appUrl = configuration.NEXT_PUBLIC_APP_URL;
-const campaignName = configuration.LIFETIME_INVITE_CAMPAIGN || "v1.1-founder-500";
-const maxClaims = Number(configuration.LIFETIME_INVITE_MAX_CLAIMS || 500);
+const campaignName = configuration.LIFETIME_INVITE_CAMPAIGN || "v1.1-founder-50";
+const maxClaims = Number(configuration.LIFETIME_INVITE_MAX_CLAIMS || 50);
 const token = configuration.LIFETIME_INVITE_TOKEN || randomBytes(32).toString("base64url");
 
 if (!url || !serviceRoleKey || !appUrl) {

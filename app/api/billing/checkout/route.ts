@@ -1,19 +1,12 @@
 import Stripe from "stripe";
 import { z } from "zod";
+import { canonicalApplicationOrigin } from "@/lib/deployment-safety";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { PLAN_KEYS, stripeClient, validatedPriceForPlan } from "@/lib/stripe";
 import { authenticatedSupabase, json } from "@/lib/presence";
 import { rateLimited } from "@/lib/security";
 
 const schema = z.object({ plan: z.enum(PLAN_KEYS) });
-
-function applicationOrigin() {
-  const configured = process.env.NEXT_PUBLIC_APP_URL;
-  if (!configured) throw new Error("application_url_not_configured");
-  const url = new URL(configured);
-  if (url.protocol !== "https:" && url.hostname !== "localhost") throw new Error("application_url_not_secure");
-  return url.origin;
-}
 
 export async function POST(request: Request) {
   if (rateLimited(request, "billing-checkout", 10, 10 * 60_000)) return json({ error: "rate_limited" }, { status: 429 });
@@ -50,7 +43,7 @@ export async function POST(request: Request) {
     }
 
     const price = await validatedPriceForPlan(parsed.data.plan);
-    const origin = applicationOrigin();
+    const origin = canonicalApplicationOrigin(request.url);
     const mode = parsed.data.plan === "founder_lifetime" ? "payment" : "subscription";
     const metadata = { user_id: auth.user.id, plan_key: parsed.data.plan };
     const params: Stripe.Checkout.SessionCreateParams = {
@@ -73,7 +66,14 @@ export async function POST(request: Request) {
       ? json({ transactionId: session.id, checkoutUrl: session.url })
       : json({ error: "checkout_url_unavailable" }, { status: 503 });
   } catch (error) {
-    const known = new Set(["founder_lifetime_unavailable", "billing_price_mismatch", "billing_plan_not_configured"]);
+    const known = new Set([
+      "founder_lifetime_unavailable",
+      "billing_price_mismatch",
+      "billing_plan_not_configured",
+      "stripe_environment_mismatch",
+      "application_url_not_configured",
+      "application_url_not_secure",
+    ]);
     const code = error instanceof Error && known.has(error.message) ? error.message : "checkout_failed";
     return json({ error: code }, { status: code === "founder_lifetime_unavailable" ? 409 : 503 });
   }

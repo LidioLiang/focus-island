@@ -9,7 +9,7 @@ const englishLocale = await readFile(new URL("../public/locales/en.js", import.m
 const layoutSource = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
 const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 
-test("English localization loads before the application and follows browser language by default", () => {
+test("English localization initializes after hydration and before the application renders its UI", () => {
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
@@ -20,7 +20,7 @@ test("English localization loads before the application and follows browser lang
   assert.match(i18nRuntime, /observer\.disconnect\(\)/);
   assert.match(i18nRuntime, /observer\.takeRecords\(\)/);
   assert.match(i18nRuntime, /translateDocument\(\);\s*observeDocument\(\);/);
-  assert.match(layoutSource, /i18n\.js\?v=8/);
+  assert.match(layoutSource, /i18n\.js\?v=9" strategy="afterInteractive"/);
   assert.match(layoutSource, /locales\/en\.js\?v=10/);
   assert.match(i18nRuntime, /englishPhrases/);
   assert.match(i18nRuntime, /\$1 focus sessions/);

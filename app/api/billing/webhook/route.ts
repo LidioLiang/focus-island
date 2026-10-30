@@ -270,7 +270,10 @@ export async function POST(request: Request) {
   let event;
   try {
     event = stripeEvent(rawBody, request.headers.get("stripe-signature"));
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "stripe_environment_mismatch") {
+      return json({ error: error.message }, { status: 503 });
+    }
     return json({ error: "invalid_signature" }, { status: 401 });
   }
   const occurredAt = eventTime(event.created);

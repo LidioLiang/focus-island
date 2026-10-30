@@ -6,6 +6,8 @@ const migration = await readFile(new URL("../supabase/migrations/20261030000100_
 const v11Migration = await readFile(new URL("../supabase/migrations/20261030000200_v1_1_developer_and_lifetime_invites.sql", import.meta.url), "utf8");
 const hardeningMigration = await readFile(new URL("../supabase/migrations/20261030000300_v1_1_security_hardening.sql", import.meta.url), "utf8");
 const stripeMigration = await readFile(new URL("../supabase/migrations/20261030090146_v1_1_stripe_billing_provider.sql", import.meta.url), "utf8");
+const closedBetaMigration = await readFile(new URL("../supabase/migrations/20261030232455_closed_beta_capacity.sql", import.meta.url), "utf8");
+const lifetimeLimitMigration = await readFile(new URL("../supabase/migrations/20261030235500_lifetime_invite_limit_50.sql", import.meta.url), "utf8");
 const appSource = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
 const stripeSource = await readFile(new URL("../lib/stripe.ts", import.meta.url), "utf8");
 const sessionSource = await readFile(new URL("../app/api/auth/session/route.ts", import.meta.url), "utf8");
@@ -74,6 +76,9 @@ test("limited lifetime invitation claims are atomic and capped server-side", () 
   assert.match(v11Migration, /unique \(user_id\)/);
   assert.match(v11Migration, /source_type, source_id[\s\S]*'lifetime'/);
   assert.match(appSource, /lifetime_invite/);
+  assert.match(lifetimeLimitMigration, /claimed_count > 50/);
+  assert.match(lifetimeLimitMigration, /max_claims = 50/);
+  assert.match(appSource, /这批 50 个终身体验名额已领完/);
 });
 
 test("v1.1 hardening removes public helper execution and anonymous history access", () => {
@@ -83,4 +88,13 @@ test("v1.1 hardening removes public helper execution and anonymous history acces
   assert.match(hardeningMigration, /email_confirmed_at is null then raise exception 'email_verification_required'/);
   assert.match(hardeningMigration, /account_merge_requests_anonymous_user_idx/);
   assert.match(hardeningMigration, /room_sessions_room_id_idx/);
+});
+
+test("closed beta capacity is atomic, disabled by default, and capped at 100 in staging", () => {
+  assert.match(closedBetaMigration, /enabled boolean not null default false/);
+  assert.match(closedBetaMigration, /max_members integer not null default 100/);
+  assert.match(closedBetaMigration, /from public\.closed_beta_settings where id is true for update/);
+  assert.match(closedBetaMigration, /v_member_count >= v_settings\.max_members then raise exception 'closed_beta_full'/);
+  assert.match(closedBetaMigration, /perform public\.claim_my_closed_beta_slot\(\)/);
+  assert.match(appSource, /closed_beta_full: "本轮 100 名封闭测试名额已满/);
 });

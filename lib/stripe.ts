@@ -1,6 +1,7 @@
 import "server-only";
 
 import Stripe from "stripe";
+import { assertStripeKeyMatchesDeployment } from "@/lib/deployment-safety";
 
 export const PLAN_KEYS = ["plus_monthly", "plus_annual", "founder_lifetime"] as const;
 export type PlanKey = (typeof PLAN_KEYS)[number];
@@ -23,6 +24,7 @@ let clientKey: string | null = null;
 export function stripeClient() {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) throw new Error("STRIPE_SECRET_KEY is not configured");
+  assertStripeKeyMatchesDeployment(secretKey);
   if (!client || clientKey !== secretKey) {
     client = new Stripe(secretKey, { maxNetworkRetries: 2 });
     clientKey = secretKey;

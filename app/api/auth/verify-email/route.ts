@@ -25,6 +25,11 @@ export async function POST(request: Request) {
     p_avatar_skin: parsed.data.avatarSkin,
   });
   if (profileError) return json({ error: "profile_sync_failed" }, { status: 503 });
-  await supabase.rpc("get_my_access_status");
+  const { error: accessError } = await supabase.rpc("get_my_access_status");
+  if (accessError?.message.includes("closed_beta_full")) {
+    await supabase.auth.signOut();
+    return json({ error: "closed_beta_full" }, { status: 403 });
+  }
+  if (accessError) return json({ error: "access_service_unavailable" }, { status: 503 });
   return json({ ok: true, userId: data.user.id, requiresPassword: data.user.is_anonymous === true });
 }
