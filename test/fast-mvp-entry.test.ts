@@ -13,7 +13,7 @@ test("English localization loads before the application and follows browser lang
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=37/);
+  assert.match(pageSource, /app\.js\?v=40/);
   assert.match(source, /language: \/\^zh\\b\/i\.test\(window\.navigator\.language/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);
   assert.match(i18nRuntime, /MutationObserver/);
@@ -21,7 +21,7 @@ test("English localization loads before the application and follows browser lang
   assert.match(i18nRuntime, /observer\.takeRecords\(\)/);
   assert.match(i18nRuntime, /translateDocument\(\);\s*observeDocument\(\);/);
   assert.match(layoutSource, /i18n\.js\?v=8/);
-  assert.match(layoutSource, /locales\/en\.js\?v=9/);
+  assert.match(layoutSource, /locales\/en\.js\?v=10/);
   assert.match(i18nRuntime, /englishPhrases/);
   assert.match(i18nRuntime, /\$1 focus sessions/);
   assert.match(i18nRuntime, /\$1 records/);
@@ -130,10 +130,11 @@ test("static cafe labels are unboxed text and NPC companions stay stable while s
   assert.doesNotMatch(source, /seatId: 4, sessionId: "npc-04"/);
 });
 
-test("developer marker calibration drags and persists only the six static seat numbers", () => {
+test("developer marker calibration is hidden by default and persists only the six static seat numbers", () => {
   const roomStart = source.indexOf("function renderStaticCafeRoom");
   const room = source.slice(roomStart, roomStart + 6500);
-  assert.match(room, /开发者 · 调整编号/);
+  assert.doesNotMatch(room, /开发者 · 调整编号/);
+  assert.match(room, /state\.isDeveloper && state\.staticSeatCalibration\.enabled/);
   assert.match(room, /data-action="toggle-static-seat-calibration"/);
   assert.match(room, /data-action="reset-static-seat-markers"/);
   assert.match(room, /staticSeatMarkerPosition\(slot\)/);

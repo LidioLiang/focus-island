@@ -3,7 +3,7 @@ import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Focus Isle",
+  title: "Focus Isle v1.1",
   description: "Step into a calm space, pick a seat, and get to work.",
 };
 
@@ -18,12 +18,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="stylesheet" href="/styles.css?v=32" />
+        <link rel="stylesheet" href="/styles.css?v=34" />
       </head>
       <body>
         {children}
         <Script src="/vendor/i18next.min.js?v=26.4.2" strategy="beforeInteractive" />
-        <Script src="/locales/en.js?v=9" strategy="beforeInteractive" />
+        <Script src="/locales/en.js?v=10" strategy="beforeInteractive" />
         <Script src="/i18n.js?v=8" strategy="beforeInteractive" />
       </body>
     </html>

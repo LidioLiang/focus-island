@@ -10,6 +10,9 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  if (process.env.ALLOW_ANONYMOUS_MIGRATION !== "true") {
+    return json({ error: "anonymous_sign_in_disabled", upgradeRequired: true }, { status: 410 });
+  }
   if (rateLimited(request, "anonymous-auth", 8, 10 * 60_000)) return json({ error: "rate_limited" }, { status: 429 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return json({ error: "invalid_request" }, { status: 400 });

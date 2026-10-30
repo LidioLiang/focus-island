@@ -1,6 +1,6 @@
 {
   "name": "focus-island",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -14,7 +14,9 @@
     "test": "node --test",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "licenses:check": "node scripts/check-dependency-licenses.mjs",
-    "assets:upload": "node scripts/upload-release-assets.mjs"
+    "assets:upload": "node scripts/upload-release-assets.mjs",
+    "admin:provision": "node scripts/provision-developer.mjs",
+    "invite:create": "node scripts/create-lifetime-invite.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

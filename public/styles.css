@@ -4306,6 +4306,17 @@ body.hud-idle .focus .immersive-timer {
 .profile-data-action.is-danger button { color: #9f4a37; border-color: rgba(168, 78, 56, 0.22); }
 .profile-data-action button:disabled { cursor: not-allowed; opacity: 0.42; }
 
+.profile-password-form { display: grid; gap: 12px; }
+.profile-password-form label { display: grid; gap: 6px; color: #687972; font-size: 11px; }
+.profile-password-form input { width: 100%; box-sizing: border-box; height: 42px; padding: 0 12px; border: 1px solid rgba(43, 78, 68, 0.17); border-radius: 10px; color: #29473f; background: white; font: inherit; }
+.profile-password-form > small { color: #84918c; font-size: 9px; line-height: 1.6; }
+.profile-password-form > button { min-height: 42px; border: 0; border-radius: 10px; color: white; background: #315f51; cursor: pointer; font-weight: 700; }
+.profile-password-form > button:disabled { cursor: wait; opacity: 0.6; }
+.profile-developer-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: 16px; align-items: start; }
+.profile-developer-card { border-color: rgba(164, 109, 38, .28); background: linear-gradient(145deg, rgba(255, 249, 234, .94), rgba(246, 237, 214, .82)); }
+.profile-developer-card > p { margin: -3px 0 12px; color: #687972; font-size: 11px; line-height: 1.7; }
+.profile-developer-card code { color: #80541d; }
+
 .profile-confirm-backdrop { position: absolute; z-index: 4; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(10, 32, 27, 0.5); backdrop-filter: blur(8px); }
 .profile-confirm-dialog { width: min(430px, calc(100vw - 48px)); padding: 25px; border: 1px solid rgba(255, 255, 255, 0.48); border-radius: 18px; background: #fffaf0; box-shadow: 0 24px 70px rgba(3, 19, 16, 0.35); }
 .profile-confirm-dialog > span { color: #aa6b22; font-size: 10px; letter-spacing: 0.15em; }
@@ -4801,4 +4812,58 @@ body.motion-effects-off .view * { animation: none !important; transition-duratio
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+/* Account gate and server-enforced billing entry */
+.access-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+  background: rgba(8, 27, 23, 0.72);
+  backdrop-filter: blur(18px);
+}
+
+.access-dialog {
+  position: relative;
+  width: min(460px, 100%);
+  padding: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 28px;
+  color: #183a32;
+  background: linear-gradient(145deg, rgba(255,255,250,.98), rgba(235,244,232,.98));
+  box-shadow: 0 30px 90px rgba(0, 24, 18, 0.42);
+}
+
+.access-dialog h2 { margin: 6px 0 12px; font-size: clamp(26px, 4vw, 38px); line-height: 1.08; }
+.access-dialog > p:not(.access-eyebrow):not(.access-error) { color: #587168; line-height: 1.65; }
+.access-eyebrow { margin: 0; color: #8b6c35; font-size: 12px; font-weight: 800; letter-spacing: .16em; }
+.access-close { position: absolute; top: 15px; right: 17px; border: 0; background: transparent; color: #47645b; font-size: 28px; cursor: pointer; }
+.access-dialog form { display: grid; gap: 16px; margin-top: 24px; }
+.access-dialog label { display: grid; gap: 7px; font-size: 13px; font-weight: 700; }
+.access-dialog input { width: 100%; box-sizing: border-box; border: 1px solid #bdcec7; border-radius: 12px; padding: 13px 14px; color: #153a31; background: rgba(255,255,255,.82); font: inherit; }
+.access-dialog .primary-button { width: 100%; margin-top: 2px; }
+.access-error { margin: 0; color: #a14535; font-size: 13px; }
+.access-link { display: block; margin: 16px auto 0; border: 0; color: #315e50; background: transparent; font: inherit; font-weight: 700; cursor: pointer; }
+.access-link.muted { margin-top: 8px; color: #71877f; font-size: 13px; }
+
+.paywall-dialog { width: min(880px, 100%); }
+.paywall-plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 26px 0 18px; }
+.paywall-plans button { position: relative; display: grid; gap: 7px; min-height: 170px; padding: 24px 18px; border: 1px solid #bfd0c7; border-radius: 20px; text-align: left; color: #183a32; background: rgba(255,255,255,.72); cursor: pointer; }
+.paywall-plans button:hover { transform: translateY(-2px); border-color: #648c7c; box-shadow: 0 12px 28px rgba(30,76,62,.12); }
+.paywall-plans button.recommended { border: 2px solid #476f5f; background: #f7f3df; }
+.paywall-plans em { position: absolute; top: -11px; right: 15px; padding: 4px 10px; border-radius: 999px; color: white; background: #476f5f; font-size: 11px; font-style: normal; }
+.paywall-plans small, .paywall-plans span { color: #6b8078; }
+.paywall-plans strong { font-size: 21px; }
+.paywall-plans strong b { color: #6b8078; font-size: 12px; font-weight: 600; }
+.paywall-plans .is-loading { opacity: .58; cursor: wait; }
+.access-fineprint { font-size: 12px; }
+
+@media (max-width: 720px) {
+  .access-dialog { padding: 30px 22px; }
+  .paywall-plans { grid-template-columns: 1fr; }
+  .paywall-plans button { min-height: 112px; }
+  .profile-developer-layout { grid-template-columns: 1fr; }
 }
