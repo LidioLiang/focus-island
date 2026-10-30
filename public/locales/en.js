@@ -109,7 +109,7 @@ window.__FOCUS_ISLAND_LOCALES__.en = {
   "\u8fdb\u5165\u4e13\u6ce8\u5c9b": "Enter Focus Isle",
   "\u65e0\u9700\u6444\u50cf\u5934 \u00b7 \u6ca1\u6709\u804a\u5929 \u00b7 \u4e00\u952e\u5f00\u59cb": "No camera \u00b7 No chat \u00b7 Start in one click",
   "\u5411\u4e0b\u4e86\u89e3\u4e13\u6ce8\u5c9b": "Discover Focus Isle",
-  "MVP \u53ef\u4ea4\u4e92\u539f\u578b \u00b7 v0.6": "Interactive MVP \u00b7 v0.6",
+  "MVP \u53ef\u4ea4\u4e92\u539f\u578b \u00b7 v1.1": "Interactive MVP \u00b7 v1.1",
   "\u4f60\u7f3a\u5c11\u7684\u4e5f\u8bb8\u4e0d\u662f": "What you may be missing",
   "\u53e6\u4e00\u4e2a\u8ba1\u65f6\u5668\u3002": "isn\u2019t another timer.",
   "\u771f\u6b63\u56f0\u96be\u7684\uff0c\u5f80\u5f80\u4e0d\u662f\u4e13\u6ce8\u591a\u4e45\uff0c\u800c\u662f\u5982\u4f55\u5f00\u59cb\u3002": "The hardest part is often not how long to focus, but how to begin.",

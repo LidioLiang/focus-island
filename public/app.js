@@ -2378,7 +2378,7 @@ function renderWelcome() {
         <button class="scroll-cue" data-action="scroll-story" aria-label="向下了解专注岛">
           <span>向下了解专注岛</span><i aria-hidden="true">↓</i>
         </button>
-        <span class="prototype-tag">MVP 可交互原型 · v0.6</span>
+        <span class="prototype-tag">MVP 可交互原型 · v1.1</span>
       </section>
 
       <section class="landing-section problem-section" id="story" aria-labelledby="problem-title">
