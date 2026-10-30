@@ -705,6 +705,7 @@ Object.assign(window.__FOCUS_ISLAND_LOCALES__.en, {
   "邮箱账号用于安全分房、试用资格与跨设备记录恢复；密码由 Supabase Auth 安全管理。": "Your email account secures room access, trial eligibility, and cross-device history. Supabase Auth securely manages your password.",
   "注册后免费专注一次": "Create an account for one free session",
   "每个已验证邮箱账号可免费完成一次最长 25 分钟专注。": "Each verified email account includes one free focus session of up to 25 minutes.",
+  "请先注册或登录邮箱账号。": "Create an account or sign in with your email first.",
   "注册并验证邮箱": "Create account and verify email",
   "已有账号？登录": "Already have an account? Sign in",
   "继续留在岛上专注": "Keep focusing on the island",

@@ -676,6 +676,7 @@ function closeAccessOverlay() {
 
 function authErrorCopy(code) {
   return ({
+    authentication_required: "请先注册或登录邮箱账号。",
     invalid_credentials: "邮箱或密码不正确。",
     email_already_registered: "这个邮箱已经注册。请登录原账号，我们会继续迁移匿名记录。",
     email_verification_required: "请先完成邮箱验证。",
