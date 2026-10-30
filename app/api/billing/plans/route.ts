@@ -1,4 +1,4 @@
-import { EXPECTED_PLAN_PRICES, PLAN_KEYS, validatedPriceForPlan } from "@/lib/paddle";
+import { EXPECTED_PLAN_PRICES, PLAN_KEYS, validatedPriceForPlan } from "@/lib/stripe";
 import { json } from "@/lib/presence";
 
 export const dynamic = "force-dynamic";

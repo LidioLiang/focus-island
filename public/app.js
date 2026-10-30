@@ -705,7 +705,7 @@ function renderAccessOverlay() {
         <button class="recommended" data-billing-plan="plus_annual"><em>推荐</em><small>更适合长期使用</small><strong>${billingPrice("plus_annual", "1999")} <b>/ 年</b></strong><span>Plus 年付 · 自动续订</span></button>
         <button data-billing-plan="founder_lifetime"><small>限时名额</small><strong>${billingPrice("founder_lifetime", "3999")}</strong><span>创始终身版 · 一次购买</span></button>
       </div>
-      <p class="access-fineprint">美元定价；税费由 Paddle 按所在地计算。服务端会校验真实 Price，付款完成后由安全回调确认权益。</p>
+      <p class="access-fineprint">美元定价；最终税费以 Stripe Checkout 显示为准。服务端会校验真实 Price，付款完成后由签名 Webhook 确认权益。</p>
       <button class="access-link" data-action="auth-sign-in-from-paywall">已有账号？登录</button>
     </section>`;
   } else if (state.accessOverlay === "verify") {
@@ -2244,6 +2244,14 @@ function renderPersonalAccount() {
   const shortId = `${visibleId.slice(0, 8)}…${visibleId.slice(-4)}`;
   const idLabel = onlineUserId ? "账号 ID" : "等待登录";
   const activeSession = hasActiveSeatSession();
+  const subscriptionActive = state.accessStatus?.entitlementType === "subscription";
+  const billingSummary = subscriptionActive
+    ? `订阅状态：${escapeHtml(state.accessStatus?.subscriptionStatus || "有效")}`
+    : state.accessStatus?.entitlementType === "lifetime"
+      ? "终身权益已生效，无需续订"
+      : state.accessStatus?.entitlementType === "admin"
+        ? "开发者账号由服务端角色授权"
+        : "当前没有付费订阅";
   return `
     <div class="profile-account-layout">
       <section class="profile-settings-card">
@@ -2252,6 +2260,10 @@ function renderPersonalAccount() {
         <fieldset class="profile-avatar-field"><legend>选择角色</legend><div>${AVATAR_OPTIONS.map((avatar) => `<button type="button" class="profile-avatar-option ${identity.avatarSkin === avatar.id ? "is-active" : ""}" data-profile-avatar="${avatar.id}" aria-pressed="${identity.avatarSkin === avatar.id}"><span style="background-image:url('${avatar.image}')"></span><small>${avatar.name}</small></button>`).join("")}</div></fieldset>
         <div class="profile-local-id"><span>${idLabel}</span><code>${shortId}</code></div>
         <p class="profile-storage-note">邮箱账号用于安全分房、试用资格与跨设备记录恢复；密码由 Supabase Auth 安全管理。</p>
+      </section>
+      <section class="profile-settings-card">
+        <div class="profile-settings-heading"><span>会员与账单</span><h2>Stripe 订阅管理</h2></div>
+        <div class="profile-data-action"><div><strong>${billingSummary}</strong><small>${subscriptionActive ? "在 Stripe Customer Portal 中更新付款方式、查看账单或取消订阅" : "购买月付或年付后，可在这里管理订阅"}</small></div><button type="button" data-action="open-billing-portal" ${subscriptionActive ? "" : "disabled"}>管理账单</button></div>
       </section>
       <section class="profile-settings-card profile-password-card">
         <div class="profile-settings-heading"><span>账号安全</span><h2>修改登录密码</h2></div>
@@ -4243,8 +4255,20 @@ document.addEventListener("click", (event) => {
         if (error.status === 401 || error.status === 403) openAuthGate(error.message);
         else if (error.message === "founder_lifetime_unavailable") showToast("创始终身版当前不可购买");
         else if (error.message === "billing_price_mismatch") showToast("价格校验未通过，已安全阻止打开结账页");
-        else if (error.message === "billing_plan_not_configured") showToast("该方案尚未绑定 Paddle Price");
+        else if (error.message === "billing_plan_not_configured") showToast("该方案尚未绑定 Stripe Price");
         else showToast("暂时无法打开结账页");
+      });
+    return;
+  }
+
+  const billingPortalButton = event.target.closest('[data-action="open-billing-portal"]');
+  if (billingPortalButton) {
+    billingPortalButton.disabled = true;
+    api("/api/billing/portal", { method: "POST", body: "{}" })
+      .then(({ portalUrl }) => { window.location.assign(portalUrl); })
+      .catch(() => {
+        billingPortalButton.disabled = false;
+        showToast("暂时无法打开 Stripe 账单管理");
       });
     return;
   }
@@ -5037,7 +5061,8 @@ restoreActiveSession();
 render();
 prepareLifetimeInviteFromUrl();
 
-if (new URLSearchParams(window.location.search).get("billing") === "confirming") {
+const billingReturnState = new URLSearchParams(window.location.search).get("billing");
+if (billingReturnState === "confirming") {
   openPaywall("payment_confirmation_pending");
   const poll = window.setInterval(async () => {
     const access = await getAccessStatus({ refresh: true }).catch(() => null);
@@ -5049,4 +5074,7 @@ if (new URLSearchParams(window.location.search).get("billing") === "confirming")
     }
   }, 2000);
   window.setTimeout(() => window.clearInterval(poll), 60_000);
+} else if (billingReturnState === "canceled") {
+  window.history.replaceState({}, "", window.location.pathname);
+  showToast("已取消结账，没有产生扣款");
 }

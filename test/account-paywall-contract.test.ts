@@ -5,8 +5,9 @@ import test from "node:test";
 const migration = await readFile(new URL("../supabase/migrations/20261030000100_accounts_focus_billing.sql", import.meta.url), "utf8");
 const v11Migration = await readFile(new URL("../supabase/migrations/20261030000200_v1_1_developer_and_lifetime_invites.sql", import.meta.url), "utf8");
 const hardeningMigration = await readFile(new URL("../supabase/migrations/20261030000300_v1_1_security_hardening.sql", import.meta.url), "utf8");
+const stripeMigration = await readFile(new URL("../supabase/migrations/20261030090146_v1_1_stripe_billing_provider.sql", import.meta.url), "utf8");
 const appSource = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
-const paddleSource = await readFile(new URL("../lib/paddle.ts", import.meta.url), "utf8");
+const stripeSource = await readFile(new URL("../lib/stripe.ts", import.meta.url), "utf8");
 const sessionSource = await readFile(new URL("../app/api/auth/session/route.ts", import.meta.url), "utf8");
 const proxySource = await readFile(new URL("../proxy.ts", import.meta.url), "utf8");
 const webhookSource = await readFile(new URL("../app/api/billing/webhook/route.ts", import.meta.url), "utf8");
@@ -36,10 +37,11 @@ test("focus records and billing state are private and mutated through RPC or ver
     assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
   }
   assert.match(migration, /users read own focus sessions/);
-  assert.match(webhookSource, /verifyPaddleSignature\(rawBody/);
-  assert.match(webhookSource, /provider_event_id: event\.event_id/);
+  assert.match(webhookSource, /stripeEvent\(rawBody/);
+  assert.match(webhookSource, /provider_event_id: event\.id/);
   assert.match(webhookSource, /event_id_payload_mismatch/);
-  assert.match(webhookSource, /Date\.parse\(existing\.provider_occurred_at\) > Date\.parse\(event\.occurred_at\)/);
+  assert.match(webhookSource, /Date\.parse\(stored\) > Date\.parse\(incoming\)/);
+  assert.match(stripeMigration, /check \(provider = 'stripe'\)/);
 });
 
 test("paid access uses a signed 72-hour snapshot and North America deployment region", () => {
@@ -48,14 +50,17 @@ test("paid access uses a signed 72-hour snapshot and North America deployment re
   assert.match(appSource, /plus_monthly/);
   assert.match(appSource, /plus_annual/);
   assert.match(appSource, /founder_lifetime/);
-  assert.match(appSource, /付款完成后由安全回调确认权益/);
+  assert.match(appSource, /付款完成后由签名 Webhook 确认权益/);
 });
 
-test("v1.1 validates exact Paddle prices and keeps developer tools server-role gated", () => {
-  assert.match(paddleSource, /plus_monthly: \{ amount: "499"/);
-  assert.match(paddleSource, /plus_annual: \{ amount: "1999"/);
-  assert.match(paddleSource, /founder_lifetime: \{ amount: "3999"/);
-  assert.match(paddleSource, /billing_price_mismatch/);
+test("v1.1 validates exact Stripe prices and keeps developer tools server-role gated", () => {
+  assert.match(stripeSource, /plus_monthly: \{ amount: 499/);
+  assert.match(stripeSource, /plus_annual: \{ amount: 1999/);
+  assert.match(stripeSource, /founder_lifetime: \{ amount: 3999/);
+  assert.match(stripeSource, /billing_price_mismatch/);
+  assert.match(webhookSource, /request\.headers\.get\("stripe-signature"\)/);
+  assert.match(webhookSource, /checkout\.session\.completed/);
+  assert.match(webhookSource, /customer\.subscription\./);
   assert.match(sessionSource, /isDeveloper\(auth\.user\)/);
   assert.match(v11Migration, /raw_app_meta_data->>'role'.*= 'developer'/);
   assert.match(appSource, /state\.isDeveloper \? \[\["developer"/);

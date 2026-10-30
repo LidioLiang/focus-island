@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { sha256 } from "@/lib/paddle";
+import { sha256 } from "@/lib/crypto";
 import { authenticatedSupabase, json } from "@/lib/presence";
 import { rateLimited } from "@/lib/security";
 

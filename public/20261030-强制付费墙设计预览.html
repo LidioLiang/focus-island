@@ -368,7 +368,7 @@
             <div class="selection-icon" aria-hidden="true">✦</div>
             <div class="selection-copy"><small>当前选择</small><strong data-summary>Plus 年付 · $19.99 / 年</strong></div>
           </div>
-          <button class="checkout-button" type="button" data-checkout>使用 Paddle 安全结账&nbsp; →</button>
+          <button class="checkout-button" type="button" data-checkout>使用 Stripe 安全结账&nbsp; →</button>
         </div>
         <div class="trust"><span>价格为美元</span><span>税费以结账页为准</span><span>付款确认后才开通权益</span></div>
         <button class="exit" type="button" data-exit>暂时离开，返回落地页</button>
@@ -444,7 +444,7 @@
       });
     });
 
-    document.querySelector("[data-checkout]").addEventListener("click", () => showToast("设计预览：正式版本将在这里打开 Paddle Checkout"));
+    document.querySelector("[data-checkout]").addEventListener("click", () => showToast("设计预览：正式版本将在这里打开 Stripe Checkout"));
     document.querySelector("[data-claim]").addEventListener("click", () => showToast("设计预览：正式版本将先注册邮箱，再由服务器核销名额"));
     document.querySelectorAll("[data-exit]").forEach((button) => button.addEventListener("click", () => {
       if (body.dataset.mode === "invite") setMode("standard");
