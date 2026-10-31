@@ -8,7 +8,9 @@ const hardeningMigration = await readFile(new URL("../supabase/migrations/202610
 const stripeMigration = await readFile(new URL("../supabase/migrations/20261030090146_v1_1_stripe_billing_provider.sql", import.meta.url), "utf8");
 const closedBetaMigration = await readFile(new URL("../supabase/migrations/20261030232455_closed_beta_capacity.sql", import.meta.url), "utf8");
 const lifetimeLimitMigration = await readFile(new URL("../supabase/migrations/20261030235500_lifetime_invite_limit_50.sql", import.meta.url), "utf8");
+const noEmailConfirmationMigration = await readFile(new URL("../supabase/migrations/20261031003735_remove_email_confirmation_gate.sql", import.meta.url), "utf8");
 const appSource = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+const signUpSource = await readFile(new URL("../app/api/auth/sign-up/route.ts", import.meta.url), "utf8");
 const stripeSource = await readFile(new URL("../lib/stripe.ts", import.meta.url), "utf8");
 const sessionSource = await readFile(new URL("../app/api/auth/session/route.ts", import.meta.url), "utf8");
 const proxySource = await readFile(new URL("../proxy.ts", import.meta.url), "utf8");
@@ -16,14 +18,26 @@ const webhookSource = await readFile(new URL("../app/api/billing/webhook/route.t
 const anonymousRoute = await readFile(new URL("../app/api/auth/anonymous/route.ts", import.meta.url), "utf8");
 const vercelConfig = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
 
-test("permanent verified accounts and one atomic 25-minute trial gate product access", () => {
+test("permanent accounts and one atomic 25-minute trial gate product access", () => {
   assert.match(migration, /v_user\.is_anonymous is true/);
-  assert.match(migration, /v_user\.email_confirmed_at is null/);
   assert.match(migration, /select \* into v_access from public\.user_access_state where user_id = v_user\.id for update/);
   assert.match(migration, /if p_timer_mode <> 25 then raise exception 'trial_requires_25'/);
   assert.match(migration, /unique \(user_id, client_session_id\)/);
   assert.match(migration, /focus_sessions_one_active_per_user_idx/);
   assert.match(migration, /raise exception 'payment_required'/);
+  assert.doesNotMatch(noEmailConfirmationMigration, /email_confirmed_at|email_verification_required/);
+  assert.match(noEmailConfirmationMigration, /if not found or v_user\.is_anonymous is true then raise exception 'registration_required'/);
+});
+
+test("sign-up confirms the password twice and resumes without an email verification step", () => {
+  assert.match(signUpSource, /confirmPassword/);
+  assert.match(signUpSource, /password !== parsed\.data\.confirmPassword/);
+  assert.match(signUpSource, /!data\.user \|\| !data\.session/);
+  assert.doesNotMatch(signUpSource, /emailRedirectTo|requiresEmailVerification/);
+  assert.match(appSource, /name="confirmPassword"/);
+  assert.match(appSource, /authContinuation/);
+  assert.match(appSource, /completeAuthenticatedFlow/);
+  assert.doesNotMatch(appSource, /data-auth-form="verify"|api\/auth\/verify-email/);
 });
 
 test("room allocation and room-session writes enforce access below the UI", () => {
@@ -85,7 +99,6 @@ test("v1.1 hardening removes public helper execution and anonymous history acces
   assert.match(hardeningMigration, /revoke all on function public\.rls_auto_enable\(\) from public, anon, authenticated/);
   assert.match(hardeningMigration, /revoke all on function public\.assert_my_product_access\(\) from authenticated/);
   assert.match(hardeningMigration, /is_anonymous is true then raise exception 'registration_required'/);
-  assert.match(hardeningMigration, /email_confirmed_at is null then raise exception 'email_verification_required'/);
   assert.match(hardeningMigration, /account_merge_requests_anonymous_user_idx/);
   assert.match(hardeningMigration, /room_sessions_room_id_idx/);
 });

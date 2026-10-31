@@ -297,7 +297,7 @@ const state = {
   authEmail: "",
   authError: "",
   authPending: false,
-  authUpgradeFlow: false,
+  authContinuation: null,
   cloudFocusClientId: null,
   sounds: { ...preferences.sounds },
   musicTrack: preferences.musicTrack,
@@ -573,7 +573,7 @@ async function ensureOnlineIdentity() {
   if (!onlineIdentityPromise) {
     onlineIdentityPromise = (async () => {
       const session = await api("/api/auth/session");
-      if (session.authenticated && !session.anonymous && session.emailVerified) {
+      if (session.authenticated && !session.anonymous) {
         onlineUserId = session.userId;
         state.isDeveloper = session.developer === true;
         return session;
@@ -623,7 +623,7 @@ async function claimPendingLifetimeInvite() {
     showToast(result.alreadyClaimed ? "这个账号已拥有终身体验权益" : `终身体验已领取${Number.isInteger(result.remaining) ? `，剩余 ${result.remaining} 个名额` : ""}`);
     return result;
   } catch (error) {
-    if (error.status === 401 || error.message === "email_verification_required") return null;
+    if (error.status === 401) return null;
     state.pendingLifetimeInvite = false;
     showToast(error.message === "invitation_exhausted" ? "这批 50 个终身体验名额已领完" : "邀请链接无效或已失效");
     return null;
@@ -640,7 +640,7 @@ async function prepareLifetimeInviteFromUrl() {
     await api("/api/invitations/lifetime/prepare", { method: "POST", body: JSON.stringify({ token }) });
     state.pendingLifetimeInvite = true;
     const session = await api("/api/auth/session");
-    if (session.authenticated && !session.anonymous && session.emailVerified) {
+    if (session.authenticated && !session.anonymous) {
       onlineUserId = session.userId;
       state.isDeveloper = session.developer === true;
       await claimPendingLifetimeInvite();
@@ -653,7 +653,8 @@ async function prepareLifetimeInviteFromUrl() {
   }
 }
 
-function openAuthGate(error = "") {
+function openAuthGate(error = "", continuation = null) {
+  if (continuation) state.authContinuation = continuation;
   state.accessOverlay = "auth";
   state.authError = error;
   state.authPending = false;
@@ -671,6 +672,7 @@ function openPaywall(reason = "payment_required") {
 
 function closeAccessOverlay() {
   state.accessOverlay = null;
+  state.authContinuation = null;
   document.querySelector(".access-overlay")?.remove();
 }
 
@@ -679,8 +681,9 @@ function authErrorCopy(code) {
     authentication_required: "请先注册或登录邮箱账号。",
     invalid_credentials: "邮箱或密码不正确。",
     email_already_registered: "这个邮箱已经注册。请登录原账号，我们会继续迁移匿名记录。",
-    email_verification_required: "请先完成邮箱验证。",
     invalid_registration: "密码至少 10 位，并同时包含大小写字母、数字和符号。",
+    password_mismatch: "两次输入的密码不一致。",
+    registration_session_unavailable: "注册配置尚未完成，请稍后再试。",
     captcha_required: "请先完成人机验证。",
     rate_limited: "尝试次数过多，请稍后再试。",
     closed_beta_full: "本轮 100 名封闭测试名额已满，感谢关注。",
@@ -710,35 +713,19 @@ function renderAccessOverlay() {
       <p class="access-fineprint">美元定价；最终税费以 Stripe Checkout 显示为准。服务端会校验真实 Price，付款完成后由签名 Webhook 确认权益。</p>
       <button class="access-link" data-action="auth-sign-in-from-paywall">已有账号？登录</button>
     </section>`;
-  } else if (state.accessOverlay === "verify") {
-    shell.innerHTML = `<section class="access-dialog" role="dialog" aria-modal="true" aria-labelledby="verify-title">
-      <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
-      <p class="access-eyebrow">VERIFY EMAIL</p><h2 id="verify-title">查看你的邮箱</h2>
-      <p>我们已向 <strong>${escapeHtml(state.authEmail)}</strong> 发送验证邮件或 6 位验证码。</p>
-      <form data-auth-form="verify"><label>验证码<input name="token" inputmode="numeric" autocomplete="one-time-code" minlength="6" maxlength="128" required /></label>
-      ${state.authError ? `<p class="access-error">${escapeHtml(authErrorCopy(state.authError))}</p>` : ""}
-      <button class="primary-button" type="submit" ${state.authPending ? "disabled" : ""}>${state.authPending ? "正在验证…" : "验证并进入"}</button></form>
-    </section>`;
-  } else if (state.accessOverlay === "set-password") {
-    shell.innerHTML = `<section class="access-dialog" role="dialog" aria-modal="true" aria-labelledby="password-title">
-      <p class="access-eyebrow">SECURE ACCOUNT</p><h2 id="password-title">为账号设置密码</h2>
-      <p>匿名资料已经绑定到邮箱。设置密码后，原有记录和用户 ID 会继续保留。</p>
-      <form data-auth-form="set-password"><label>新密码<input name="password" type="password" autocomplete="new-password" minlength="10" required /></label>
-      ${state.authError ? `<p class="access-error">${escapeHtml(authErrorCopy(state.authError))}</p>` : ""}
-      <button class="primary-button" type="submit" ${state.authPending ? "disabled" : ""}>完成账号升级</button></form>
-    </section>`;
   } else {
     const signUp = state.authMode === "sign-up";
     shell.innerHTML = `<section class="access-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
       <p class="access-eyebrow">${signUp ? "CREATE ACCOUNT" : "WELCOME BACK"}</p>
       <h2 id="auth-title">${state.pendingLifetimeInvite ? (signUp ? "注册领取终身体验" : "登录领取终身体验") : signUp ? "注册后免费专注一次" : "登录专注岛"}</h2>
-      <p>${state.pendingLifetimeInvite ? "你已通过限量邀请链接进入。完成邮箱验证后自动领取，名额以最终领取成功为准。" : signUp ? "每个已验证邮箱账号可免费完成一次最长 25 分钟专注。" : "登录后恢复云端记录与已购买权益。"}</p>
+      <p>${state.pendingLifetimeInvite ? "你已通过限量邀请链接进入。注册成功后自动领取，名额以最终领取成功为准。" : signUp ? "填写邮箱并设置密码，注册成功后会自动继续刚才的专注操作。" : "登录后恢复云端记录与已购买权益。"}</p>
       <form data-auth-form="${signUp ? "sign-up" : "sign-in"}">
         <label>邮箱<input name="email" type="email" autocomplete="email" value="${escapeHtml(state.authEmail)}" required /></label>
         <label>密码<input name="password" type="password" autocomplete="${signUp ? "new-password" : "current-password"}" ${signUp ? "minlength=\"10\"" : ""} required /></label>
+        ${signUp ? '<label>再次输入密码<input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" required /></label>' : ""}
         ${state.authError ? `<p class="access-error">${escapeHtml(authErrorCopy(state.authError))}</p>` : ""}
-        <button class="primary-button" type="submit" ${state.authPending ? "disabled" : ""}>${state.authPending ? "请稍候…" : signUp ? "注册并验证邮箱" : "登录"}</button>
+        <button class="primary-button" type="submit" ${state.authPending ? "disabled" : ""}>${state.authPending ? "请稍候…" : signUp ? "注册并继续专注" : "登录并继续"}</button>
       </form>
       <button class="access-link" data-action="toggle-auth-mode">${signUp ? "已有账号？登录" : "没有账号？注册"}</button>
       ${!signUp ? `<button class="access-link muted" data-action="reset-password">忘记密码</button>` : ""}
@@ -761,6 +748,24 @@ async function importLocalHistory() {
   await api("/api/focus/sessions", { method: "POST", body: JSON.stringify({ sessions }) }).catch(() => {});
 }
 
+async function completeAuthenticatedFlow(result) {
+  onlineUserId = result.userId;
+  state.isDeveloper = result.developer === true;
+  onlineIdentityPromise = null;
+  await claimPendingLifetimeInvite();
+  state.accessStatus = null;
+  await getAccessStatus({ refresh: true });
+  await importLocalHistory();
+  const continuation = state.authContinuation;
+  closeAccessOverlay();
+  if (continuation === "start-focus" && state.view === "room" && state.selectedSeat !== null) {
+    await enterImmersiveFocus();
+    return;
+  }
+  state.view = "island";
+  render();
+}
+
 async function authorizeFocusStart() {
   if (state.cloudFocusClientId) return true;
   const clientSessionId = crypto.randomUUID();
@@ -773,7 +778,8 @@ async function authorizeFocusStart() {
     return true;
   } catch (error) {
     if (error.status === 402) openPaywall(error.message);
-    else openAuthGate(error.message);
+    else if (error.status === 401 || error.status === 403) openAuthGate(error.message, "start-focus");
+    else showToast("暂时无法开始专注，请稍后再试");
     return false;
   }
 }
@@ -2360,201 +2366,289 @@ async function executeProfileDataAction() {
 }
 
 function renderWelcome() {
-  const feedbackAction = FEEDBACK_FORM_URL
-    ? `<a class="feedback-link" href="${FEEDBACK_FORM_URL}" target="_blank" rel="noopener noreferrer">去填写反馈&nbsp; ↗</a>`
-    : `<button class="feedback-link is-disabled" type="button" disabled>反馈通道准备中</button>`;
+  const english = window.FocusI18n?.getLanguage() === "en"
+    || (!window.FocusI18n && !/^zh\b/i.test(window.navigator.language || ""));
+  const copy = english ? {
+    brandTag: "A quiet place to begin",
+    navHow: "How it works",
+    navWhy: "Why it works",
+    navPricing: "Pricing",
+    navCta: "Try one session",
+    heroKicker: "A focus space for people who work alone",
+    heroTitle: "Make starting\nfeel lighter.",
+    heroBody: "Step into a quiet café, choose a seat, and let the room carry you from “I should start” to actually beginning.",
+    heroCta: "Start 25 minutes free",
+    heroSecondary: "See how it works",
+    heroNote: "No camera · No chat · Your first session is free",
+    openNow: "Open now",
+    cafe: "Four Seasons Café",
+    focusReady: "Your quiet table is ready",
+    focusMode: "FIRST SESSION · 25 MIN",
+    focusStatus: "Quiet company · no social pressure",
+    bridgeEyebrow: "THE HARDEST PART IS THE THRESHOLD",
+    bridgeTitle: "You may not need more discipline.\nYou may need somewhere to begin.",
+    bridgeBody: "A timer can count the minutes, but it cannot create the small transition between daily life and focused work. Focus Isle turns that transition into a place you can enter.",
+    bridgeA: "Leave the noise",
+    bridgeB: "Choose a seat",
+    bridgeC: "Begin one thing",
+    howEyebrow: "FROM INTENTION TO ACTION",
+    howTitle: "One island. One café.\nOne clear path into focus.",
+    howBody: "No room lists, character controls, or setup maze. This version keeps the journey intentionally short.",
+    step1Title: "Arrive on the island",
+    step1Body: "The café is the only open destination today, so there is nothing to compare or configure.",
+    step2Title: "Choose your seat",
+    step2Body: "We place you in a small six-seat café. Pick an open seat and settle into the quiet company around you.",
+    step3Title: "Let the interface disappear",
+    step3Body: "Choose 25 minutes and begin. Café ambience, white noise, and soft music stay under your control.",
+    howCta: "Take a seat",
+    presenceEyebrow: "PRESENCE WITHOUT PERFORMANCE",
+    presenceTitle: "Feel accompanied,\nwithout having to be seen.",
+    presenceBody: "Focus Isle keeps the comfort of a shared room and removes the parts that turn presence into pressure.",
+    noCamera: "No camera",
+    noCameraBody: "Show up exactly as you are. Nothing to prepare and no feeling of being watched.",
+    noChat: "No chat or DMs",
+    noChatBody: "No introductions, notifications, or expectation to reply while you work.",
+    noFeed: "No feed to perform for",
+    noFeedBody: "There are no streak competitions, status posts, or social tasks pulling you away.",
+    offerEyebrow: "TRY THE EXPERIENCE FIRST",
+    offerTitle: "Finish one real session.\nThen decide if it belongs in your day.",
+    offerBody: "Create an account when you begin. Your first 25-minute focus session is free; continued access uses one of the plans below.",
+    trial: "First session",
+    trialPrice: "$0",
+    trialLine: "One complete 25-minute session",
+    monthly: "Monthly",
+    monthlyPrice: "$4.99",
+    monthlyLine: "Flexible access to the core focus experience",
+    annual: "Annual",
+    annualPrice: "$19.99",
+    annualLine: "A quieter commitment for the whole year",
+    annualBadge: "Best value",
+    founder: "Founder lifetime",
+    founderPrice: "$39.99",
+    founderLine: "One-time payment while founder access remains available",
+    priceNote: "USD pricing. Taxes, eligibility, and final availability are confirmed in Stripe Checkout. Focus Isle is currently in beta.",
+    finalEyebrow: "YOUR NEXT 25 MINUTES",
+    finalTitle: "You do not need to fix the whole day.\nJust find a seat.",
+    finalBody: "Enter the café, let the room get quiet, and begin with the next small thing.",
+    finalCta: "Start my free session",
+    footerLine: "A quiet place to focus, with company and without interruption.",
+    privacy: "Privacy",
+    terms: "Terms",
+    beta: "Interactive beta · v1.1",
+  } : {
+    brandTag: "一个更容易开始的地方",
+    navHow: "如何使用",
+    navWhy: "为什么有效",
+    navPricing: "价格",
+    navCta: "免费试一次",
+    heroKicker: "为独自工作的人，准备的沉浸式专注空间",
+    heroTitle: "让开始专注，\n变得轻一点。",
+    heroBody: "走进一间安静的咖啡馆，选一个座位，让场景、声音和陪伴替你完成从“想做”到“开始做”的切换。",
+    heroCta: "免费开始 25 分钟",
+    heroSecondary: "看看它如何工作",
+    heroNote: "无需摄像头 · 没有聊天 · 第一次专注免费",
+    openNow: "当前开放",
+    cafe: "四时咖啡馆",
+    focusReady: "你的安静座位已经准备好",
+    focusMode: "首次体验 · 25 分钟",
+    focusStatus: "安静陪伴 · 没有社交压力",
+    bridgeEyebrow: "最难的不是坚持，而是跨过开始的门槛",
+    bridgeTitle: "你也许不缺自律。\n只是缺一个开始的地方。",
+    bridgeBody: "计时器可以计算分钟，却不能替你完成从日常生活切换到专注工作的那一步。专注岛把这一步，变成一个可以走进去的空间。",
+    bridgeA: "离开杂音",
+    bridgeB: "选一个座位",
+    bridgeC: "只开始一件事",
+    howEyebrow: "从想做，到真的开始",
+    howTitle: "一座岛，一间咖啡馆，\n一条清楚的专注路径。",
+    howBody: "没有房间列表、角色操控和复杂设置。当前版本刻意把进入专注的旅程缩短。",
+    step1Title: "抵达海岛",
+    step1Body: "咖啡馆是当前唯一开放的目的地，不需要比较，也不用做复杂选择。",
+    step2Title: "找个位置坐下",
+    step2Body: "系统会把你带进一间六座小咖啡馆。选一个空位，在安静的陪伴感里坐下。",
+    step3Title: "让界面退到身后",
+    step3Body: "选择 25 分钟并开始。咖啡馆环境、白噪音和轻音乐都可以独立控制。",
+    howCta: "去选一个座位",
+    presenceEyebrow: "有陪伴感，不需要表演",
+    presenceTitle: "有陪伴感，\n但你不必被看见。",
+    presenceBody: "专注岛保留身边有人一起安静做事的感觉，同时拿走那些会把陪伴变成压力的东西。",
+    noCamera: "不开摄像头",
+    noCameraBody: "不用整理自己，也不需要承担一直被注视的感觉。",
+    noChat: "没有聊天与私信",
+    noChatBody: "不必自我介绍，没有消息提醒，也没有必须及时回应的关系。",
+    noFeed: "没有需要经营的动态",
+    noFeedBody: "没有连胜排名、状态发布或社交任务把注意力从工作上拿走。",
+    offerEyebrow: "先体验，再决定",
+    offerTitle: "先完成一次真正的专注，\n再决定它是否适合你的日常。",
+    offerBody: "第一次开始时注册账号，可免费完成一次 25 分钟专注。继续使用时，再从下面的方案中选择。",
+    trial: "首次体验",
+    trialPrice: "$0",
+    trialLine: "一次完整的 25 分钟专注",
+    monthly: "月付",
+    monthlyPrice: "$4.99",
+    monthlyLine: "灵活使用当前核心专注体验",
+    annual: "年付",
+    annualPrice: "$19.99",
+    annualLine: "用更低成本保留一整年的专注空间",
+    annualBadge: "更划算",
+    founder: "创始终身版",
+    founderPrice: "$39.99",
+    founderLine: "创始权益仍开放时可一次性购买",
+    priceNote: "美元定价；税费、购买资格和最终可售状态以 Stripe Checkout 为准。专注岛当前处于内测阶段。",
+    finalEyebrow: "从接下来的 25 分钟开始",
+    finalTitle: "不需要修好一整天。\n先找个位置坐下。",
+    finalBody: "进入咖啡馆，让画面安静下来，从眼前最小的一件事开始。",
+    finalCta: "开始我的免费专注",
+    footerLine: "一个有人陪伴、互不打扰的沉浸式专注空间。",
+    privacy: "隐私政策",
+    terms: "服务条款",
+    beta: "可交互内测 · v1.1",
+  };
+
+  const lines = (value) => value.split("\n").map((line) => `<span>${line}</span>`).join("");
+  const logo = `
+    <span class="landing-brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="7" r="2.2" fill="currentColor" stroke="none" />
+        <path d="M4.5 16.2c2.1-3.1 4.6-4.7 7.5-4.7s5.4 1.6 7.5 4.7" />
+        <path d="M3.5 18.7c2.7-1.1 5.5-1.1 8.3 0s5.7 1.1 8.7-.1" />
+      </svg>
+    </span>`;
 
   app.innerHTML = `
-    <div class="landing-page">
-      <section class="view welcome welcome-hero" aria-labelledby="welcome-title">
-        <img class="scene-image" src="${islandImage}" alt="一座有城市、图书馆、森林、湖泊与雪山的宁静海岛" />
-        <div class="welcome-content">
-          <div class="welcome-kicker"><span class="presence-dot"></span>内部演示 · 画面中的陪伴角色均为岛民 NPC</div>
-          <h1 id="welcome-title">换一个地方，<br />开始专注。</h1>
-          <p class="welcome-subtitle">像进入游戏一样，去咖啡馆、图书馆或森林里找个位置坐下。有人陪伴，互不打扰。</p>
-          <div class="welcome-actions">
-            <button class="primary-button" data-action="enter-island">注册并进入专注岛&nbsp; →</button>
-            <span class="welcome-note">验证邮箱后可免费专注一次 · 无需摄像头 · 没有聊天</span>
-          </div>
-        </div>
-        <button class="scroll-cue" data-action="scroll-story" aria-label="向下了解专注岛">
-          <span>向下了解专注岛</span><i aria-hidden="true">↓</i>
-        </button>
-        <span class="prototype-tag">MVP 可交互原型 · v1.1</span>
-      </section>
+    <div class="landing-page landing-v2" id="top">
+      <header class="landing-v2-nav">
+        <a class="landing-v2-brand" href="#top" aria-label="Focus Isle">
+          ${logo}<span><strong>${english ? "Focus Isle" : "专注岛"}</strong><small>${copy.brandTag}</small></span>
+        </a>
+        <nav aria-label="${english ? "Landing page" : "落地页导航"}">
+          <a href="#how">${copy.navHow}</a>
+          <a href="#why">${copy.navWhy}</a>
+          <a href="#pricing">${copy.navPricing}</a>
+        </nav>
+        <button class="landing-v2-nav-cta" data-action="enter-island">${copy.navCta}<span aria-hidden="true">↗</span></button>
+      </header>
 
-      <section class="landing-section problem-section" id="story" aria-labelledby="problem-title">
-        <div class="section-shell problem-grid">
-          <div class="section-heading">
-            <p class="landing-eyebrow">WHY FOCUS ISLE</p>
-            <h2 id="problem-title">你缺少的也许不是<br />另一个计时器。</h2>
-          </div>
-          <div class="problem-copy">
-            <p class="lead-copy">真正困难的，往往不是专注多久，而是如何开始。</p>
-            <p>在家工作或独自学习时，生活和任务之间没有清晰的边界。不是你不够自律，只是少了一个让身体和注意力都知道“现在要开始了”的地方。</p>
-            <p>专注岛想做的，就是把这段最难的切换，变成一次轻松的出发。</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="landing-section journey-section" aria-labelledby="journey-title">
-        <div class="section-shell">
-          <div class="center-heading">
-            <p class="landing-eyebrow">WHAT IT IS</p>
-            <h2 id="journey-title">一个不用开摄像头，<br />也不用和陌生人聊天的虚拟专注空间。</h2>
-            <p>从选择一个地方，到真正坐下来开始，只需要跟着感觉往前走。</p>
-          </div>
-          <div class="journey-track" aria-label="进入专注岛的四个步骤">
-            <figure class="journey-shot journey-shot-map">
-              <img src="${islandImage}" alt="专注岛地图，可选择不同的专注区域" loading="lazy" />
-              <figcaption><span>01</span><strong>选一个地方</strong><small>今天想去咖啡馆、图书馆，还是森林？</small></figcaption>
-            </figure>
-            <figure class="journey-shot journey-shot-room">
-              <img src="${scenes.cafe.image}" alt="四时咖啡馆房间内的座位与安静专注的岛民" loading="lazy" />
-              <figcaption><span>02</span><strong>走进一间房</strong><small>听听环境声，看看这里是不是今天需要的氛围。</small></figcaption>
-            </figure>
-            <figure class="journey-shot journey-shot-seat">
-              <img src="${ASSET_BASE}20261011-library-focus-room.png" alt="穹顶图书馆里的阅读座位" loading="lazy" />
-              <figcaption><span>03</span><strong>找个位置坐下</strong><small>看见有人也在认真做事，但不需要打招呼。</small></figcaption>
-            </figure>
-            <figure class="journey-shot journey-shot-focus">
-              <img src="${ASSET_BASE}20261012-cafe-window-focus-view.png" alt="咖啡馆临窗座位的沉浸式专注近景" loading="lazy" />
-              <figcaption><span>04</span><strong>开始专注</strong><small>画面安静下来，只留下计时、声音和正在做的事。</small></figcaption>
-            </figure>
-          </div>
-          <div class="section-action">
-            <button class="primary-button" data-action="enter-island">去岛上看看&nbsp; →</button>
-            <span>验证邮箱后，免费体验一次完整的 25 分钟专注</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="landing-section scenes-section" aria-labelledby="scenes-title">
-        <div class="section-shell">
-          <div class="section-heading scenes-heading">
-            <p class="landing-eyebrow">THREE PLACES, THREE MOODS</p>
-            <h2 id="scenes-title">今天的你，<br />适合哪一种地方？</h2>
-            <p>场景不是装饰。不同的光线、声音和空间感，会给开始这件事带来不同的阻力与节奏。</p>
-          </div>
-
-          <article class="scene-story scene-story-cafe">
-            <div class="scene-story-visual">
-              <img src="${scenes.cafe.image}" alt="四种光线氛围的四时咖啡馆" loading="lazy" />
-              <span class="scene-index">01 / CITY</span>
+      <main>
+        <section class="landing-v2-hero" aria-labelledby="welcome-title">
+          <div class="landing-v2-orb landing-v2-orb-a" aria-hidden="true"></div>
+          <div class="landing-v2-orb landing-v2-orb-b" aria-hidden="true"></div>
+          <div class="landing-v2-hero-copy">
+            <p class="landing-v2-eyebrow"><span></span>${copy.heroKicker}</p>
+            <h1 id="welcome-title">${lines(copy.heroTitle)}</h1>
+            <p class="landing-v2-lead">${copy.heroBody}</p>
+            <div class="landing-v2-actions">
+              <button class="landing-v2-primary" data-action="enter-island">${copy.heroCta}<span aria-hidden="true">→</span></button>
+              <a class="landing-v2-text-link" href="#how">${copy.heroSecondary}<span aria-hidden="true">↓</span></a>
             </div>
-            <div class="scene-story-copy">
-              <span class="scene-icon">${regionIcon("city")}</span>
-              <p class="landing-eyebrow">四时咖啡馆</p>
-              <h3>让生活的声音，<br />陪你轻轻开始。</h3>
-              <p>晴日、雨雾、黄昏和月夜会给开始带来不同的节奏。选一间今天最想待着的房间，让咖啡馆的日常声音陪你进入状态。</p>
-              <div class="sound-line"><span>环境声</span><strong>天气环境 · 咖啡馆底噪 · 偶尔杯碟声</strong></div>
+            <p class="landing-v2-note">${copy.heroNote}</p>
+          </div>
+
+          <div class="landing-v2-product" aria-label="${copy.cafe}">
+            <div class="landing-v2-product-frame">
+              <div class="landing-v2-product-bar"><i></i><i></i><i></i><span>focus-isle.app / café</span></div>
+              <img src="${scenes.cafe.image}" alt="${copy.cafe}" />
+              <div class="landing-v2-product-card">
+                <span>${copy.focusMode}</span>
+                <strong>25:00</strong>
+                <small>${copy.focusReady}</small>
+              </div>
+              <div class="landing-v2-open-pill"><span></span>${copy.openNow} · ${copy.cafe}</div>
             </div>
-          </article>
+            <p class="landing-v2-product-caption"><span>◌</span>${copy.focusStatus}</p>
+          </div>
+          <span class="landing-v2-version">${copy.beta}</span>
+        </section>
 
-          <article class="scene-story scene-story-library">
-            <div class="scene-story-visual">
-              <img src="${scenes.library.image}" alt="高窗与长桌构成的穹顶图书馆" loading="lazy" />
-              <span class="scene-index">02 / ACADEMY</span>
+        <section class="landing-v2-bridge" id="story" aria-labelledby="problem-title">
+          <div class="landing-v2-shell landing-v2-bridge-grid">
+            <div>
+              <p class="landing-v2-eyebrow">${copy.bridgeEyebrow}</p>
+              <h2 id="problem-title">${lines(copy.bridgeTitle)}</h2>
             </div>
-            <div class="scene-story-copy">
-              <span class="scene-icon">${regionIcon("academy")}</span>
-              <p class="landing-eyebrow">穹顶图书馆</p>
-              <h3>当你需要秩序，<br />就来一张安静的长桌。</h3>
-              <p>高窗把光铺在木桌上，翻页声很轻。明确、克制的空间感，适合阅读、备考、研究和那些需要慢慢做完的难题。</p>
-              <div class="sound-line"><span>环境声</span><strong>静谧室内 · 轻微翻页 · 壁炉声</strong></div>
+            <div class="landing-v2-bridge-copy">
+              <p>${copy.bridgeBody}</p>
+              <div class="landing-v2-threshold" aria-label="${copy.bridgeA}, ${copy.bridgeB}, ${copy.bridgeC}">
+                <span>01<small>${copy.bridgeA}</small></span><i>→</i>
+                <span>02<small>${copy.bridgeB}</small></span><i>→</i>
+                <span>03<small>${copy.bridgeC}</small></span>
+              </div>
             </div>
-          </article>
+          </div>
+        </section>
 
-          <article class="scene-story scene-story-forest">
-            <div class="scene-story-visual">
-              <img src="${scenes.forest.image}" alt="溪流、苔石与树木环绕的苔溪森林" loading="lazy" />
-              <span class="scene-index">03 / FOREST</span>
+        <section class="landing-v2-how" id="how" aria-labelledby="how-title">
+          <div class="landing-v2-shell">
+            <div class="landing-v2-section-head">
+              <div><p class="landing-v2-eyebrow">${copy.howEyebrow}</p><h2 id="how-title">${lines(copy.howTitle)}</h2></div>
+              <p>${copy.howBody}</p>
             </div>
-            <div class="scene-story-copy">
-              <span class="scene-icon">${regionIcon("forest")}</span>
-              <p class="landing-eyebrow">苔溪森林</p>
-              <h3>先让呼吸慢下来，<br />再让想法慢慢出现。</h3>
-              <p>溪流绕过苔石，风穿过树叶。自然、低压力的氛围，适合创作、思考、复盘和长时间的独立工作。</p>
-              <div class="sound-line"><span>环境声</span><strong>溪流 · 林间风 · 远处鸟鸣</strong></div>
+            <div class="landing-v2-steps">
+              <article>
+                <div class="landing-v2-step-visual"><img src="${islandImage}" alt="${copy.step1Title}" loading="lazy" /><span>01</span></div>
+                <h3>${copy.step1Title}</h3><p>${copy.step1Body}</p>
+              </article>
+              <article>
+                <div class="landing-v2-step-visual"><img src="${scenes.cafe.image}" alt="${copy.step2Title}" loading="lazy" /><span>02</span></div>
+                <h3>${copy.step2Title}</h3><p>${copy.step2Body}</p>
+              </article>
+              <article>
+                <div class="landing-v2-step-visual"><img src="${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.png" alt="${copy.step3Title}" loading="lazy" /><span>03</span></div>
+                <h3>${copy.step3Title}</h3><p>${copy.step3Body}</p>
+              </article>
             </div>
-          </article>
+            <div class="landing-v2-center-action"><button class="landing-v2-primary" data-action="enter-island">${copy.howCta}<span aria-hidden="true">→</span></button></div>
+          </div>
+        </section>
 
-          <p class="future-note">湖畔、海滨与雪山还在岛屿的远处。未来先去哪里，会听取岛民的真实感受。</p>
-        </div>
-      </section>
+        <section class="landing-v2-presence" id="why" aria-labelledby="presence-title">
+          <div class="landing-v2-shell">
+            <div class="landing-v2-presence-intro">
+              <p class="landing-v2-eyebrow">${copy.presenceEyebrow}</p>
+              <h2 id="presence-title">${lines(copy.presenceTitle)}</h2>
+              <p>${copy.presenceBody}</p>
+            </div>
+            <div class="landing-v2-principles">
+              <article><span>01</span><h3>${copy.noCamera}</h3><p>${copy.noCameraBody}</p></article>
+              <article><span>02</span><h3>${copy.noChat}</h3><p>${copy.noChatBody}</p></article>
+              <article><span>03</span><h3>${copy.noFeed}</h3><p>${copy.noFeedBody}</p></article>
+            </div>
+          </div>
+        </section>
 
-      <section class="landing-section philosophy-section" aria-labelledby="philosophy-title">
-        <div class="philosophy-glow" aria-hidden="true"></div>
-        <div class="section-shell philosophy-shell">
-          <div class="philosophy-heading">
-            <p class="landing-eyebrow">PRESENCE WITHOUT PRESSURE</p>
-            <h2 id="philosophy-title">有人陪伴，<br />互不打扰。</h2>
-            <p>我们想保留共同在场的安心感，同时拿走被看见、被回应和必须社交的压力。</p>
+        <section class="landing-v2-offer" id="pricing" aria-labelledby="pricing-title">
+          <div class="landing-v2-shell">
+            <div class="landing-v2-offer-head">
+              <p class="landing-v2-eyebrow">${copy.offerEyebrow}</p>
+              <h2 id="pricing-title">${lines(copy.offerTitle)}</h2>
+              <p>${copy.offerBody}</p>
+            </div>
+            <div class="landing-v2-price-grid">
+              <article class="landing-v2-price landing-v2-price-trial"><span>${copy.trial}</span><strong>${copy.trialPrice}</strong><p>${copy.trialLine}</p><button data-action="enter-island">${copy.navCta}<i>→</i></button></article>
+              <article class="landing-v2-price"><span>${copy.monthly}</span><strong>${copy.monthlyPrice}<small>/mo</small></strong><p>${copy.monthlyLine}</p></article>
+              <article class="landing-v2-price landing-v2-price-featured"><em>${copy.annualBadge}</em><span>${copy.annual}</span><strong>${copy.annualPrice}<small>/yr</small></strong><p>${copy.annualLine}</p></article>
+              <article class="landing-v2-price"><span>${copy.founder}</span><strong>${copy.founderPrice}</strong><p>${copy.founderLine}</p></article>
+            </div>
+            <p class="landing-v2-price-note">${copy.priceNote}</p>
           </div>
-          <div class="principle-list">
-            <article><span>01</span><div><h3>不打开摄像头</h3><p>不用整理自己，也不用承担持续被注视的压力。</p></div></article>
-            <article><span>02</span><div><h3>没有聊天与私信</h3><p>不需要认识任何人，也没有必须及时回应的信息。</p></div></article>
-            <article><span>03</span><div><h3>少一点设置</h3><p>先选地方、找位置坐下，再让注意力自然安静下来。</p></div></article>
-          </div>
-          <div class="design-flow" aria-label="专注岛的体验设计逻辑">
-            <div><span>进入仪式</span><strong>像进入游戏一样出发</strong></div>
-            <i aria-hidden="true">→</i>
-            <div><span>共同在场</span><strong>看见大家安静做事</strong></div>
-            <i aria-hidden="true">→</i>
-            <div><span>沉浸桌面</span><strong>界面主动退到身后</strong></div>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="landing-section value-section" aria-labelledby="value-title">
-        <div class="section-shell value-shell">
-          <div class="value-visual">
-            <img src="${ASSET_BASE}20261012-cafe-lounge-focus-view.png" alt="咖啡馆安静角落里的沉浸式专注桌面" loading="lazy" />
-            <p>“不需要努力变成另一个人。<br />只是换一个地方，重新开始。”</p>
+        <section class="landing-v2-final" aria-labelledby="final-cta-title">
+          <img src="${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.png" alt="" aria-hidden="true" loading="lazy" />
+          <div class="landing-v2-final-overlay"></div>
+          <div class="landing-v2-final-copy">
+            <p class="landing-v2-eyebrow">${copy.finalEyebrow}</p>
+            <h2 id="final-cta-title">${lines(copy.finalTitle)}</h2>
+            <p>${copy.finalBody}</p>
+            <button class="landing-v2-primary" data-action="enter-island">${copy.finalCta}<span aria-hidden="true">→</span></button>
           </div>
-          <div class="value-copy">
-            <p class="landing-eyebrow">WHAT WE HOPE YOU FEEL</p>
-            <h2 id="value-title">我们希望你在这里，<br />获得三件很轻的事。</h2>
-            <ol>
-              <li><span>01</span><div><strong>开始变得容易一点</strong><p>不用先把一切准备完美，先坐下，再做眼前的一小步。</p></div></li>
-              <li><span>02</span><div><strong>独处不再那么空</strong><p>你仍然拥有自己的空间，同时知道此刻有人也在认真生活。</p></div></li>
-              <li><span>03</span><div><strong>陪伴不成为打扰</strong><p>没有消息、表演或社交任务，注意力可以留给真正想完成的事。</p></div></li>
-            </ol>
-          </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      <section class="landing-section final-cta-section" aria-labelledby="final-cta-title">
-        <img src="${islandImage}" alt="" aria-hidden="true" loading="lazy" />
-        <div class="final-cta-overlay"></div>
-        <div class="final-cta-content">
-          <span class="free-badge">注册账号 · 免费体验一次 25 分钟专注</span>
-          <h2 id="final-cta-title">今天，去岛上<br />找个位置坐下。</h2>
-          <p>不需要准备好一整天。只要从下一段专注开始。</p>
-          <button class="primary-button" data-action="enter-island">注册并开始体验&nbsp; →</button>
-        </div>
-      </section>
-
-      <section class="feedback-section" aria-labelledby="feedback-heading">
-        <div class="section-shell feedback-shell">
-          <div>
-            <p class="landing-eyebrow">BUILD THE ISLAND WITH US</p>
-            <h2 id="feedback-heading">帮我们把这座岛建得更好。</h2>
-            <p>欢迎告诉我们：哪个场景让你更容易进入状态、哪一步还不够顺，以及你还想去怎样的空间。</p>
-          </div>
-          <div class="feedback-action">
-            ${feedbackAction}
-            <small>${FEEDBACK_FORM_URL ? "将在新标签页打开反馈表单" : "正式反馈表单正在准备，开放后会在这里出现"}</small>
-          </div>
-        </div>
-      </section>
-
-      <footer class="landing-footer">
-        <div class="section-shell">
-          ${brand()}
-          <p>一个有人陪伴、互不打扰的沉浸式专注空间。</p>
-          <p><a href="/privacy">隐私政策</a> · <a href="/terms">服务条款</a></p>
-          <button class="footer-enter" data-action="enter-island">进入专注岛&nbsp; →</button>
+      <footer class="landing-v2-footer">
+        <div class="landing-v2-shell">
+          <a class="landing-v2-brand" href="#top">${logo}<span><strong>${english ? "Focus Isle" : "专注岛"}</strong><small>${copy.brandTag}</small></span></a>
+          <p>${copy.footerLine}</p>
+          <div><a href="/privacy">${copy.privacy}</a><a href="/terms">${copy.terms}</a><button data-action="enter-island">${copy.navCta} →</button></div>
         </div>
       </footer>
     </div>`;
@@ -4454,14 +4548,14 @@ document.addEventListener("click", (event) => {
   if (action === "enter-island") {
     window.scrollTo({ top: 0, behavior: "auto" });
     getAccessStatus({ refresh: true }).then((access) => {
-      if (!access.authenticated || !access.emailVerified || !access.canEnterProduct) {
-        openAuthGate(access.paywallReason);
+      if (!access.authenticated || !access.canEnterProduct) {
+        openAuthGate(access.paywallReason, "enter-island");
         return;
       }
       state.view = "island";
       render();
       importLocalHistory();
-    }).catch(() => openAuthGate("access_service_unavailable"));
+    }).catch((error) => openAuthGate(error.message || "access_service_unavailable", "enter-island"));
   }
   if (action === "close-access-overlay") closeAccessOverlay();
   if (action === "toggle-auth-mode") {
@@ -4984,60 +5078,23 @@ document.addEventListener("submit", async (event) => {
     if (flow === "sign-up") {
       const email = String(values.get("email") || "").trim();
       const password = String(values.get("password") || "");
+      const confirmPassword = String(values.get("confirmPassword") || "");
+      if (password !== confirmPassword) throw new Error("password_mismatch");
       state.authEmail = email;
       const captchaToken = await turnstileToken();
-      const result = await api("/api/auth/sign-up", { method: "POST", body: JSON.stringify({ email, password, captchaToken }) });
-      state.authUpgradeFlow = result.flow === "anonymous_upgrade";
-      state.accessOverlay = "verify";
+      const result = await api("/api/auth/sign-up", { method: "POST", body: JSON.stringify({ email, password, confirmPassword, captchaToken }) });
+      await completeAuthenticatedFlow(result);
     } else if (flow === "sign-in") {
       const email = String(values.get("email") || "").trim();
       state.authEmail = email;
       const captchaToken = await turnstileToken();
       const result = await api("/api/auth/sign-in", { method: "POST", body: JSON.stringify({ email, password: String(values.get("password") || ""), captchaToken }) });
-      onlineUserId = result.userId;
-      state.isDeveloper = result.developer === true;
-      onlineIdentityPromise = null;
       const mergeToken = sessionStorage.getItem(STORAGE_KEYS.pendingMergeToken);
       if (mergeToken) {
         await api("/api/auth/merge/complete", { method: "POST", body: JSON.stringify({ mergeToken }) });
         sessionStorage.removeItem(STORAGE_KEYS.pendingMergeToken);
       }
-      await claimPendingLifetimeInvite();
-      state.accessStatus = null;
-      await getAccessStatus({ refresh: true });
-      await importLocalHistory();
-      closeAccessOverlay();
-      state.view = "island";
-      render();
-    } else if (flow === "verify") {
-      const result = await api("/api/auth/verify-email", { method: "POST", body: JSON.stringify({
-        email: state.authEmail, token: String(values.get("token") || ""),
-        flow: state.authUpgradeFlow ? "anonymous_upgrade" : "new_account",
-        displayName: identity.displayName, avatarSkin: identity.avatarSkin,
-      }) });
-      onlineUserId = result.userId;
-      onlineIdentityPromise = null;
-      if (state.authUpgradeFlow) state.accessOverlay = "set-password";
-      else {
-        await claimPendingLifetimeInvite();
-        state.accessStatus = null;
-        await getAccessStatus({ refresh: true });
-        await importLocalHistory();
-        closeAccessOverlay();
-        state.view = "island";
-        render();
-      }
-    } else if (flow === "set-password") {
-      await api("/api/auth/password/update", { method: "POST", body: JSON.stringify({ password: String(values.get("password") || "") }) });
-      state.authUpgradeFlow = false;
-      state.accessStatus = null;
-      onlineIdentityPromise = null;
-      await claimPendingLifetimeInvite();
-      await getAccessStatus({ refresh: true });
-      await importLocalHistory();
-      closeAccessOverlay();
-      state.view = "island";
-      render();
+      await completeAuthenticatedFlow(result);
     }
   } catch (error) {
     state.authError = error.message;

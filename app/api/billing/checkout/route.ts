@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return json({ error: "invalid_plan" }, { status: 400 });
   const auth = await authenticatedSupabase();
   if (!auth || auth.user.is_anonymous) return json({ error: "registration_required" }, { status: 401 });
-  if (!auth.user.email_confirmed_at || !auth.user.email) return json({ error: "email_verification_required" }, { status: 403 });
+  if (!auth.user.email) return json({ error: "account_email_required" }, { status: 403 });
 
   try {
     const stripe = stripeClient();

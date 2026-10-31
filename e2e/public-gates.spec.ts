@@ -35,6 +35,52 @@ test("an unauthenticated visitor is routed to the account gate", async ({ page }
   await expect(page.locator('[role="dialog"][aria-labelledby="auth-title"]')).toBeVisible();
   await expect(page.locator('[data-auth-form] input[name="email"]')).toBeVisible();
   await expect(page.locator('[data-auth-form] input[name="password"]')).toBeVisible();
+  await expect(page.locator('[data-auth-form] input[name="confirmPassword"]')).toBeVisible();
+  await expect(page.locator('[data-auth-form="verify"]')).toHaveCount(0);
+});
+
+test("successful sign-up skips email verification and resumes the first focus action", async ({ page }) => {
+  let registered = false;
+  await page.route("**/api/access/status", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authenticated: registered,
+        emailVerified: registered,
+        accountType: registered ? "permanent" : undefined,
+        trialStatus: registered ? "available" : "unavailable",
+        entitlementType: "none",
+        subscriptionStatus: null,
+        canEnterProduct: registered,
+        canStartFocus: registered,
+        offlineGraceUntil: null,
+        paywallReason: registered ? null : "authentication_required",
+        developer: false,
+      }),
+    });
+  });
+  await page.route("**/api/auth/sign-up", async (route) => {
+    const payload = route.request().postDataJSON() as { password: string; confirmPassword: string };
+    expect(payload.password).toBe(payload.confirmPassword);
+    registered = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, userId: "test-user", email: "tester@example.com", developer: false }),
+    });
+  });
+
+  await page.goto("/");
+  await page.locator('[data-action="enter-island"]').first().click();
+  const form = page.locator('[data-auth-form="sign-up"]');
+  await form.locator('input[name="email"]').fill("tester@example.com");
+  await form.locator('input[name="password"]').fill("ValidPass1!");
+  await form.locator('input[name="confirmPassword"]').fill("ValidPass1!");
+  await form.locator('button[type="submit"]').click();
+
+  await expect(page.locator('[data-scene="cafe"]')).toBeVisible();
+  await expect(page.locator('[role="dialog"][aria-labelledby="auth-title"]')).toHaveCount(0);
 });
 
 test("privacy and terms pages remain publicly reachable", async ({ page }) => {

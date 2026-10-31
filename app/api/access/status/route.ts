@@ -55,7 +55,7 @@ export async function GET() {
 
   const cookieStore = await cookies();
   const snapshot = verifyAccessSnapshot(cookieStore.get(ACCESS_COOKIE_NAME)?.value, auth.user.id);
-  if (snapshot && !auth.user.is_anonymous && auth.user.email_confirmed_at) {
+  if (snapshot && !auth.user.is_anonymous) {
     return json({
       authenticated: true, emailVerified: true, accountType: "permanent", trialStatus: "unavailable",
       entitlementType: "offline_grace", subscriptionStatus: "grace", canEnterProduct: true,

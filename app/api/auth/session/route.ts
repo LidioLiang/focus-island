@@ -9,7 +9,7 @@ export async function GET() {
     anonymous: auth.user.is_anonymous === true,
     accountType: auth.user.is_anonymous ? "anonymous" : "permanent",
     email: auth.user.email || null,
-    emailVerified: Boolean(auth.user.email_confirmed_at),
+    emailVerified: auth.user.is_anonymous !== true,
     developer: isDeveloper(auth.user),
   } : { authenticated: false, emailVerified: false }, {
     headers: { "Cache-Control": "no-store" },

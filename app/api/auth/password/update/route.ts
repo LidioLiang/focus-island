@@ -14,11 +14,11 @@ export async function POST(request: Request) {
   if (!parsed.success) return json({ error: "invalid_password", fields: parsed.error.flatten().fieldErrors }, { status: 400 });
   const supabase = await createServerSupabaseClient();
   const { data: current } = await supabase.auth.getUser();
-  if (!current.user || current.user.is_anonymous || !current.user.email_confirmed_at) {
-    return json({ error: "verified_permanent_account_required" }, { status: 403 });
+  if (!current.user || current.user.is_anonymous) {
+    return json({ error: "permanent_account_required" }, { status: 403 });
   }
   if (parsed.data.currentPassword) {
-    if (!current.user.email) return json({ error: "verified_permanent_account_required" }, { status: 403 });
+    if (!current.user.email) return json({ error: "permanent_account_required" }, { status: 403 });
     const { error: reauthError } = await supabase.auth.signInWithPassword({
       email: current.user.email,
       password: parsed.data.currentPassword,

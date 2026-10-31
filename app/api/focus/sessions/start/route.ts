@@ -14,7 +14,7 @@ const schema = z.object({
 
 function statusFor(message: string) {
   if (message.includes("payment_required") || message.includes("trial_requires_25")) return 402;
-  if (message.includes("registration_required") || message.includes("email_verification_required")) return 403;
+  if (message.includes("registration_required")) return 403;
   if (message.includes("active_session_exists")) return 409;
   return 400;
 }
@@ -33,9 +33,9 @@ export async function POST(request: Request) {
     p_timer_mode: parsed.data.timerMode,
   });
   if (error) {
-    const known = ["payment_required", "trial_requires_25", "registration_required", "email_verification_required", "active_session_exists"];
+    const known = ["payment_required", "trial_requires_25", "registration_required", "active_session_exists"];
     const code = known.find((item) => error.message.includes(item)) || "focus_start_failed";
-    if (code === "focus_start_failed" && !auth.user.is_anonymous && auth.user.email_confirmed_at) {
+    if (code === "focus_start_failed" && !auth.user.is_anonymous) {
       const cookieStore = await cookies();
       const snapshot = verifyAccessSnapshot(cookieStore.get(ACCESS_COOKIE_NAME)?.value, auth.user.id);
       if (snapshot) {

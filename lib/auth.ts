@@ -11,7 +11,7 @@ export function authError(error: { message?: string; code?: string } | null, fal
   const message = error?.message?.toLowerCase() || "";
   if (message.includes("already registered") || message.includes("already been registered")) return "email_already_registered";
   if (message.includes("invalid login")) return "invalid_credentials";
-  if (message.includes("email not confirmed")) return "email_verification_required";
+  if (message.includes("email not confirmed")) return "registration_session_unavailable";
   if (message.includes("rate limit")) return "rate_limited";
   if (message.includes("expired")) return "verification_expired";
   return error?.code || fallback;
