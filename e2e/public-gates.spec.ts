@@ -22,7 +22,7 @@ test("landing page loads without requesting retired Godot runtime assets", async
   });
 
   await page.goto("/");
-  await expect(page).toHaveTitle(/Focus Isle v1\.1/);
+  await expect(page).toHaveTitle(/Focus Isle · Find Your Quiet/);
   await expect(page.locator("#welcome-title")).toBeVisible();
   await expect(page.locator('[data-action="enter-island"]').first()).toBeVisible();
   expect(retiredRuntimeRequests).toEqual([]);

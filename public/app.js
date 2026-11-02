@@ -1952,6 +1952,8 @@ function topbar({ back = null, right = true, showPresence = true } = {}) {
 }
 
 function render() {
+  landingExperienceCleanup?.();
+  landingExperienceCleanup = null;
   stopTickerIfNeeded();
   const isLanding = state.view === "welcome";
   document.body.classList.toggle("landing-mode", isLanding);
@@ -2365,7 +2367,7 @@ async function executeProfileDataAction() {
   }
 }
 
-function renderWelcome() {
+function renderWelcomeLegacy() {
   const english = window.FocusI18n?.getLanguage() === "en"
     || (!window.FocusI18n && !/^zh\b/i.test(window.navigator.language || ""));
   const copy = english ? {
@@ -2653,6 +2655,274 @@ function renderWelcome() {
       </footer>
     </div>`;
 }
+
+
+const LANDING_COPY = (() => {
+  const en = {
+    label:"English",navHow:"How it works",navWhy:"Why it works",navPricing:"Pricing",signIn:"Sign in",startFree:"Start free",heroKicker:"IMMERSIVE FOCUS SPACE",heroTitle:"Find Your Quiet.",heroLead:"Step onto the island and begin with 25 calm minutes.",heroCta:"Start 25 Minutes Free",heroMeta:"No camera · No chat · Your first session is free",explore:"SCROLL TO EXPLORE",cafe:"Café",academy:"Academy",lakeside:"Lakeside",seaside:"Seaside",snow:"Snowy Mountain",openNow:"OPEN NOW",comingSoon:"COMING SOON",whyKicker:"WHY FOCUS ISLE",whyTitle:"The hardest part isn't focus. It's starting.",whyBody:"Focus Isle turns the moment before work into a place you can enter—quiet, visual, and free from social pressure.",card1Title:"One island",card1Body:"A clear threshold between everyday noise and the work ahead.",card2Title:"Five places",card2Body:"Café, academy, lakeside, seaside, and snowy mountain—each with a different rhythm.",card3Title:"25 minutes",card3Body:"One calm first session. Enough time to begin without carrying the whole day.",howKicker:"HOW IT WORKS",howTitle:"Three gentle shifts into focus.",step1Title:"Choose a place",step1Body:"Start with the atmosphere you need today. The café is open now; more destinations are on the way.",step2Title:"Take a quiet seat",step2Body:"Enter a small room, choose an open seat, and settle in without cameras, chat, or introductions.",step3Title:"Let everything else disappear",step3Body:"Begin 25 minutes and keep only the timer, the ambience, and the work in front of you.",pricingKicker:"START FREE",pricingTitle:"Try one real session. Stay if it helps.",pricingBody:"Your first 25-minute focus session is free. Choose a plan only after you have felt the experience.",first:"First session",firstBody:"One complete 25-minute focus.",monthly:"Monthly",monthlyBody:"Flexible access to the core experience.",annual:"Annual",annualBody:"A quieter commitment for the year.",lifetime:"Founder lifetime",lifetimeBody:"One payment while founder access remains available.",finalTitle:"Your next 25 minutes can start here.",finalBody:"You do not need the whole day figured out. Just choose a place and begin.",finalCta:"Start My Free Session",privacy:"Privacy",terms:"Terms"
+  };
+  const languages = {
+    en,
+    "zh-CN": {...en,label:"简体中文",navHow:"如何使用",navWhy:"为什么有效",navPricing:"价格",signIn:"登录",startFree:"免费开始",heroKicker:"沉浸式专注空间",heroTitle:"找到你的安静。",heroLead:"登上专注岛，从平静的 25 分钟开始。",heroCta:"免费开始 25 分钟",heroMeta:"无需摄像头 · 没有聊天 · 第一次专注免费",explore:"向下探索",cafe:"咖啡馆",academy:"学院",lakeside:"湖畔",seaside:"海滨",snow:"雪山",openNow:"当前开放",comingSoon:"即将开放",whyKicker:"为什么选择专注岛",whyTitle:"最难的不是专注，而是开始。",whyBody:"专注岛把开始工作前的那一刻，变成一个可以进入的空间：安静、可感知，也没有社交压力。",card1Title:"一座岛",card1Body:"在日常杂音与眼前任务之间，建立一个清楚的入口。",card2Title:"五个地方",card2Body:"咖啡馆、学院、湖畔、海滨与雪山，每个地方都有不同节奏。",card3Title:"25 分钟",card3Body:"一次平静的首次专注，不需要背负一整天。",howKicker:"如何使用",howTitle:"三个温和的切换，进入专注。",step1Title:"选择一个地方",step1Body:"从今天需要的氛围开始。咖啡馆当前开放，更多地点正在准备。",step2Title:"找个安静座位",step2Body:"进入一间小房间，选一个空位，不开摄像头，也不需要聊天。",step3Title:"让其他东西退到身后",step3Body:"开始 25 分钟，只留下计时、环境声和眼前的事情。",pricingKicker:"免费开始",pricingTitle:"先完成一次真实专注，再决定是否留下。",pricingBody:"第一次 25 分钟专注免费。先体验，再选择适合的方案。",first:"首次体验",firstBody:"一次完整的 25 分钟专注。",monthly:"月付",monthlyBody:"灵活使用核心专注体验。",annual:"年付",annualBody:"用更低成本保留一整年。",lifetime:"创始终身版",lifetimeBody:"创始权益开放期间一次性购买。",finalTitle:"接下来的 25 分钟，可以从这里开始。",finalBody:"不必先想好一整天。选一个地方，然后开始。",finalCta:"开始我的免费专注",privacy:"隐私政策",terms:"服务条款"},
+    "zh-TW": {...en,label:"繁體中文",navHow:"如何使用",navWhy:"為什麼有效",navPricing:"價格",signIn:"登入",startFree:"免費開始",heroKicker:"沉浸式專注空間",heroTitle:"找到你的安靜。",heroLead:"登上專注島，從平靜的 25 分鐘開始。",heroCta:"免費開始 25 分鐘",heroMeta:"無需攝影機 · 沒有聊天 · 第一次專注免費",explore:"向下探索",cafe:"咖啡館",academy:"學院",lakeside:"湖畔",seaside:"海濱",snow:"雪山",openNow:"目前開放",comingSoon:"即將開放",whyKicker:"為什麼選擇專注島",whyTitle:"最難的不是專注，而是開始。",whyBody:"專注島把開始工作前的那一刻，變成一個可以進入的安靜空間。",howKicker:"如何使用",howTitle:"三個溫和的切換，進入專注。",pricingKicker:"免費開始",pricingTitle:"先完成一次真實專注，再決定是否留下。",finalTitle:"接下來的 25 分鐘，可以從這裡開始。",finalCta:"開始我的免費專注",privacy:"隱私政策",terms:"服務條款"},
+    ja: {...en,label:"日本語",navHow:"使い方",navWhy:"選ばれる理由",navPricing:"料金",signIn:"ログイン",startFree:"無料で始める",heroKicker:"没入型フォーカス空間",heroTitle:"自分の静けさを。",heroLead:"集中島に渡り、穏やかな25分から始めましょう。",heroCta:"25分間、無料で始める",heroMeta:"カメラ不要 · チャットなし · 初回セッション無料",explore:"下へスクロール",cafe:"カフェ",academy:"アカデミー",lakeside:"湖畔",seaside:"海辺",snow:"雪山",openNow:"営業中",comingSoon:"近日公開",whyKicker:"FOCUS ISLE の理由",whyTitle:"難しいのは集中ではなく、始めること。",whyBody:"仕事を始める直前の時間を、静かで視覚的な場所へ変えます。",howKicker:"使い方",howTitle:"集中へ向かう、三つの穏やかな切り替え。",pricingKicker:"無料で始める",pricingTitle:"まず一度、実際に集中してみましょう。",finalTitle:"次の25分は、ここから始められます。",finalCta:"無料セッションを始める"},
+    ko: {...en,label:"한국어",navHow:"이용 방법",navWhy:"효과가 있는 이유",navPricing:"요금",signIn:"로그인",startFree:"무료 시작",heroKicker:"몰입형 집중 공간",heroTitle:"나만의 고요를 찾으세요.",heroLead:"집중의 섬에 올라 평온한 25분으로 시작하세요.",heroCta:"25분 무료로 시작",heroMeta:"카메라 없음 · 채팅 없음 · 첫 집중 무료",explore:"아래로 탐색",cafe:"카페",academy:"아카데미",lakeside:"호숫가",seaside:"해변",snow:"설산",openNow:"현재 운영 중",comingSoon:"곧 공개",whyKicker:"FOCUS ISLE을 선택하는 이유",whyTitle:"어려운 건 집중이 아니라 시작입니다.",whyBody:"일을 시작하기 전의 순간을 조용하고 시각적인 공간으로 바꿉니다.",howKicker:"이용 방법",howTitle:"집중으로 이어지는 세 번의 부드러운 전환.",pricingKicker:"무료 시작",pricingTitle:"한 번 직접 집중해 보고 결정하세요.",finalTitle:"다음 25분은 여기서 시작할 수 있습니다.",finalCta:"무료 집중 시작"},
+    es: {...en,label:"Español",navHow:"Cómo funciona",navWhy:"Por qué funciona",navPricing:"Precios",signIn:"Entrar",startFree:"Empezar gratis",heroKicker:"ESPACIO DE CONCENTRACIÓN INMERSIVO",heroTitle:"Encuentra tu calma.",heroLead:"Llega a la isla y comienza con 25 minutos de calma.",heroCta:"Empieza 25 minutos gratis",heroMeta:"Sin cámara · Sin chat · Primera sesión gratis",explore:"DESLIZA PARA EXPLORAR",cafe:"Cafetería",academy:"Academia",lakeside:"Lago",seaside:"Costa",snow:"Montaña nevada",openNow:"ABIERTO",comingSoon:"PRÓXIMAMENTE",whyKicker:"POR QUÉ FOCUS ISLE",whyTitle:"Lo difícil no es concentrarse. Es empezar.",whyBody:"Focus Isle convierte el momento antes de trabajar en un lugar tranquilo al que puedes entrar.",howKicker:"CÓMO FUNCIONA",howTitle:"Tres cambios suaves hacia la concentración.",pricingKicker:"EMPIEZA GRATIS",pricingTitle:"Prueba una sesión real. Quédate si te ayuda.",finalTitle:"Tus próximos 25 minutos pueden empezar aquí.",finalCta:"Empezar mi sesión gratis"},
+    fr: {...en,label:"Français",navHow:"Comment ça marche",navWhy:"Pourquoi ça marche",navPricing:"Tarifs",signIn:"Connexion",startFree:"Commencer gratuitement",heroKicker:"ESPACE DE CONCENTRATION IMMERSIF",heroTitle:"Trouvez votre calme.",heroLead:"Rejoignez l’île et commencez par 25 minutes de calme.",heroCta:"Commencer 25 min gratuitement",heroMeta:"Sans caméra · Sans chat · Première session offerte",explore:"DÉFILER POUR EXPLORER",cafe:"Café",academy:"Académie",lakeside:"Bord du lac",seaside:"Bord de mer",snow:"Montagne enneigée",openNow:"OUVERT",comingSoon:"BIENTÔT",whyKicker:"POURQUOI FOCUS ISLE",whyTitle:"Le plus difficile n’est pas de se concentrer. C’est de commencer.",whyBody:"Focus Isle transforme l’instant avant le travail en un lieu calme où entrer.",howKicker:"COMMENT ÇA MARCHE",howTitle:"Trois transitions douces vers la concentration.",pricingKicker:"COMMENCER GRATUITEMENT",pricingTitle:"Essayez une vraie session. Restez si elle vous aide.",finalTitle:"Vos prochaines 25 minutes peuvent commencer ici.",finalCta:"Commencer ma session gratuite"},
+    de: {...en,label:"Deutsch",navHow:"So funktioniert es",navWhy:"Warum es wirkt",navPricing:"Preise",signIn:"Anmelden",startFree:"Kostenlos starten",heroKicker:"IMMERSIVER FOKUSRAUM",heroTitle:"Finde deine Ruhe.",heroLead:"Betritt die Insel und beginne mit 25 ruhigen Minuten.",heroCta:"25 Minuten kostenlos starten",heroMeta:"Keine Kamera · Kein Chat · Erste Sitzung kostenlos",explore:"NACH UNTEN ENTDECKEN",cafe:"Café",academy:"Akademie",lakeside:"Seeufer",seaside:"Küste",snow:"Schneeberg",openNow:"GEÖFFNET",comingSoon:"BALD",whyKicker:"WARUM FOCUS ISLE",whyTitle:"Das Schwerste ist nicht der Fokus. Es ist der Anfang.",whyBody:"Focus Isle macht aus dem Moment vor der Arbeit einen ruhigen Ort, den du betreten kannst.",howKicker:"SO FUNKTIONIERT ES",howTitle:"Drei sanfte Schritte in den Fokus.",pricingKicker:"KOSTENLOS STARTEN",pricingTitle:"Teste eine echte Sitzung. Bleib, wenn sie hilft.",finalTitle:"Deine nächsten 25 Minuten können hier beginnen.",finalCta:"Kostenlose Sitzung starten"},
+    pt: {...en,label:"Português",navHow:"Como funciona",navWhy:"Por que funciona",navPricing:"Preços",signIn:"Entrar",startFree:"Começar grátis",heroKicker:"ESPAÇO DE FOCO IMERSIVO",heroTitle:"Encontre sua calma.",heroLead:"Entre na ilha e comece com 25 minutos de calma.",heroCta:"Começar 25 minutos grátis",heroMeta:"Sem câmera · Sem chat · Primeira sessão grátis",explore:"ROLE PARA EXPLORAR",cafe:"Café",academy:"Academia",lakeside:"Lago",seaside:"Litoral",snow:"Montanha nevada",openNow:"ABERTO",comingSoon:"EM BREVE",whyKicker:"POR QUE FOCUS ISLE",whyTitle:"O mais difícil não é focar. É começar.",whyBody:"Focus Isle transforma o momento antes do trabalho em um lugar calmo para entrar.",howKicker:"COMO FUNCIONA",howTitle:"Três transições suaves para o foco.",pricingKicker:"COMEÇAR GRÁTIS",pricingTitle:"Experimente uma sessão real. Fique se ajudar.",finalTitle:"Seus próximos 25 minutos podem começar aqui.",finalCta:"Começar minha sessão grátis"}
+  };
+  return languages;
+})();
+
+const LANDING_FINAL_TEMPLATE = `
+<header class="site-nav" data-nav>
+  <a class="brand" href="#top" aria-label="Focus Isle">
+    <svg viewBox="0 0 128 128" fill="none" aria-hidden="true">
+      <circle cx="64" cy="64" r="50" stroke="currentColor" stroke-width="6"/>
+      <circle cx="64" cy="37" r="7" fill="#F3C978"/>
+      <path d="M64 49 46 76h36L64 49Z" fill="currentColor"/>
+      <path d="M42 64c5 10 12 15 22 15s17-5 22-15" stroke="#173D34" stroke-width="4.5" stroke-linecap="round"/>
+      <path d="M64 78c-13 0-24 5-34 15 13 4 24 2 34-4 10 6 21 8 34 4-10-10-21-15-34-15Z" fill="currentColor"/>
+      <path d="M35 101c10-3 19-3 29 0s19 3 29 0" stroke="#F3C978" stroke-width="4" stroke-linecap="round"/>
+    </svg>
+    <span>Focus Isle</span>
+  </a>
+  <nav class="nav-links" aria-label="Landing page navigation">
+    <a href="#how" data-i18n="navHow">How it works</a>
+    <a href="#why" data-i18n="navWhy">Why it works</a>
+    <a href="#pricing" data-i18n="navPricing">Pricing</a>
+  </nav>
+  <div class="nav-actions">
+    <div class="language" data-language>
+      <button class="language-toggle" type="button" aria-expanded="false" aria-haspopup="menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 4 6 4 9s-1 6-4 9c-3-3-4-6-4-9s1-6 4-9Z"/></svg>
+        <span data-language-label>English</span><span>⌄</span>
+      </button>
+      <ul class="language-menu" role="menu">
+        <li><button type="button" role="menuitem" data-lang="en"><span>EN</span><span>English</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="zh-CN"><span>CN</span><span>简体中文</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="zh-TW"><span>TW</span><span>繁體中文</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="ja"><span>JP</span><span>日本語</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="ko"><span>KR</span><span>한국어</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="es"><span>ES</span><span>Español</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="fr"><span>FR</span><span>Français</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="de"><span>DE</span><span>Deutsch</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="pt"><span>PT</span><span>Português</span><span>✓</span></button></li>
+      </ul>
+    </div>
+    <button type="button" class="sign-in" data-action="open-sign-in" data-i18n="signIn">Sign in</button>
+    <button type="button" class="nav-cta" data-action="enter-island" data-i18n="startFree">Start free</button>
+  </div>
+</header>
+
+<main>
+  <section class="hero" id="top">
+    <div class="hero-backdrop" aria-hidden="true"></div>
+    <div class="island-stage">
+      <img src="/assets/20261012-focus-island-map-detailed.png" alt="Focus Isle with a café village, academy, lake, seaside and snowy mountain" />
+      <button type="button" class="scene-marker marker-cafe" data-action="enter-island"><i>●</i><span data-i18n="cafe">Café</span><small data-i18n="openNow">OPEN NOW</small></button>
+      <button type="button" class="scene-marker marker-academy" data-action="locked"><i>●</i><span data-i18n="academy">Academy</span><small data-i18n="comingSoon">COMING SOON</small></button>
+      <button type="button" class="scene-marker marker-lake" data-action="locked"><i>●</i><span data-i18n="lakeside">Lakeside</span><small data-i18n="comingSoon">COMING SOON</small></button>
+      <button type="button" class="scene-marker marker-seaside" data-action="locked"><i>●</i><span data-i18n="seaside">Seaside</span><small data-i18n="comingSoon">COMING SOON</small></button>
+      <button type="button" class="scene-marker marker-snow" data-action="locked"><i>●</i><span data-i18n="snow">Snowy Mountain</span><small data-i18n="comingSoon">COMING SOON</small></button>
+    </div>
+    <div class="hero-shade" aria-hidden="true"></div>
+    <div class="hero-copy" data-hero-copy>
+      <p class="eyebrow" data-i18n="heroKicker">IMMERSIVE FOCUS SPACE</p>
+      <h1 id="welcome-title" data-i18n="heroTitle">Find Your Quiet.</h1>
+      <p class="hero-lead" data-i18n="heroLead">Step onto the island and begin with 25 calm minutes.</p>
+      <button type="button" class="primary" data-action="enter-island"><span data-i18n="heroCta">Start 25 Minutes Free</span><span aria-hidden="true">→</span></button>
+      <p class="hero-meta" data-i18n="heroMeta">No camera · No chat · Your first session is free</p>
+    </div>
+    <a class="scroll-cue" href="#why"><span data-i18n="explore">SCROLL TO EXPLORE</span></a>
+  </section>
+
+  <section class="why" id="why">
+    <div class="section-shell">
+      <div class="why-intro">
+        <p class="section-kicker" data-i18n="whyKicker">WHY FOCUS ISLE</p>
+        <h2 class="word-reveal" data-word-reveal data-i18n="whyTitle">The hardest part isn't focus. It's starting.</h2>
+        <p data-i18n="whyBody">Focus Isle turns the moment before work into a place you can enter—quiet, visual, and free from social pressure.</p>
+      </div>
+      <div class="truth-grid">
+        <article class="truth-card reveal"><span>01</span><strong data-i18n="card1Title">One island</strong><p data-i18n="card1Body">A clear threshold between everyday noise and the work ahead.</p></article>
+        <article class="truth-card reveal"><span>02</span><strong data-i18n="card2Title">Five places</strong><p data-i18n="card2Body">Café, academy, lakeside, seaside, and snowy mountain—each with a different rhythm.</p></article>
+        <article class="truth-card reveal"><span>03</span><strong data-i18n="card3Title">25 minutes</strong><p data-i18n="card3Body">One calm first session. Enough time to begin without carrying the whole day.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="how" id="how">
+    <div class="section-shell">
+      <p class="section-kicker" data-i18n="howKicker">HOW IT WORKS</p>
+      <h2 class="word-reveal" data-word-reveal data-dark-words data-i18n="howTitle">Three gentle shifts into focus.</h2>
+      <div class="feature-list">
+        <article class="feature-row reveal"><div class="feature-visual"><img src="/assets/20261012-focus-island-map-detailed.png" alt="Focus Isle map" loading="lazy" /></div><div class="feature-copy"><span>01</span><h3 data-i18n="step1Title">Choose a place</h3><p data-i18n="step1Body">Start with the atmosphere you need today. The café is open now; more destinations are on the way.</p></div></article>
+        <article class="feature-row reveal"><div class="feature-visual"><img src="/assets/20261028-cafe-room-static-seat-master.png" alt="Warm six-seat café" loading="lazy" /></div><div class="feature-copy"><span>02</span><h3 data-i18n="step2Title">Take a quiet seat</h3><p data-i18n="step2Body">Enter a small room, choose an open seat, and settle in without cameras, chat, or introductions.</p></div></article>
+        <article class="feature-row reveal"><div class="feature-visual"><img src="/assets/20261028-cafe-rain-clearing-focus-view.png" alt="Immersive café focus view" loading="lazy" /></div><div class="feature-copy"><span>03</span><h3 data-i18n="step3Title">Let everything else disappear</h3><p data-i18n="step3Body">Begin 25 minutes and keep only the timer, the ambience, and the work in front of you.</p></div></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="pricing" id="pricing">
+    <div class="section-shell">
+      <div class="pricing-head">
+        <p class="section-kicker" data-i18n="pricingKicker">START FREE</p>
+        <h2 class="word-reveal" data-word-reveal data-i18n="pricingTitle">Try one real session. Stay if it helps.</h2>
+        <p data-i18n="pricingBody">Your first 25-minute focus session is free. Choose a plan only after you have felt the experience.</p>
+      </div>
+      <div class="price-grid">
+        <button type="button" class="price-card reveal" data-action="enter-island"><span data-i18n="first">First session</span><strong>$0</strong><p data-i18n="firstBody">One complete 25-minute focus.</p></button>
+        <button type="button" class="price-card reveal" data-billing-plan="plus_monthly"><span data-i18n="monthly">Monthly</span><strong>$4.99</strong><p data-i18n="monthlyBody">Flexible access to the core experience.</p></button>
+        <button type="button" class="price-card is-featured reveal" data-billing-plan="plus_annual"><span data-i18n="annual">Annual</span><strong>$19.99</strong><p data-i18n="annualBody">A quieter commitment for the year.</p></button>
+        <button type="button" class="price-card reveal" data-billing-plan="founder_lifetime"><span data-i18n="lifetime">Founder lifetime</span><strong>$39.99</strong><p data-i18n="lifetimeBody">One payment while founder access remains available.</p></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="final-cta">
+    <img src="/assets/20261028-cafe-rain-clearing-focus-view.png" alt="" aria-hidden="true" loading="lazy" />
+    <div class="final-copy reveal"><h2 data-i18n="finalTitle">Your next 25 minutes can start here.</h2><p data-i18n="finalBody">You do not need the whole day figured out. Just choose a place and begin.</p><button type="button" class="primary" data-action="enter-island"><span data-i18n="finalCta">Start My Free Session</span><span aria-hidden="true">→</span></button></div>
+  </section>
+</main>
+
+<footer class="footer"><div class="section-shell"><a class="brand" href="#top">Focus Isle</a><div class="footer-links"><a href="/privacy" data-i18n="privacy">Privacy</a><a href="/terms" data-i18n="terms">Terms</a></div></div></footer>
+<p class="sr-only" aria-live="polite" data-live></p>
+`;
+
+let landingExperienceCleanup = null;
+
+function currentLandingLanguage() {
+  const saved = localStorage.getItem("focusIsleLandingLanguage");
+  return LANDING_COPY[saved] ? saved : "en";
+}
+
+function prepareLandingWords(root, updateScroll) {
+  root.querySelectorAll("[data-word-reveal]").forEach((heading) => {
+    const text = heading.textContent.trim();
+    heading.innerHTML = text.split(/\s+/).map((word) => `<span>${escapeHtml(word)}</span>`).join(" ");
+  });
+  updateScroll();
+}
+
+function applyLandingLanguage(code, { announce = false, updateScroll = () => {} } = {}) {
+  const root = document.querySelector(".landing-final");
+  if (!root) return;
+  const language = LANDING_COPY[code] ? code : "en";
+  const copy = LANDING_COPY[language];
+  root.querySelectorAll("[data-i18n]").forEach((node) => {
+    const value = copy[node.dataset.i18n];
+    if (value) node.textContent = value;
+  });
+  const label = root.querySelector("[data-language-label]");
+  if (label) label.textContent = copy.label;
+  root.querySelectorAll("[data-lang]").forEach((button) => {
+    button.setAttribute("aria-current", String(button.dataset.lang === language));
+  });
+  localStorage.setItem("focusIsleLandingLanguage", language);
+  const productLanguage = language === "zh-CN" ? "zh-CN" : "en";
+  if (preferences.language !== productLanguage) {
+    preferences.language = productLanguage;
+    savePreferences();
+    window.FocusI18n?.setLanguage(productLanguage);
+  }
+  document.documentElement.lang = language;
+  document.title = language === "zh-CN" ? "专注岛 · 找到你的安静" : "Focus Isle · Find Your Quiet";
+  const description = document.querySelector('meta[name="description"]');
+  if (description) description.content = copy.heroLead;
+  if (announce) {
+    const live = root.querySelector("[data-live]");
+    if (live) live.textContent = copy.label;
+  }
+  root.querySelector("[data-language]")?.classList.remove("is-open");
+  root.querySelector(".language-toggle")?.setAttribute("aria-expanded", "false");
+  prepareLandingWords(root, updateScroll);
+}
+
+function initLandingExperience() {
+  const root = document.querySelector(".landing-final");
+  if (!root) return;
+  const nav = root.querySelector("[data-nav]");
+  const languageRoot = root.querySelector("[data-language]");
+  const toggle = root.querySelector(".language-toggle");
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let observer = null;
+  let ticking = false;
+
+  const clampValue = (value, min, max) => Math.min(max, Math.max(min, value));
+  const updateScroll = () => {
+    ticking = false;
+    const y = scrollY;
+    nav?.classList.toggle("is-scrolled", y > 36);
+    root.style.setProperty("--hero-progress", reduceMotion ? "0" : String(clampValue(y / (innerHeight * 0.65), 0, 1)));
+    root.querySelectorAll("[data-word-reveal]").forEach((heading) => {
+      const rect = heading.getBoundingClientRect();
+      const progress = reduceMotion ? 1 : clampValue((innerHeight * 0.88 - rect.top) / (innerHeight * 0.62), 0, 1);
+      const words = [...heading.querySelectorAll("span")];
+      words.forEach((word, index) => {
+        const start = index / Math.max(words.length, 1) * 0.72;
+        const local = clampValue((progress - start) / 0.24, 0, 1);
+        word.style.color = heading.hasAttribute("data-dark-words")
+          ? `rgba(23,61,52,${0.18 + local * 0.82})`
+          : `rgba(255,255,255,${0.2 + local * 0.8})`;
+      });
+    });
+  };
+  const onScroll = () => {
+    if (!ticking) {
+      ticking = true;
+      requestAnimationFrame(updateScroll);
+    }
+  };
+  const setMenu = (open) => {
+    languageRoot?.classList.toggle("is-open", open);
+    toggle?.setAttribute("aria-expanded", String(open));
+  };
+  const onToggle = () => setMenu(!languageRoot?.classList.contains("is-open"));
+  const onLanguageClick = (event) => {
+    const button = event.currentTarget;
+    applyLandingLanguage(button.dataset.lang, { announce: true, updateScroll });
+  };
+  const onDocumentClick = (event) => {
+    if (languageRoot && !languageRoot.contains(event.target)) setMenu(false);
+  };
+  const onDocumentKeydown = (event) => {
+    if (event.key === "Escape") setMenu(false);
+  };
+
+  toggle?.addEventListener("click", onToggle);
+  root.querySelectorAll("[data-lang]").forEach((button) => button.addEventListener("click", onLanguageClick));
+  document.addEventListener("click", onDocumentClick);
+  document.addEventListener("keydown", onDocumentKeydown);
+  addEventListener("scroll", onScroll, { passive: true });
+  addEventListener("resize", updateScroll, { passive: true });
+
+  observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add("is-visible");
+      observer?.unobserve(entry.target);
+    }
+  }), { threshold: 0.16, rootMargin: "0px 0px -8%" });
+  root.querySelectorAll(".reveal").forEach((node) => observer.observe(node));
+  applyLandingLanguage(currentLandingLanguage(), { updateScroll });
+
+  landingExperienceCleanup = () => {
+    toggle?.removeEventListener("click", onToggle);
+    root.querySelectorAll("[data-lang]").forEach((button) => button.removeEventListener("click", onLanguageClick));
+    document.removeEventListener("click", onDocumentClick);
+    document.removeEventListener("keydown", onDocumentKeydown);
+    removeEventListener("scroll", onScroll);
+    removeEventListener("resize", updateScroll);
+    observer?.disconnect();
+  };
+}
+
+function renderWelcome() {
+  app.innerHTML = `<div class="landing-final" data-no-auto-i18n>${LANDING_FINAL_TEMPLATE}</div>`;
+  requestAnimationFrame(initLandingExperience);
+}
+
 
 function renderIsland() {
   app.innerHTML = `
@@ -4542,6 +4812,12 @@ document.addEventListener("click", (event) => {
   }
   if (action === "execute-profile-confirm") {
     executeProfileDataAction();
+    return;
+  }
+
+  if (action === "open-sign-in") {
+    state.authMode = "sign-in";
+    openAuthGate("", "enter-island");
     return;
   }
 

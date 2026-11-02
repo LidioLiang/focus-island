@@ -13,14 +13,15 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=42/);
+  assert.match(pageSource, /app\.js\?v=43/);
   assert.match(source, /language: \/\^zh\\b\/i\.test\(window\.navigator\.language/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);
   assert.match(i18nRuntime, /MutationObserver/);
   assert.match(i18nRuntime, /observer\.disconnect\(\)/);
   assert.match(i18nRuntime, /observer\.takeRecords\(\)/);
   assert.match(i18nRuntime, /translateDocument\(\);\s*observeDocument\(\);/);
-  assert.match(layoutSource, /i18n\.js\?v=9" strategy="afterInteractive"/);
+  assert.match(layoutSource, /i18n\.js\?v=10" strategy="afterInteractive"/);
+  assert.match(layoutSource, /landing-final\.css\?v=1/);
   assert.match(layoutSource, /locales\/en\.js\?v=11/);
   assert.match(i18nRuntime, /englishPhrases/);
   assert.match(i18nRuntime, /\$1 focus sessions/);
@@ -35,7 +36,7 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(englishLocale, /Your timer is still running\. Return to your session when you’re ready\./);
   assert.match(englishLocale, /Golden Hour/);
   assert.match(englishLocale, /Stillwater/);
-  assert.match(layoutSource, /Step into a calm space, pick a seat, and get to work\./);
+  assert.match(layoutSource, /Step onto the island and begin with 25 calm minutes\./);
   assert.match(source, /<p>PROFILE<\/p>/);
   assert.match(englishLocale, /Focus Isle/);
   assert.match(englishLocale, /Privacy Policy/);
