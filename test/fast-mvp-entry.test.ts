@@ -13,7 +13,7 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=44/);
+  assert.match(pageSource, /app\.js\?v=45/);
   assert.match(layoutSource, /styles\.css\?v=36/);
   assert.match(source, /language: \/\^zh\\b\/i\.test\(window\.navigator\.language/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);

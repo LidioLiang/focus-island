@@ -96,3 +96,86 @@ test("the cafe opens with two stable islanders and the user avatar never replays
     opacity: getComputedStyle(element).opacity,
   }))).toEqual({ animations: 0, opacity: "1" });
 });
+
+test("an expired background lease silently recovers or moves seats without resetting focus time", async ({ page }) => {
+  const sessionId = "7d813b27-a6a8-46b8-9d31-5f9df8c1907e";
+  const startedAt = Date.now() - 52 * 60_000;
+  let resumePayload: Record<string, unknown> | null = null;
+
+  await page.addInitScript(({ sessionId: seededSessionId, startedAt: seededStartedAt }) => {
+    localStorage.setItem("focusIslandGuestIdentityV2", JSON.stringify({
+      guestId: "e2423fbb-03a8-4430-80d1-ae035dbb53b5",
+      sessionId: seededSessionId,
+      displayName: "Quiet Otter",
+      avatarSkin: 1,
+    }));
+    localStorage.setItem("focusIslandActiveSessionV1", JSON.stringify({
+      sceneId: "cafe",
+      roomId: "cafe-01",
+      localRoom: false,
+      selectedSeat: 0,
+      timerMode: 50,
+      durationSeconds: 3000,
+      remainingSeconds: 0,
+      elapsedSeconds: 3120,
+      isRunning: true,
+      sessionPhase: "focus",
+      restDurationSeconds: 300,
+      restRemainingSeconds: 300,
+      restStartedAt: null,
+      nextFocusMode: 50,
+      sessionStartedAt: seededStartedAt,
+      cloudFocusClientId: "focus-test-session",
+      companions: 6,
+      focusImageChoice: "window",
+      sounds: { ambient: false, white: false, music: false },
+      musicTrack: "rainy-notes",
+      soundVolumes: { ambient: 55, white: 30, music: 24 },
+      savedAt: Date.now(),
+    }));
+  }, { sessionId, startedAt });
+
+  await page.route("**/api/sessions/*/heartbeat", (route) => route.fulfill({
+    status: 409,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "session_expired" }),
+  }));
+  await page.route("**/api/sessions/*/resume", async (route) => {
+    resumePayload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, recovered: true, moved: true, roomId: "cafe-02", seatId: 4 }),
+    });
+  });
+  await page.route("**/api/rooms/cafe-02/state", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      leases: [{
+        roomId: "cafe-02",
+        seatId: 4,
+        sessionId,
+        displayName: "Quiet Otter",
+        avatarSkin: 1,
+        memberType: "human",
+        state: "occupied",
+        activity: "专注计时中",
+        focusStartedAt: startedAt,
+      }],
+      serverNow: Date.now(),
+    }),
+  }));
+
+  await page.goto("/");
+  await expect.poll(() => resumePayload).not.toBeNull();
+  expect(resumePayload).toMatchObject({
+    preferredRoomId: "cafe-01",
+    preferredSeatId: 1,
+    focusing: false,
+    focusStartedAt: startedAt,
+  });
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("focusIslandActiveSessionV1") || "null"));
+  expect(saved).toMatchObject({ roomId: "cafe-02", selectedSeat: 3, sessionStartedAt: startedAt });
+  await expect(page.getByText("座位连接已过期，请重新选座")).toHaveCount(0);
+});

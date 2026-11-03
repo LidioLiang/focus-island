@@ -335,6 +335,7 @@ let cafeSceneObjectDrag = null;
 let staticSeatMarkerDrag = null;
 let onlineIdentityPromise = null;
 let onlineUserId = null;
+let seatRecoveryPromise = null;
 
 let identity = getOrCreateIdentity();
 
@@ -1815,7 +1816,7 @@ async function syncCafeState({ refreshMarkers = true } = {}) {
     state.roomPresence = presence;
     reconcileLocalNpcRoster(presence.leases);
     const ownLease = presence.leases.find((lease) => lease.sessionId === identity.sessionId && lease.state === "occupied");
-    state.currentSeatId = ownLease ? Number(ownLease.seatId) : null;
+    if (ownLease) state.currentSeatId = Number(ownLease.seatId);
     const room = scenes.cafe.rooms.find((item) => item.id === currentRoomApiId());
     const visibleLeases = cafeVisibleLeases(presence.leases);
     if (room) room.occupied = visibleLeases.length;
@@ -1899,10 +1900,65 @@ async function sendHeartbeat() {
     });
   } catch (error) {
     if (error.status === 404 || error.status === 409) {
-      state.currentSeatId = null;
-      showToast("座位连接已过期，请重新选座");
+      await recoverCafeSeat("heartbeat");
     }
   }
+}
+
+function currentSeatActivity() {
+  if (state.sessionPhase === "rest") return "休息中";
+  if (state.isRunning) return "专注计时中";
+  return "已入座";
+}
+
+async function recoverCafeSeat(source = "resume") {
+  if (seatRecoveryPromise) return seatRecoveryPromise;
+  if (document.hidden || state.sceneId !== "cafe" || state.localRoom || !state.currentSeatId) return false;
+  if (!["focus", "room"].includes(state.view)) return false;
+  const preferredRoomId = currentRoomApiId();
+  const preferredSeatId = Number(state.currentSeatId);
+  if (!preferredRoomId || !Number.isInteger(preferredSeatId)) return false;
+
+  seatRecoveryPromise = (async () => {
+    try {
+      const result = await api(`/api/sessions/${identity.sessionId}/resume`, {
+        method: "POST",
+        body: JSON.stringify({
+          preferredRoomId,
+          preferredSeatId,
+          displayName: identity.displayName,
+          avatarSkin: identity.avatarSkin,
+          activity: currentSeatActivity(),
+          focusing: state.isRunning,
+          focusStartedAt: state.sessionStartedAt,
+        }),
+      });
+      const previousRoomId = state.roomId;
+      state.roomId = result.roomId;
+      state.currentSeatId = Number(result.seatId);
+      state.selectedSeat = state.currentSeatId - 1;
+      state.switchingFromSeatId = null;
+      if (previousRoomId !== state.roomId) {
+        window.dispatchEvent(new CustomEvent("focus-island:subscribe-room", { detail: { roomId: state.roomId } }));
+      }
+      persistActiveSession(true);
+      await syncCafeState({ refreshMarkers: state.view === "room" });
+      return true;
+    } catch (error) {
+      if (error.status === 409 && error.message === "system_rooms_full") {
+        state.currentSeatId = null;
+        showToast("当前系统房间暂无空位，你的专注计时仍会保留");
+        if (state.view === "room") renderRoom();
+      } else {
+        const syncLabel = document.querySelector(".room-sync-label");
+        if (syncLabel) syncLabel.textContent = "正在重新连接…";
+      }
+      return false;
+    } finally {
+      seatRecoveryPromise = null;
+    }
+  })();
+  return seatRecoveryPromise;
 }
 
 async function releaseSeat({ beacon = false, force = false } = {}) {
@@ -5311,6 +5367,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) void recoverCafeSeat("visibility");
   if (!["focus", "room"].includes(state.view) || (!state.isRunning && state.sessionPhase !== "rest")) return;
   if (syncTimerFromClock()) return;
   persistActiveSession(true);
@@ -5319,6 +5376,9 @@ document.addEventListener("visibilitychange", () => {
     document.querySelectorAll("[data-rest-clock]").forEach((timerElement) => { timerElement.textContent = formatRestTime(); });
   }
 });
+
+window.addEventListener("pageshow", () => { void recoverCafeSeat("pageshow"); });
+window.addEventListener("online", () => { void recoverCafeSeat("online"); });
 
 window.addEventListener("pagehide", () => {
   if (["focus", "room"].includes(state.view) && (state.isRunning || state.sessionPhase === "rest")) syncTimerFromClock();
