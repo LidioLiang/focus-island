@@ -819,6 +819,31 @@ function createLocalNpcLeases({ excludeSeatIds = [] } = {}) {
   });
 }
 
+function reconcileLocalNpcRoster(leases = state.roomPresence.leases) {
+  const realLeases = leases.filter((lease) => lease.memberType !== "npc");
+  const occupiedSeatIds = new Set(realLeases.map((lease) => Number(lease.seatId)));
+  const stableRoster = state.localNpcRoster.filter((lease) => !occupiedSeatIds.has(Number(lease.seatId)));
+  const missingCount = Math.max(0, 2 - stableRoster.length);
+  if (!missingCount) {
+    state.localNpcRoster = stableRoster.slice(0, 2);
+    return;
+  }
+  const replacements = createLocalNpcLeases({
+    excludeSeatIds: [...occupiedSeatIds, ...stableRoster.map((lease) => Number(lease.seatId))],
+  }).slice(0, missingCount);
+  state.localNpcRoster = [...stableRoster, ...replacements].slice(0, 2);
+}
+
+function cafeSeatOccupancyLeases() {
+  const leasesBySeat = new Map();
+  state.roomPresence.leases.forEach((lease) => leasesBySeat.set(Number(lease.seatId), lease));
+  state.localNpcRoster.forEach((lease) => {
+    const seatId = Number(lease.seatId);
+    if (!leasesBySeat.has(seatId)) leasesBySeat.set(seatId, lease);
+  });
+  return [...leasesBySeat.values()];
+}
+
 async function enterCafeRoom() {
   if (state.isAllocatingRoom) return;
   state.isAllocatingRoom = true;
@@ -855,7 +880,7 @@ async function enterCafeRoom() {
   } finally {
     state.isAllocatingRoom = false;
   }
-  state.localNpcRoster = state.localRoom ? createLocalNpcLeases() : [];
+  state.localNpcRoster = createLocalNpcLeases();
   state.roomPresence = state.localRoom
     ? { leases: [...state.localNpcRoster], serverNow: Date.now() }
     : { leases: [], serverNow: Date.now() };
@@ -866,7 +891,7 @@ async function enterCafeRoom() {
 }
 
 function leaseForSeat(seatIndex) {
-  return state.roomPresence.leases.find((lease) => Number(lease.seatId) === seatIndex + 1 && ["reserved", "moving", "occupied"].includes(lease.state)) || null;
+  return cafeSeatOccupancyLeases().find((lease) => Number(lease.seatId) === seatIndex + 1 && ["reserved", "moving", "occupied"].includes(lease.state)) || null;
 }
 
 function focusedMinutes(lease) {
@@ -1788,6 +1813,7 @@ async function syncCafeState({ refreshMarkers = true } = {}) {
   try {
     const presence = await api(`/api/rooms/${currentRoomApiId()}/state`);
     state.roomPresence = presence;
+    reconcileLocalNpcRoster(presence.leases);
     const ownLease = presence.leases.find((lease) => lease.sessionId === identity.sessionId && lease.state === "occupied");
     state.currentSeatId = ownLease ? Number(ownLease.seatId) : null;
     const room = scenes.cafe.rooms.find((item) => item.id === currentRoomApiId());
@@ -3128,11 +3154,10 @@ function renderStaticCafeOccupants() {
     const minutes = focusedMinutes(lease);
     const status = lease.focusStartedAt ? `已专注 ${minutes} 分钟` : "已入座";
     const displayName = escapeHtml(String(lease.displayName || "安静旅人").replace(/^岛民\s*[·・]\s*/, ""));
-    const entering = mine && state.awaitingImmersiveFocus;
     const [left, top, width, height] = slot.occupant_anchor;
     const [labelLeft, labelTop] = slot.label_anchor;
     return `
-      <div class="static-seat-occupant ${mine ? "is-mine" : ""} ${entering ? "is-entering" : ""}" style="--left:${left}%;--top:${top}%;--width:${width}%;--height:${height}%;--avatar:${Number(lease.avatarSkin || 0)};${slot.flip ? "--flip:-1;" : ""}">
+      <div class="static-seat-occupant ${mine ? "is-mine" : ""}" style="--left:${left}%;--top:${top}%;--width:${width}%;--height:${height}%;--avatar:${Number(lease.avatarSkin || 0)};${slot.flip ? "--flip:-1;" : ""}">
         <span class="static-seat-avatar" style="background-image:url('${slot.occupied_asset}')" aria-hidden="true"></span>
       </div>
       <div class="static-seat-label ${mine ? "is-mine" : ""} ${npc ? "is-npc" : ""}" style="left:${labelLeft}%;top:${labelTop}%">
@@ -4009,6 +4034,8 @@ function restoreActiveSession() {
         }],
         serverNow: Date.now(),
       };
+    } else {
+      state.localNpcRoster = createLocalNpcLeases({ excludeSeatIds: [saved.selectedSeat + 1] });
     }
     if (state.sessionPhase === "rest") {
       const offlineSeconds = Math.max(0, Math.floor((Date.now() - saved.savedAt) / 1000));

@@ -13,7 +13,8 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=43/);
+  assert.match(pageSource, /app\.js\?v=44/);
+  assert.match(layoutSource, /styles\.css\?v=36/);
   assert.match(source, /language: \/\^zh\\b\/i\.test\(window\.navigator\.language/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);
   assert.match(i18nRuntime, /MutationObserver/);
@@ -70,7 +71,7 @@ test("production cafe room uses the calibrated sunny master and six static occup
   }
   assert.match(source, /Coordinates are percentages of the calibrated 1672 × 941 sunny cafe canvas/);
   assert.match(styles, /aspect-ratio: 1672 \/ 941/);
-  assert.match(styles, /\.static-seat-occupant\.is-entering \{ animation: static-seat-fade-in 560ms ease both; \}/);
+  assert.doesNotMatch(styles, /static-seat-occupant\.is-entering|static-seat-fade-in/);
   const occupantRuleStart = styles.indexOf(".static-seat-occupant {");
   const occupantRule = styles.slice(occupantRuleStart, styles.indexOf("}", occupantRuleStart) + 1);
   assert.doesNotMatch(occupantRule, /animation:/);
@@ -119,12 +120,16 @@ test("active focus uses a compact bottom-center hover timer with four dock actio
 test("static cafe labels are unboxed text and NPC companions stay stable while seats change", () => {
   assert.match(styles, /\.static-seat-label\s*\{[\s\S]*border: 0[\s\S]*background: transparent[\s\S]*box-shadow: none/);
   assert.match(source, /function createLocalNpcLeases/);
+  assert.match(source, /function reconcileLocalNpcRoster/);
+  assert.match(source, /function cafeSeatOccupancyLeases/);
   assert.match(source, /shuffledCopy\(staticSeatSlots\.map/);
   assert.match(source, /displayName: nicknames\[index\]/);
-  assert.match(source, /state\.localNpcRoster = state\.localRoom \? createLocalNpcLeases\(\) : \[\]/);
+  assert.match(source, /state\.localNpcRoster = createLocalNpcLeases\(\)/);
+  assert.match(source, /reconcileLocalNpcRoster\(presence\.leases\)/);
+  assert.match(source, /return cafeSeatOccupancyLeases\(\)\.find/);
   assert.match(source, /const otherLeases = state\.roomPresence\.leases\.filter/);
-  assert.match(source, /const entering = mine && state\.awaitingImmersiveFocus/);
-  assert.match(source, /\$\{entering \? "is-entering" : ""\}/);
+  assert.doesNotMatch(source, /const entering = mine && state\.awaitingImmersiveFocus/);
+  assert.doesNotMatch(source, /\$\{entering \? "is-entering" : ""\}/);
   assert.match(source, /data-static-focus-started-at/);
   assert.match(source, /updateStaticFocusTimes/);
   assert.doesNotMatch(source, /seatId: 2, sessionId: "npc-02"/);

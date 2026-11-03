@@ -1858,8 +1858,6 @@ body.landing-mode #app {
   transform-origin: center;
 }
 
-.static-seat-occupant.is-entering { animation: static-seat-fade-in 560ms ease both; }
-
 .static-seat-avatar {
   display: block;
   width: 100%;
@@ -1867,15 +1865,6 @@ body.landing-mode #app {
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
-}
-
-@keyframes static-seat-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .static-seat-occupant.is-entering { animation-duration: 1ms; }
 }
 
 .static-seat-label {

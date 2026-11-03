@@ -18,7 +18,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="stylesheet" href="/styles.css?v=35" />
+        <link rel="stylesheet" href="/styles.css?v=36" />
         <link rel="stylesheet" href="/landing-final.css?v=1" />
       </head>
       <body>
