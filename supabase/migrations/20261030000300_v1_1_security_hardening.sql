@@ -1,6 +1,12 @@
 -- Focus Isle v1.1: remove unnecessary public execution and close anonymous history access.
 
-revoke all on function public.rls_auto_enable() from public, anon, authenticated;
+do $$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    execute 'revoke all on function public.rls_auto_enable() from public, anon, authenticated';
+  end if;
+end;
+$$;
 revoke all on function public.assert_my_product_access() from authenticated;
 
 drop policy if exists "users read own focus sessions" on public.focus_sessions;

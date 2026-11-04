@@ -96,6 +96,7 @@ test("limited lifetime invitation claims are atomic and capped server-side", () 
 });
 
 test("v1.1 hardening removes public helper execution and anonymous history access", () => {
+  assert.match(hardeningMigration, /to_regprocedure\('public\.rls_auto_enable\(\)'\) is not null/);
   assert.match(hardeningMigration, /revoke all on function public\.rls_auto_enable\(\) from public, anon, authenticated/);
   assert.match(hardeningMigration, /revoke all on function public\.assert_my_product_access\(\) from authenticated/);
   assert.match(hardeningMigration, /is_anonymous is true then raise exception 'registration_required'/);
