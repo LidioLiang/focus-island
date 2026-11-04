@@ -780,6 +780,8 @@ async function authorizeFocusStart() {
   } catch (error) {
     if (error.status === 402) openPaywall(error.message);
     else if (error.status === 401 || error.status === 403) openAuthGate(error.message, "start-focus");
+    else if (error.status === 409 && error.message === "active_session_exists") showToast("检测到另一段专注仍在进行，请先回到原页面结束，或等待本轮结束后重试");
+    else if (error.status === 429) showToast("操作有些频繁，请稍等一分钟后重试");
     else showToast("暂时无法开始专注，请稍后再试");
     return false;
   }
@@ -3921,7 +3923,7 @@ function setRestDuration(minutes) {
   renderFocus();
 }
 
-function startNextFocusSession() {
+async function startNextFocusSession() {
   state.cloudFocusClientId = null;
   stopTicker();
   state.sessionPhase = "focus";
@@ -3929,25 +3931,28 @@ function startNextFocusSession() {
   state.durationSeconds = state.timerMode * 60;
   state.remainingSeconds = state.durationSeconds;
   state.elapsedSeconds = 0;
-  state.sessionStartedAt = Date.now();
+  state.sessionStartedAt = null;
   state.sessionResult = null;
   state.restStartedAt = null;
   state.restCustomOpen = false;
-  state.isRunning = true;
+  state.isRunning = false;
   state.sessionPanelOpen = false;
-  lastTick = Date.now();
-  document.title = "专注中 · 专注岛";
+  lastTick = null;
+  document.title = "准备专注 · 专注岛";
   renderFocus();
-  authorizeFocusStart().then((allowed) => {
-    if (!allowed) {
-      state.isRunning = false;
-      stopTicker();
-      persistActiveSession(true);
-    }
-  });
+  if (!await authorizeFocusStart()) {
+    persistActiveSession(true);
+    return;
+  }
+  state.sessionStartedAt = Date.now();
+  state.isRunning = true;
+  lastTick = state.sessionStartedAt;
+  document.title = "专注中 · 专注岛";
+  startTicker();
   updateAudio();
   persistActiveSession(true);
   sendHeartbeat();
+  renderFocus();
 }
 
 function notifyFocusComplete() {
