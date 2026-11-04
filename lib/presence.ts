@@ -44,9 +44,15 @@ export async function authenticatedSupabase() {
 
 export function rpcError(error: { message?: string; code?: string } | null) {
   const message = error?.message || "database_error";
-  const known = ["seat_taken", "reservation_expired", "session_expired", "room_not_found", "system_rooms_full"];
+  const known = ["seat_taken", "reservation_expired", "session_expired", "room_not_found", "system_rooms_full", "invalid_request"];
   const code = known.find((item) => message.includes(item)) || "database_error";
-  const status = code === "seat_taken" || code.includes("expired") ? 409 : code === "room_not_found" ? 404 : 500;
+  const status = code === "seat_taken" || code.includes("expired") || code === "system_rooms_full"
+    ? 409
+    : code === "room_not_found"
+      ? 404
+      : code === "invalid_request"
+        ? 400
+        : 500;
   return json({ error: code }, { status });
 }
 

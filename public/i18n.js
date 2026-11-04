@@ -122,6 +122,7 @@
 
   function translateElement(element) {
     if (!(element instanceof Element)) return;
+    if (element.closest("[data-no-auto-i18n]")) return;
     for (const attribute of TRANSLATABLE_ATTRIBUTES) {
       if (element.hasAttribute(attribute)) {
         const value = element.getAttribute(attribute);
@@ -133,6 +134,8 @@
 
   function translateNode(node) {
     if (currentLanguage === "zh-CN" || !node) return;
+    if (node.nodeType === Node.TEXT_NODE && node.parentElement?.closest("[data-no-auto-i18n]")) return;
+    if (node instanceof Element && node.closest("[data-no-auto-i18n]")) return;
     if (node.nodeType === Node.TEXT_NODE) {
       const translated = translateText(node.nodeValue);
       if (translated !== node.nodeValue) node.nodeValue = translated;
@@ -144,9 +147,17 @@
     let current = walker.nextNode();
     while (current) {
       if (current.nodeType === Node.TEXT_NODE) {
+        if (current.parentElement?.closest("[data-no-auto-i18n]")) {
+          current = walker.nextNode();
+          continue;
+        }
         const translated = translateText(current.nodeValue);
         if (translated !== current.nodeValue) current.nodeValue = translated;
       } else {
+        if (current.closest("[data-no-auto-i18n]")) {
+          current = walker.nextNode();
+          continue;
+        }
         translateElement(current);
       }
       current = walker.nextNode();

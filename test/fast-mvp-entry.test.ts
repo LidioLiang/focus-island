@@ -9,19 +9,21 @@ const englishLocale = await readFile(new URL("../public/locales/en.js", import.m
 const layoutSource = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
 const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 
-test("English localization loads before the application and follows browser language by default", () => {
+test("English localization initializes after hydration and before the application renders its UI", () => {
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=37/);
+  assert.match(pageSource, /app\.js\?v=45/);
+  assert.match(layoutSource, /styles\.css\?v=36/);
   assert.match(source, /language: \/\^zh\\b\/i\.test\(window\.navigator\.language/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);
   assert.match(i18nRuntime, /MutationObserver/);
   assert.match(i18nRuntime, /observer\.disconnect\(\)/);
   assert.match(i18nRuntime, /observer\.takeRecords\(\)/);
   assert.match(i18nRuntime, /translateDocument\(\);\s*observeDocument\(\);/);
-  assert.match(layoutSource, /i18n\.js\?v=8/);
-  assert.match(layoutSource, /locales\/en\.js\?v=9/);
+  assert.match(layoutSource, /i18n\.js\?v=10" strategy="afterInteractive"/);
+  assert.match(layoutSource, /landing-final\.css\?v=1/);
+  assert.match(layoutSource, /locales\/en\.js\?v=11/);
   assert.match(i18nRuntime, /englishPhrases/);
   assert.match(i18nRuntime, /\$1 focus sessions/);
   assert.match(i18nRuntime, /\$1 records/);
@@ -35,7 +37,7 @@ test("English localization loads before the application and follows browser lang
   assert.match(englishLocale, /Your timer is still running\. Return to your session when you’re ready\./);
   assert.match(englishLocale, /Golden Hour/);
   assert.match(englishLocale, /Stillwater/);
-  assert.match(layoutSource, /Step into a calm space, pick a seat, and get to work\./);
+  assert.match(layoutSource, /Step onto the island and begin with 25 calm minutes\./);
   assert.match(source, /<p>PROFILE<\/p>/);
   assert.match(englishLocale, /Focus Isle/);
   assert.match(englishLocale, /Privacy Policy/);
@@ -69,7 +71,7 @@ test("production cafe room uses the calibrated sunny master and six static occup
   }
   assert.match(source, /Coordinates are percentages of the calibrated 1672 × 941 sunny cafe canvas/);
   assert.match(styles, /aspect-ratio: 1672 \/ 941/);
-  assert.match(styles, /\.static-seat-occupant\.is-entering \{ animation: static-seat-fade-in 560ms ease both; \}/);
+  assert.doesNotMatch(styles, /static-seat-occupant\.is-entering|static-seat-fade-in/);
   const occupantRuleStart = styles.indexOf(".static-seat-occupant {");
   const occupantRule = styles.slice(occupantRuleStart, styles.indexOf("}", occupantRuleStart) + 1);
   assert.doesNotMatch(occupantRule, /animation:/);
@@ -118,22 +120,27 @@ test("active focus uses a compact bottom-center hover timer with four dock actio
 test("static cafe labels are unboxed text and NPC companions stay stable while seats change", () => {
   assert.match(styles, /\.static-seat-label\s*\{[\s\S]*border: 0[\s\S]*background: transparent[\s\S]*box-shadow: none/);
   assert.match(source, /function createLocalNpcLeases/);
+  assert.match(source, /function reconcileLocalNpcRoster/);
+  assert.match(source, /function cafeSeatOccupancyLeases/);
   assert.match(source, /shuffledCopy\(staticSeatSlots\.map/);
   assert.match(source, /displayName: nicknames\[index\]/);
-  assert.match(source, /state\.localNpcRoster = state\.localRoom \? createLocalNpcLeases\(\) : \[\]/);
+  assert.match(source, /state\.localNpcRoster = createLocalNpcLeases\(\)/);
+  assert.match(source, /reconcileLocalNpcRoster\(presence\.leases\)/);
+  assert.match(source, /return cafeSeatOccupancyLeases\(\)\.find/);
   assert.match(source, /const otherLeases = state\.roomPresence\.leases\.filter/);
-  assert.match(source, /const entering = mine && state\.awaitingImmersiveFocus/);
-  assert.match(source, /\$\{entering \? "is-entering" : ""\}/);
+  assert.doesNotMatch(source, /const entering = mine && state\.awaitingImmersiveFocus/);
+  assert.doesNotMatch(source, /\$\{entering \? "is-entering" : ""\}/);
   assert.match(source, /data-static-focus-started-at/);
   assert.match(source, /updateStaticFocusTimes/);
   assert.doesNotMatch(source, /seatId: 2, sessionId: "npc-02"/);
   assert.doesNotMatch(source, /seatId: 4, sessionId: "npc-04"/);
 });
 
-test("developer marker calibration drags and persists only the six static seat numbers", () => {
+test("developer marker calibration is hidden by default and persists only the six static seat numbers", () => {
   const roomStart = source.indexOf("function renderStaticCafeRoom");
   const room = source.slice(roomStart, roomStart + 6500);
-  assert.match(room, /开发者 · 调整编号/);
+  assert.doesNotMatch(room, /开发者 · 调整编号/);
+  assert.match(room, /state\.isDeveloper && state\.staticSeatCalibration\.enabled/);
   assert.match(room, /data-action="toggle-static-seat-calibration"/);
   assert.match(room, /data-action="reset-static-seat-markers"/);
   assert.match(room, /staticSeatMarkerPosition\(slot\)/);

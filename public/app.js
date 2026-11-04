@@ -176,6 +176,7 @@ const islandImage = `${ASSET_BASE}20261012-focus-island-map-detailed.png`;
 const STORAGE_KEYS = {
   activeSession: "focusIslandActiveSessionV1",
   history: "focusIslandHistoryV1",
+  pendingMergeToken: "focusIslandPendingMergeTokenV1",
   guestIdentity: "focusIslandGuestIdentityV2",
   preferences: "focusIslandPreferencesV1",
   cafeSpriteTuning: "focusIslandCafeSpriteTuningV2",
@@ -287,6 +288,17 @@ const state = {
   },
   libraryScenePublished: initialLibraryScenePublished,
   feedback: null,
+  accessStatus: null,
+  isDeveloper: false,
+  billingPlans: null,
+  pendingLifetimeInvite: false,
+  accessOverlay: null,
+  authMode: "sign-up",
+  authEmail: "",
+  authError: "",
+  authPending: false,
+  authContinuation: null,
+  cloudFocusClientId: null,
   sounds: { ...preferences.sounds },
   musicTrack: preferences.musicTrack,
   soundVolumes: { ...preferences.soundVolumes },
@@ -323,6 +335,7 @@ let cafeSceneObjectDrag = null;
 let staticSeatMarkerDrag = null;
 let onlineIdentityPromise = null;
 let onlineUserId = null;
+let seatRecoveryPromise = null;
 
 let identity = getOrCreateIdentity();
 
@@ -561,23 +574,217 @@ async function ensureOnlineIdentity() {
   if (!onlineIdentityPromise) {
     onlineIdentityPromise = (async () => {
       const session = await api("/api/auth/session");
-      if (session.authenticated) {
+      if (session.authenticated && !session.anonymous) {
         onlineUserId = session.userId;
+        state.isDeveloper = session.developer === true;
         return session;
       }
-      const captchaToken = await turnstileToken();
-      const created = await api("/api/auth/anonymous", {
-        method: "POST",
-        body: JSON.stringify({ captchaToken, displayName: identity.displayName, avatarSkin: identity.avatarSkin }),
-      });
-      onlineUserId = created.userId;
-      return created;
+      const error = new Error(session.anonymous ? "registration_required" : "authentication_required");
+      error.status = 401;
+      throw error;
     })().catch((error) => {
       onlineIdentityPromise = null;
       throw error;
     });
   }
   return onlineIdentityPromise;
+}
+
+async function getAccessStatus({ refresh = false } = {}) {
+  if (state.accessStatus && !refresh) return state.accessStatus;
+  const response = await fetch("/api/access/status", { cache: "no-store" });
+  const status = await response.json().catch(() => ({ authenticated: false, paywallReason: "access_service_unavailable" }));
+  state.accessStatus = status;
+  state.isDeveloper = status.developer === true;
+  return status;
+}
+
+function billingPrice(plan, fallback) {
+  const configured = state.billingPlans?.find((item) => item.key === plan);
+  const amount = Number(configured?.amount || fallback) / 100;
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: configured?.currency || "USD" }).format(amount);
+}
+
+async function loadBillingPlans() {
+  try {
+    const result = await api("/api/billing/plans");
+    state.billingPlans = Array.isArray(result.plans) ? result.plans : null;
+  } catch (_) {
+    state.billingPlans = null;
+  }
+}
+
+async function claimPendingLifetimeInvite() {
+  if (!state.pendingLifetimeInvite) return null;
+  try {
+    const result = await api("/api/invitations/lifetime/claim", { method: "POST", body: "{}" });
+    state.pendingLifetimeInvite = false;
+    state.accessStatus = null;
+    await getAccessStatus({ refresh: true });
+    showToast(result.alreadyClaimed ? "这个账号已拥有终身体验权益" : `终身体验已领取${Number.isInteger(result.remaining) ? `，剩余 ${result.remaining} 个名额` : ""}`);
+    return result;
+  } catch (error) {
+    if (error.status === 401) return null;
+    state.pendingLifetimeInvite = false;
+    showToast(error.message === "invitation_exhausted" ? "这批 50 个终身体验名额已领完" : "邀请链接无效或已失效");
+    return null;
+  }
+}
+
+async function prepareLifetimeInviteFromUrl() {
+  const url = new URL(window.location.href);
+  const token = url.searchParams.get("lifetime_invite");
+  if (!token) return;
+  url.searchParams.delete("lifetime_invite");
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  try {
+    await api("/api/invitations/lifetime/prepare", { method: "POST", body: JSON.stringify({ token }) });
+    state.pendingLifetimeInvite = true;
+    const session = await api("/api/auth/session");
+    if (session.authenticated && !session.anonymous) {
+      onlineUserId = session.userId;
+      state.isDeveloper = session.developer === true;
+      await claimPendingLifetimeInvite();
+    } else {
+      state.authMode = "sign-up";
+      openAuthGate();
+    }
+  } catch (_) {
+    showToast("邀请链接无效，请向邀请人确认完整链接");
+  }
+}
+
+function openAuthGate(error = "", continuation = null) {
+  if (continuation) state.authContinuation = continuation;
+  state.accessOverlay = "auth";
+  state.authError = error;
+  state.authPending = false;
+  renderAccessOverlay();
+}
+
+function openPaywall(reason = "payment_required") {
+  state.accessOverlay = "paywall";
+  state.authError = reason;
+  renderAccessOverlay();
+  loadBillingPlans().then(() => {
+    if (state.accessOverlay === "paywall") renderAccessOverlay();
+  });
+}
+
+function closeAccessOverlay() {
+  state.accessOverlay = null;
+  state.authContinuation = null;
+  document.querySelector(".access-overlay")?.remove();
+}
+
+function authErrorCopy(code) {
+  return ({
+    authentication_required: "请先注册或登录邮箱账号。",
+    invalid_credentials: "邮箱或密码不正确。",
+    email_already_registered: "这个邮箱已经注册。请登录原账号，我们会继续迁移匿名记录。",
+    invalid_registration: "密码至少 10 位，并同时包含大小写字母、数字和符号。",
+    password_mismatch: "两次输入的密码不一致。",
+    registration_session_unavailable: "注册配置尚未完成，请稍后再试。",
+    captcha_required: "请先完成人机验证。",
+    rate_limited: "尝试次数过多，请稍后再试。",
+    closed_beta_full: "本轮 100 名封闭测试名额已满，感谢关注。",
+    access_service_unavailable: "暂时无法验证使用资格，请稍后再试。",
+    invalid_current_password: "当前密码不正确。",
+    current_password_required: "请输入当前密码后再修改。",
+    billing_price_mismatch: "结账价格与 v1.1 定价不一致，已安全阻止扣款。",
+  })[code] || "操作没有完成，请稍后重试。";
+}
+
+function renderAccessOverlay() {
+  document.querySelector(".access-overlay")?.remove();
+  if (!state.accessOverlay) return;
+  const shell = document.createElement("div");
+  shell.className = "access-overlay";
+  if (state.accessOverlay === "paywall") {
+    shell.innerHTML = `<section class="access-dialog paywall-dialog" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
+      <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
+      <p class="access-eyebrow">FOCUS ISLE PLUS</p>
+      <h2 id="paywall-title">继续留在岛上专注</h2>
+      <p>你的免费 25 分钟已经使用。选择任一方案即可继续使用核心专注功能。</p>
+      <div class="paywall-plans">
+        <button data-billing-plan="plus_monthly"><small>灵活开始</small><strong>${billingPrice("plus_monthly", "499")} <b>/ 月</b></strong><span>Plus 月付 · 自动续订</span></button>
+        <button class="recommended" data-billing-plan="plus_annual"><em>推荐</em><small>更适合长期使用</small><strong>${billingPrice("plus_annual", "1999")} <b>/ 年</b></strong><span>Plus 年付 · 自动续订</span></button>
+        <button data-billing-plan="founder_lifetime"><small>限时名额</small><strong>${billingPrice("founder_lifetime", "3999")}</strong><span>创始终身版 · 一次购买</span></button>
+      </div>
+      <p class="access-fineprint">美元定价；最终税费以 Stripe Checkout 显示为准。服务端会校验真实 Price，付款完成后由签名 Webhook 确认权益。</p>
+      <button class="access-link" data-action="auth-sign-in-from-paywall">已有账号？登录</button>
+    </section>`;
+  } else {
+    const signUp = state.authMode === "sign-up";
+    shell.innerHTML = `<section class="access-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
+      <p class="access-eyebrow">${signUp ? "CREATE ACCOUNT" : "WELCOME BACK"}</p>
+      <h2 id="auth-title">${state.pendingLifetimeInvite ? (signUp ? "注册领取终身体验" : "登录领取终身体验") : signUp ? "注册后免费专注一次" : "登录专注岛"}</h2>
+      <p>${state.pendingLifetimeInvite ? "你已通过限量邀请链接进入。注册成功后自动领取，名额以最终领取成功为准。" : signUp ? "填写邮箱并设置密码，注册成功后会自动继续刚才的专注操作。" : "登录后恢复云端记录与已购买权益。"}</p>
+      <form data-auth-form="${signUp ? "sign-up" : "sign-in"}">
+        <label>邮箱<input name="email" type="email" autocomplete="email" value="${escapeHtml(state.authEmail)}" required /></label>
+        <label>密码<input name="password" type="password" autocomplete="${signUp ? "new-password" : "current-password"}" ${signUp ? "minlength=\"10\"" : ""} required /></label>
+        ${signUp ? '<label>再次输入密码<input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" required /></label>' : ""}
+        ${state.authError ? `<p class="access-error">${escapeHtml(authErrorCopy(state.authError))}</p>` : ""}
+        <button class="primary-button" type="submit" ${state.authPending ? "disabled" : ""}>${state.authPending ? "请稍候…" : signUp ? "注册并继续专注" : "登录并继续"}</button>
+      </form>
+      <button class="access-link" data-action="toggle-auth-mode">${signUp ? "已有账号？登录" : "没有账号？注册"}</button>
+      ${!signUp ? `<button class="access-link muted" data-action="reset-password">忘记密码</button>` : ""}
+    </section>`;
+  }
+  document.body.appendChild(shell);
+  window.setTimeout(() => shell.querySelector("input")?.focus(), 0);
+}
+
+async function importLocalHistory() {
+  const sessions = readHistory().slice(0, 100).map((item) => ({
+    client_session_id: String(item.clientSessionId || item.id), scene_id: item.sceneId || "cafe",
+    room_id: item.roomId || "", seat_id: Number(item.seat || 0) + 1,
+    timer_mode: [0, 25, 50].includes(Number(item.timerMode)) ? Number(item.timerMode) : 25,
+    planned_seconds: Number(item.targetSeconds) || 0, actual_seconds: Number(item.elapsedSeconds) || 0,
+    started_at: new Date(item.startedAt || Date.now()).toISOString(), ended_at: new Date(item.endedAt || Date.now()).toISOString(),
+    status: focusStatusKey(item.status) === "completed" ? "completed" : focusStatusKey(item.status),
+  }));
+  if (!sessions.length) return;
+  await api("/api/focus/sessions", { method: "POST", body: JSON.stringify({ sessions }) }).catch(() => {});
+}
+
+async function completeAuthenticatedFlow(result) {
+  onlineUserId = result.userId;
+  state.isDeveloper = result.developer === true;
+  onlineIdentityPromise = null;
+  await claimPendingLifetimeInvite();
+  state.accessStatus = null;
+  await getAccessStatus({ refresh: true });
+  await importLocalHistory();
+  const continuation = state.authContinuation;
+  closeAccessOverlay();
+  if (continuation === "start-focus" && state.view === "room" && state.selectedSeat !== null) {
+    await enterImmersiveFocus();
+    return;
+  }
+  state.view = "island";
+  render();
+}
+
+async function authorizeFocusStart() {
+  if (state.cloudFocusClientId) return true;
+  const clientSessionId = crypto.randomUUID();
+  try {
+    await api("/api/focus/sessions/start", { method: "POST", body: JSON.stringify({
+      clientSessionId, sceneId: state.sceneId || "cafe", roomId: state.roomId || "",
+      seatId: state.selectedSeat === null ? null : state.selectedSeat + 1, timerMode: state.timerMode,
+    }) });
+    state.cloudFocusClientId = clientSessionId;
+    return true;
+  } catch (error) {
+    if (error.status === 402) openPaywall(error.message);
+    else if (error.status === 401 || error.status === 403) openAuthGate(error.message, "start-focus");
+    else if (error.status === 409 && error.message === "active_session_exists") showToast("检测到另一段专注仍在进行，请先回到原页面结束，或等待本轮结束后重试");
+    else if (error.status === 429) showToast("操作有些频繁，请稍等一分钟后重试");
+    else showToast("暂时无法开始专注，请稍后再试");
+    return false;
+  }
 }
 
 function currentRoomApiId() {
@@ -615,11 +822,46 @@ function createLocalNpcLeases({ excludeSeatIds = [] } = {}) {
   });
 }
 
+function reconcileLocalNpcRoster(leases = state.roomPresence.leases) {
+  const realLeases = leases.filter((lease) => lease.memberType !== "npc");
+  const occupiedSeatIds = new Set(realLeases.map((lease) => Number(lease.seatId)));
+  const stableRoster = state.localNpcRoster.filter((lease) => !occupiedSeatIds.has(Number(lease.seatId)));
+  const missingCount = Math.max(0, 2 - stableRoster.length);
+  if (!missingCount) {
+    state.localNpcRoster = stableRoster.slice(0, 2);
+    return;
+  }
+  const replacements = createLocalNpcLeases({
+    excludeSeatIds: [...occupiedSeatIds, ...stableRoster.map((lease) => Number(lease.seatId))],
+  }).slice(0, missingCount);
+  state.localNpcRoster = [...stableRoster, ...replacements].slice(0, 2);
+}
+
+function cafeSeatOccupancyLeases() {
+  const leasesBySeat = new Map();
+  state.roomPresence.leases.forEach((lease) => leasesBySeat.set(Number(lease.seatId), lease));
+  state.localNpcRoster.forEach((lease) => {
+    const seatId = Number(lease.seatId);
+    if (!leasesBySeat.has(seatId)) leasesBySeat.set(seatId, lease);
+  });
+  return [...leasesBySeat.values()];
+}
+
 async function enterCafeRoom() {
   if (state.isAllocatingRoom) return;
   state.isAllocatingRoom = true;
   showToast("正在为你准备咖啡馆座位…");
+  let access = null;
   try {
+    access = await getAccessStatus({ refresh: true });
+    if (!access.authenticated || !access.emailVerified) {
+      openAuthGate(access.paywallReason);
+      return;
+    }
+    if (!access.canStartFocus) {
+      openPaywall(access.paywallReason);
+      return;
+    }
     await ensureOnlineIdentity();
     const allocation = await api("/api/scenes/cafe/allocate", {
       method: "POST",
@@ -627,14 +869,21 @@ async function enterCafeRoom() {
     });
     state.roomId = allocation.roomId;
     state.localRoom = allocation.mode === "local";
-  } catch (_) {
-    state.roomId = "cafe-local";
-    state.localRoom = true;
-    showToast("在线房间暂不可用，已进入本地岛民房间");
+  } catch (error) {
+    if (access?.entitlementType === "offline_grace") {
+      state.roomId = "cafe-local";
+      state.localRoom = true;
+      showToast("在线服务暂不可用，已使用付费离线宽限进入本地岛民房间");
+    } else {
+    if (error.status === 401 || error.status === 403) openAuthGate(error.message);
+    else if (error.status === 402) openPaywall(error.message);
+    else showToast("暂时无法验证使用资格，请稍后再试");
+    return;
+    }
   } finally {
     state.isAllocatingRoom = false;
   }
-  state.localNpcRoster = state.localRoom ? createLocalNpcLeases() : [];
+  state.localNpcRoster = createLocalNpcLeases();
   state.roomPresence = state.localRoom
     ? { leases: [...state.localNpcRoster], serverNow: Date.now() }
     : { leases: [], serverNow: Date.now() };
@@ -645,7 +894,7 @@ async function enterCafeRoom() {
 }
 
 function leaseForSeat(seatIndex) {
-  return state.roomPresence.leases.find((lease) => Number(lease.seatId) === seatIndex + 1 && ["reserved", "moving", "occupied"].includes(lease.state)) || null;
+  return cafeSeatOccupancyLeases().find((lease) => Number(lease.seatId) === seatIndex + 1 && ["reserved", "moving", "occupied"].includes(lease.state)) || null;
 }
 
 function focusedMinutes(lease) {
@@ -682,12 +931,15 @@ function clearImmersiveAutoEnter({ resetState = true } = {}) {
   }
 }
 
-function startFocusFromSeat() {
+async function startFocusFromSeat() {
+  if (!await authorizeFocusStart()) return false;
   state.isRunning = true;
   state.sessionStartedAt = state.sessionStartedAt || Date.now();
   lastTick = Date.now();
   startTicker();
   updateAudio();
+  persistActiveSession(true);
+  return true;
 }
 
 function beginImmersiveAutoEnter() {
@@ -708,11 +960,11 @@ function beginImmersiveAutoEnter() {
   }, 250);
 }
 
-function enterImmersiveFocus() {
+async function enterImmersiveFocus() {
   if (state.sceneId !== "cafe" || state.selectedSeat === null) return;
   if (document.querySelector(".focus-transition-preview")) return;
   clearImmersiveAutoEnter();
-  if (!state.sessionStartedAt) startFocusFromSeat();
+  if (!state.sessionStartedAt && !await startFocusFromSeat()) return;
   const reduceMotion = preferences.reduceMotion || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const roomView = document.querySelector(".view.room");
   if (reduceMotion || !roomView) {
@@ -1328,9 +1580,7 @@ function applyCafeSpriteTuningToDom(seatId) {
 }
 
 function renderCafeSpriteTuningPanel() {
-  if (!state.cafeDebugMode.enabled) {
-    return `<button class="sprite-tuning-toggle" data-action="toggle-cafe-debug-mode">开发者调试模式</button>`;
-  }
+  if (!state.isDeveloper || !state.cafeDebugMode.enabled) return "";
   const objectId = state.cafeSceneEditor.activeObjectId;
   const objects = cafeEditorObjects();
   const activeObject = cafeEditorObjectById(objectId) || objects[0];
@@ -1457,9 +1707,7 @@ function renderLibrarySceneObjectLayers({ editor = false } = {}) {
 }
 
 function renderLibrarySceneEditorPanel() {
-  if (!state.libraryDebugMode.enabled) {
-    return `<button class="sprite-tuning-toggle" data-action="toggle-library-debug-mode">开发者调试模式</button>`;
-  }
+  if (!state.isDeveloper || !state.libraryDebugMode.enabled) return "";
   const objects = libraryEditorObjects();
   const activeObject = libraryEditorObjectById(state.librarySceneEditor.activeObjectId) || objects[0];
   if (!activeObject) {
@@ -1568,8 +1816,9 @@ async function syncCafeState({ refreshMarkers = true } = {}) {
   try {
     const presence = await api(`/api/rooms/${currentRoomApiId()}/state`);
     state.roomPresence = presence;
+    reconcileLocalNpcRoster(presence.leases);
     const ownLease = presence.leases.find((lease) => lease.sessionId === identity.sessionId && lease.state === "occupied");
-    state.currentSeatId = ownLease ? Number(ownLease.seatId) : null;
+    if (ownLease) state.currentSeatId = Number(ownLease.seatId);
     const room = scenes.cafe.rooms.find((item) => item.id === currentRoomApiId());
     const visibleLeases = cafeVisibleLeases(presence.leases);
     if (room) room.occupied = visibleLeases.length;
@@ -1653,10 +1902,65 @@ async function sendHeartbeat() {
     });
   } catch (error) {
     if (error.status === 404 || error.status === 409) {
-      state.currentSeatId = null;
-      showToast("座位连接已过期，请重新选座");
+      await recoverCafeSeat("heartbeat");
     }
   }
+}
+
+function currentSeatActivity() {
+  if (state.sessionPhase === "rest") return "休息中";
+  if (state.isRunning) return "专注计时中";
+  return "已入座";
+}
+
+async function recoverCafeSeat(source = "resume") {
+  if (seatRecoveryPromise) return seatRecoveryPromise;
+  if (document.hidden || state.sceneId !== "cafe" || state.localRoom || !state.currentSeatId) return false;
+  if (!["focus", "room"].includes(state.view)) return false;
+  const preferredRoomId = currentRoomApiId();
+  const preferredSeatId = Number(state.currentSeatId);
+  if (!preferredRoomId || !Number.isInteger(preferredSeatId)) return false;
+
+  seatRecoveryPromise = (async () => {
+    try {
+      const result = await api(`/api/sessions/${identity.sessionId}/resume`, {
+        method: "POST",
+        body: JSON.stringify({
+          preferredRoomId,
+          preferredSeatId,
+          displayName: identity.displayName,
+          avatarSkin: identity.avatarSkin,
+          activity: currentSeatActivity(),
+          focusing: state.isRunning,
+          focusStartedAt: state.sessionStartedAt,
+        }),
+      });
+      const previousRoomId = state.roomId;
+      state.roomId = result.roomId;
+      state.currentSeatId = Number(result.seatId);
+      state.selectedSeat = state.currentSeatId - 1;
+      state.switchingFromSeatId = null;
+      if (previousRoomId !== state.roomId) {
+        window.dispatchEvent(new CustomEvent("focus-island:subscribe-room", { detail: { roomId: state.roomId } }));
+      }
+      persistActiveSession(true);
+      await syncCafeState({ refreshMarkers: state.view === "room" });
+      return true;
+    } catch (error) {
+      if (error.status === 409 && error.message === "system_rooms_full") {
+        state.currentSeatId = null;
+        showToast("当前系统房间暂无空位，你的专注计时仍会保留");
+        if (state.view === "room") renderRoom();
+      } else {
+        const syncLabel = document.querySelector(".room-sync-label");
+        if (syncLabel) syncLabel.textContent = "正在重新连接…";
+      }
+      return false;
+    } finally {
+      seatRecoveryPromise = null;
+    }
+  })();
+  return seatRecoveryPromise;
 }
 
 async function releaseSeat({ beacon = false, force = false } = {}) {
@@ -1732,6 +2036,8 @@ function topbar({ back = null, right = true, showPresence = true } = {}) {
 }
 
 function render() {
+  landingExperienceCleanup?.();
+  landingExperienceCleanup = null;
   stopTickerIfNeeded();
   const isLanding = state.view === "welcome";
   document.body.classList.toggle("landing-mode", isLanding);
@@ -1815,6 +2121,7 @@ function renderPersonalCenter() {
     ["history", "▣", "专注记录"],
     ["preferences", "♪", "偏好设置"],
     ["account", "◇", "账户与数据"],
+    ...(state.isDeveloper ? [["developer", "⌘", "开发者工具"]] : []),
   ];
   const overlay = document.createElement("section");
   overlay.className = "personal-center-overlay";
@@ -1828,12 +2135,12 @@ function renderPersonalCenter() {
         <div class="personal-center-brand">${brand()}</div>
         <div class="personal-center-identity">
           ${profileAvatarMarkup("personal-center-avatar")}
-          <div><strong>${escapeHtml(localizedIdentityDisplayName(identity.displayName))}</strong><small>本地游客</small></div>
+          <div><strong>${escapeHtml(localizedIdentityDisplayName(identity.displayName))}</strong><small>岛上昵称</small></div>
         </div>
         <nav aria-label="个人中心">
           ${tabs.map(([id, icon, label]) => `<button type="button" class="personal-nav-button ${state.personalCenter.tab === id ? "is-active" : ""}" data-profile-tab="${id}" aria-current="${state.personalCenter.tab === id ? "page" : "false"}"><span aria-hidden="true">${icon}</span>${label}</button>`).join("")}
         </nav>
-        <p class="personal-center-local-note">身份、记录与偏好保存在本设备</p>
+        <p class="personal-center-local-note">Focus Isle v1.1 · 账号与记录云端同步</p>
       </aside>
       <main class="personal-center-main">
         <header class="personal-center-header">
@@ -1853,6 +2160,7 @@ function renderPersonalCenterContent() {
   if (state.personalCenter.tab === "history") return renderPersonalHistory();
   if (state.personalCenter.tab === "preferences") return renderPersonalPreferences();
   if (state.personalCenter.tab === "account") return renderPersonalAccount();
+  if (state.personalCenter.tab === "developer" && state.isDeveloper) return renderDeveloperTools();
   return renderPersonalOverview();
 }
 
@@ -1896,7 +2204,7 @@ function renderPersonalOverview() {
       <section class="profile-hero-card">
         <div class="profile-hero-identity">
           ${profileAvatarMarkup("profile-hero-avatar")}
-          <div><span>本地游客</span><h2>${escapeHtml(localizedIdentityDisplayName(identity.displayName))}</h2><p>你的身份和记录保存在这台设备中。</p></div>
+          <div><span>已验证账号</span><h2>${escapeHtml(localizedIdentityDisplayName(identity.displayName))}</h2><p>专注记录会保存到你的云端账号。</p></div>
         </div>
         <div class="profile-hero-actions"><button type="button" class="profile-text-button" data-profile-tab="account">编辑资料</button><button type="button" class="profile-primary-button" data-action="${primary.action}">${primary.label}<span aria-hidden="true">→</span></button></div>
       </section>
@@ -2028,24 +2336,62 @@ function renderPersonalPreferences() {
 function renderPersonalAccount() {
   const visibleId = onlineUserId || identity.guestId;
   const shortId = `${visibleId.slice(0, 8)}…${visibleId.slice(-4)}`;
-  const idLabel = onlineUserId ? "匿名账户 ID" : "本设备身份 ID";
+  const idLabel = onlineUserId ? "账号 ID" : "等待登录";
   const activeSession = hasActiveSeatSession();
+  const subscriptionActive = state.accessStatus?.entitlementType === "subscription";
+  const billingSummary = subscriptionActive
+    ? `订阅状态：${escapeHtml(state.accessStatus?.subscriptionStatus || "有效")}`
+    : state.accessStatus?.entitlementType === "lifetime"
+      ? "终身权益已生效，无需续订"
+      : state.accessStatus?.entitlementType === "admin"
+        ? "开发者账号由服务端角色授权"
+        : "当前没有付费订阅";
   return `
     <div class="profile-account-layout">
       <section class="profile-settings-card">
-        <div class="profile-settings-heading"><span>匿名游客资料</span><h2>你的岛上身份</h2></div>
+        <div class="profile-settings-heading"><span>账号资料</span><h2>你的岛上身份</h2></div>
         <label class="profile-name-field"><span>昵称</span><div><input type="text" maxlength="16" value="${escapeHtml(localizedIdentityDisplayName(identity.displayName))}" data-profile-name aria-describedby="profile-name-help" /><button type="button" data-action="save-profile-identity">保存昵称</button></div><small id="profile-name-help">1–16 个字符</small></label>
         <fieldset class="profile-avatar-field"><legend>选择角色</legend><div>${AVATAR_OPTIONS.map((avatar) => `<button type="button" class="profile-avatar-option ${identity.avatarSkin === avatar.id ? "is-active" : ""}" data-profile-avatar="${avatar.id}" aria-pressed="${identity.avatarSkin === avatar.id}"><span style="background-image:url('${avatar.image}')"></span><small>${avatar.name}</small></button>`).join("")}</div></fieldset>
         <div class="profile-local-id"><span>${idLabel}</span><code>${shortId}</code></div>
-        <p class="profile-storage-note">匿名账户用于安全分房和占座；偏好与专注记录仍保存在这台设备。未绑定可恢复登录方式前，清除浏览器数据后可能无法找回该账户。</p>
+        <p class="profile-storage-note">邮箱账号用于安全分房、试用资格与跨设备记录恢复；密码由 Supabase Auth 安全管理。</p>
+      </section>
+      <section class="profile-settings-card">
+        <div class="profile-settings-heading"><span>会员与账单</span><h2>Stripe 订阅管理</h2></div>
+        <div class="profile-data-action"><div><strong>${billingSummary}</strong><small>${subscriptionActive ? "在 Stripe Customer Portal 中更新付款方式、查看账单或取消订阅" : "购买月付或年付后，可在这里管理订阅"}</small></div><button type="button" data-action="open-billing-portal" ${subscriptionActive ? "" : "disabled"}>管理账单</button></div>
+      </section>
+      <section class="profile-settings-card profile-password-card">
+        <div class="profile-settings-heading"><span>账号安全</span><h2>修改登录密码</h2></div>
+        <form class="profile-password-form" data-account-form="password">
+          <label><span>当前密码</span><input type="password" name="currentPassword" autocomplete="current-password" required /></label>
+          <label><span>新密码</span><input type="password" name="password" autocomplete="new-password" minlength="10" required /></label>
+          <label><span>确认新密码</span><input type="password" name="confirmPassword" autocomplete="new-password" minlength="10" required /></label>
+          <small>至少 10 位，并同时包含大小写字母、数字和符号。</small>
+          <button type="submit">确认修改密码</button>
+        </form>
       </section>
       <section class="profile-settings-card profile-data-card">
         <div class="profile-settings-heading"><span>数据管理</span><h2>重置或清理本地数据</h2></div>
-        <div class="profile-data-action"><div><strong>恢复默认偏好</strong><small>不会删除游客身份、记录或当前会话</small></div><button type="button" data-confirm-profile="reset-preferences">恢复默认</button></div>
+        <div class="profile-data-action"><div><strong>恢复默认偏好</strong><small>不会删除账号、云端记录或当前会话</small></div><button type="button" data-confirm-profile="reset-preferences">恢复默认</button></div>
         <div class="profile-data-action"><div><strong>清空专注记录</strong><small>身份和偏好会继续保留</small></div><button type="button" data-confirm-profile="clear-history">清空记录</button></div>
-        <div class="profile-data-action is-danger"><div><strong>删除账户与本地数据</strong><small>${activeSession ? "请先结束当前专注，再执行此操作" : "匿名账户、偏好和记录都会被删除"}</small></div><button type="button" data-confirm-profile="delete-all" ${activeSession ? "disabled" : ""}>删除全部</button></div>
+        <div class="profile-data-action is-danger"><div><strong>删除账户与本地数据</strong><small>${activeSession ? "请先结束当前专注，再执行此操作" : "账号、云端记录、偏好和本地缓存都会被删除"}</small></div><button type="button" data-confirm-profile="delete-all" ${activeSession ? "disabled" : ""}>删除全部</button></div>
       </section>
     </div>`;
+}
+
+function renderDeveloperTools() {
+  const inCafeRoom = state.view === "room" && state.sceneId === "cafe";
+  return `<div class="profile-developer-layout">
+    <section class="profile-settings-card profile-developer-card">
+      <div class="profile-settings-heading"><span>DEVELOPER · SERVER AUTHORIZED</span><h2>场景编辑工具</h2></div>
+      <p>此入口只对 Supabase <code>app_metadata.role=developer</code> 的账号显示。编辑结果仍保存在当前设备，不会自动发布到生产环境。</p>
+      <div class="profile-data-action"><div><strong>咖啡厅场景编辑器</strong><small>${inCafeRoom ? "调整物件、人物、座位和层级" : "请先进入咖啡厅房间"}</small></div><button type="button" data-action="open-cafe-developer-editor" ${inCafeRoom ? "" : "disabled"}>打开编辑器</button></div>
+      <div class="profile-data-action"><div><strong>静态座位编号校准</strong><small>${inCafeRoom ? "拖动 1–6 号座位编号" : "请先进入咖啡厅房间"}</small></div><button type="button" data-action="open-static-seat-calibration" ${inCafeRoom ? "" : "disabled"}>开始校准</button></div>
+    </section>
+    <section class="profile-settings-card">
+      <div class="profile-settings-heading"><span>权限说明</span><h2>开发者账号与普通会员隔离</h2></div>
+      <p class="profile-storage-note">客户端不会根据邮箱或密码开启开发模式。退出该开发者账号后，所有开发入口立即隐藏；服务端角色同时授予测试专注权限。</p>
+    </section>
+  </div>`;
 }
 
 function renderPersonalCenterConfirm() {
@@ -2054,7 +2400,7 @@ function renderPersonalCenterConfirm() {
   const content = {
     "reset-preferences": ["恢复默认偏好？", "默认计时、声音、界面和提醒将恢复初始状态。", "恢复默认"],
     "clear-history": ["清空全部专注记录？", "此操作无法撤销，但不会影响身份、偏好或当前会话。", "清空记录"],
-    "delete-all": ["删除账户与全部本地数据？", "匿名账户、偏好和专注记录都会被删除，此操作无法撤销。", "确认删除"],
+    "delete-all": ["删除账户与全部数据？", "账号、云端专注记录、偏好和本地缓存都会被删除，此操作无法撤销。", "确认删除"],
   }[action];
   if (!content) return "";
   return `<div class="profile-confirm-backdrop" role="presentation"><div class="profile-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="profile-confirm-title"><span>请确认</span><h2 id="profile-confirm-title">${content[0]}</h2><p>${content[1]}</p><div><button type="button" data-action="cancel-profile-confirm">取消</button><button type="button" class="is-danger" data-action="execute-profile-confirm">${content[2]}</button></div></div></div>`;
@@ -2101,210 +2447,566 @@ async function executeProfileDataAction() {
     closePersonalCenter();
     state.view = "welcome";
     render();
-    showToast("账户与本地数据已删除，已生成新的游客身份");
+    showToast("账户与本地数据已删除");
   }
 }
 
-function renderWelcome() {
-  const feedbackAction = FEEDBACK_FORM_URL
-    ? `<a class="feedback-link" href="${FEEDBACK_FORM_URL}" target="_blank" rel="noopener noreferrer">去填写反馈&nbsp; ↗</a>`
-    : `<button class="feedback-link is-disabled" type="button" disabled>反馈通道准备中</button>`;
+function renderWelcomeLegacy() {
+  const english = window.FocusI18n?.getLanguage() === "en"
+    || (!window.FocusI18n && !/^zh\b/i.test(window.navigator.language || ""));
+  const copy = english ? {
+    brandTag: "A quiet place to begin",
+    navHow: "How it works",
+    navWhy: "Why it works",
+    navPricing: "Pricing",
+    navCta: "Try one session",
+    heroKicker: "A focus space for people who work alone",
+    heroTitle: "Make starting\nfeel lighter.",
+    heroBody: "Step into a quiet café, choose a seat, and let the room carry you from “I should start” to actually beginning.",
+    heroCta: "Start 25 minutes free",
+    heroSecondary: "See how it works",
+    heroNote: "No camera · No chat · Your first session is free",
+    openNow: "Open now",
+    cafe: "Four Seasons Café",
+    focusReady: "Your quiet table is ready",
+    focusMode: "FIRST SESSION · 25 MIN",
+    focusStatus: "Quiet company · no social pressure",
+    bridgeEyebrow: "THE HARDEST PART IS THE THRESHOLD",
+    bridgeTitle: "You may not need more discipline.\nYou may need somewhere to begin.",
+    bridgeBody: "A timer can count the minutes, but it cannot create the small transition between daily life and focused work. Focus Isle turns that transition into a place you can enter.",
+    bridgeA: "Leave the noise",
+    bridgeB: "Choose a seat",
+    bridgeC: "Begin one thing",
+    howEyebrow: "FROM INTENTION TO ACTION",
+    howTitle: "One island. One café.\nOne clear path into focus.",
+    howBody: "No room lists, character controls, or setup maze. This version keeps the journey intentionally short.",
+    step1Title: "Arrive on the island",
+    step1Body: "The café is the only open destination today, so there is nothing to compare or configure.",
+    step2Title: "Choose your seat",
+    step2Body: "We place you in a small six-seat café. Pick an open seat and settle into the quiet company around you.",
+    step3Title: "Let the interface disappear",
+    step3Body: "Choose 25 minutes and begin. Café ambience, white noise, and soft music stay under your control.",
+    howCta: "Take a seat",
+    presenceEyebrow: "PRESENCE WITHOUT PERFORMANCE",
+    presenceTitle: "Feel accompanied,\nwithout having to be seen.",
+    presenceBody: "Focus Isle keeps the comfort of a shared room and removes the parts that turn presence into pressure.",
+    noCamera: "No camera",
+    noCameraBody: "Show up exactly as you are. Nothing to prepare and no feeling of being watched.",
+    noChat: "No chat or DMs",
+    noChatBody: "No introductions, notifications, or expectation to reply while you work.",
+    noFeed: "No feed to perform for",
+    noFeedBody: "There are no streak competitions, status posts, or social tasks pulling you away.",
+    offerEyebrow: "TRY THE EXPERIENCE FIRST",
+    offerTitle: "Finish one real session.\nThen decide if it belongs in your day.",
+    offerBody: "Create an account when you begin. Your first 25-minute focus session is free; continued access uses one of the plans below.",
+    trial: "First session",
+    trialPrice: "$0",
+    trialLine: "One complete 25-minute session",
+    monthly: "Monthly",
+    monthlyPrice: "$4.99",
+    monthlyLine: "Flexible access to the core focus experience",
+    annual: "Annual",
+    annualPrice: "$19.99",
+    annualLine: "A quieter commitment for the whole year",
+    annualBadge: "Best value",
+    founder: "Founder lifetime",
+    founderPrice: "$39.99",
+    founderLine: "One-time payment while founder access remains available",
+    priceNote: "USD pricing. Taxes, eligibility, and final availability are confirmed in Stripe Checkout. Focus Isle is currently in beta.",
+    finalEyebrow: "YOUR NEXT 25 MINUTES",
+    finalTitle: "You do not need to fix the whole day.\nJust find a seat.",
+    finalBody: "Enter the café, let the room get quiet, and begin with the next small thing.",
+    finalCta: "Start my free session",
+    footerLine: "A quiet place to focus, with company and without interruption.",
+    privacy: "Privacy",
+    terms: "Terms",
+    beta: "Interactive beta · v1.1",
+  } : {
+    brandTag: "一个更容易开始的地方",
+    navHow: "如何使用",
+    navWhy: "为什么有效",
+    navPricing: "价格",
+    navCta: "免费试一次",
+    heroKicker: "为独自工作的人，准备的沉浸式专注空间",
+    heroTitle: "让开始专注，\n变得轻一点。",
+    heroBody: "走进一间安静的咖啡馆，选一个座位，让场景、声音和陪伴替你完成从“想做”到“开始做”的切换。",
+    heroCta: "免费开始 25 分钟",
+    heroSecondary: "看看它如何工作",
+    heroNote: "无需摄像头 · 没有聊天 · 第一次专注免费",
+    openNow: "当前开放",
+    cafe: "四时咖啡馆",
+    focusReady: "你的安静座位已经准备好",
+    focusMode: "首次体验 · 25 分钟",
+    focusStatus: "安静陪伴 · 没有社交压力",
+    bridgeEyebrow: "最难的不是坚持，而是跨过开始的门槛",
+    bridgeTitle: "你也许不缺自律。\n只是缺一个开始的地方。",
+    bridgeBody: "计时器可以计算分钟，却不能替你完成从日常生活切换到专注工作的那一步。专注岛把这一步，变成一个可以走进去的空间。",
+    bridgeA: "离开杂音",
+    bridgeB: "选一个座位",
+    bridgeC: "只开始一件事",
+    howEyebrow: "从想做，到真的开始",
+    howTitle: "一座岛，一间咖啡馆，\n一条清楚的专注路径。",
+    howBody: "没有房间列表、角色操控和复杂设置。当前版本刻意把进入专注的旅程缩短。",
+    step1Title: "抵达海岛",
+    step1Body: "咖啡馆是当前唯一开放的目的地，不需要比较，也不用做复杂选择。",
+    step2Title: "找个位置坐下",
+    step2Body: "系统会把你带进一间六座小咖啡馆。选一个空位，在安静的陪伴感里坐下。",
+    step3Title: "让界面退到身后",
+    step3Body: "选择 25 分钟并开始。咖啡馆环境、白噪音和轻音乐都可以独立控制。",
+    howCta: "去选一个座位",
+    presenceEyebrow: "有陪伴感，不需要表演",
+    presenceTitle: "有陪伴感，\n但你不必被看见。",
+    presenceBody: "专注岛保留身边有人一起安静做事的感觉，同时拿走那些会把陪伴变成压力的东西。",
+    noCamera: "不开摄像头",
+    noCameraBody: "不用整理自己，也不需要承担一直被注视的感觉。",
+    noChat: "没有聊天与私信",
+    noChatBody: "不必自我介绍，没有消息提醒，也没有必须及时回应的关系。",
+    noFeed: "没有需要经营的动态",
+    noFeedBody: "没有连胜排名、状态发布或社交任务把注意力从工作上拿走。",
+    offerEyebrow: "先体验，再决定",
+    offerTitle: "先完成一次真正的专注，\n再决定它是否适合你的日常。",
+    offerBody: "第一次开始时注册账号，可免费完成一次 25 分钟专注。继续使用时，再从下面的方案中选择。",
+    trial: "首次体验",
+    trialPrice: "$0",
+    trialLine: "一次完整的 25 分钟专注",
+    monthly: "月付",
+    monthlyPrice: "$4.99",
+    monthlyLine: "灵活使用当前核心专注体验",
+    annual: "年付",
+    annualPrice: "$19.99",
+    annualLine: "用更低成本保留一整年的专注空间",
+    annualBadge: "更划算",
+    founder: "创始终身版",
+    founderPrice: "$39.99",
+    founderLine: "创始权益仍开放时可一次性购买",
+    priceNote: "美元定价；税费、购买资格和最终可售状态以 Stripe Checkout 为准。专注岛当前处于内测阶段。",
+    finalEyebrow: "从接下来的 25 分钟开始",
+    finalTitle: "不需要修好一整天。\n先找个位置坐下。",
+    finalBody: "进入咖啡馆，让画面安静下来，从眼前最小的一件事开始。",
+    finalCta: "开始我的免费专注",
+    footerLine: "一个有人陪伴、互不打扰的沉浸式专注空间。",
+    privacy: "隐私政策",
+    terms: "服务条款",
+    beta: "可交互内测 · v1.1",
+  };
+
+  const lines = (value) => value.split("\n").map((line) => `<span>${line}</span>`).join("");
+  const logo = `
+    <span class="landing-brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="7" r="2.2" fill="currentColor" stroke="none" />
+        <path d="M4.5 16.2c2.1-3.1 4.6-4.7 7.5-4.7s5.4 1.6 7.5 4.7" />
+        <path d="M3.5 18.7c2.7-1.1 5.5-1.1 8.3 0s5.7 1.1 8.7-.1" />
+      </svg>
+    </span>`;
 
   app.innerHTML = `
-    <div class="landing-page">
-      <section class="view welcome welcome-hero" aria-labelledby="welcome-title">
-        <img class="scene-image" src="${islandImage}" alt="一座有城市、图书馆、森林、湖泊与雪山的宁静海岛" />
-        <div class="welcome-content">
-          <div class="welcome-kicker"><span class="presence-dot"></span>内部演示 · 画面中的陪伴角色均为岛民 NPC</div>
-          <h1 id="welcome-title">换一个地方，<br />开始专注。</h1>
-          <p class="welcome-subtitle">像进入游戏一样，去咖啡馆、图书馆或森林里找个位置坐下。有人陪伴，互不打扰。</p>
-          <div class="welcome-actions">
-            <button class="primary-button" data-action="enter-island">进入专注岛&nbsp; →</button>
-            <span class="welcome-note">无需摄像头 · 没有聊天 · 一键开始</span>
-          </div>
-        </div>
-        <button class="scroll-cue" data-action="scroll-story" aria-label="向下了解专注岛">
-          <span>向下了解专注岛</span><i aria-hidden="true">↓</i>
-        </button>
-        <span class="prototype-tag">MVP 可交互原型 · v0.6</span>
-      </section>
+    <div class="landing-page landing-v2" id="top">
+      <header class="landing-v2-nav">
+        <a class="landing-v2-brand" href="#top" aria-label="Focus Isle">
+          ${logo}<span><strong>${english ? "Focus Isle" : "专注岛"}</strong><small>${copy.brandTag}</small></span>
+        </a>
+        <nav aria-label="${english ? "Landing page" : "落地页导航"}">
+          <a href="#how">${copy.navHow}</a>
+          <a href="#why">${copy.navWhy}</a>
+          <a href="#pricing">${copy.navPricing}</a>
+        </nav>
+        <button class="landing-v2-nav-cta" data-action="enter-island">${copy.navCta}<span aria-hidden="true">↗</span></button>
+      </header>
 
-      <section class="landing-section problem-section" id="story" aria-labelledby="problem-title">
-        <div class="section-shell problem-grid">
-          <div class="section-heading">
-            <p class="landing-eyebrow">WHY FOCUS ISLE</p>
-            <h2 id="problem-title">你缺少的也许不是<br />另一个计时器。</h2>
-          </div>
-          <div class="problem-copy">
-            <p class="lead-copy">真正困难的，往往不是专注多久，而是如何开始。</p>
-            <p>在家工作或独自学习时，生活和任务之间没有清晰的边界。不是你不够自律，只是少了一个让身体和注意力都知道“现在要开始了”的地方。</p>
-            <p>专注岛想做的，就是把这段最难的切换，变成一次轻松的出发。</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="landing-section journey-section" aria-labelledby="journey-title">
-        <div class="section-shell">
-          <div class="center-heading">
-            <p class="landing-eyebrow">WHAT IT IS</p>
-            <h2 id="journey-title">一个不用开摄像头，<br />也不用和陌生人聊天的虚拟专注空间。</h2>
-            <p>从选择一个地方，到真正坐下来开始，只需要跟着感觉往前走。</p>
-          </div>
-          <div class="journey-track" aria-label="进入专注岛的四个步骤">
-            <figure class="journey-shot journey-shot-map">
-              <img src="${islandImage}" alt="专注岛地图，可选择不同的专注区域" loading="lazy" />
-              <figcaption><span>01</span><strong>选一个地方</strong><small>今天想去咖啡馆、图书馆，还是森林？</small></figcaption>
-            </figure>
-            <figure class="journey-shot journey-shot-room">
-              <img src="${scenes.cafe.image}" alt="四时咖啡馆房间内的座位与安静专注的岛民" loading="lazy" />
-              <figcaption><span>02</span><strong>走进一间房</strong><small>听听环境声，看看这里是不是今天需要的氛围。</small></figcaption>
-            </figure>
-            <figure class="journey-shot journey-shot-seat">
-              <img src="${ASSET_BASE}20261011-library-focus-room.png" alt="穹顶图书馆里的阅读座位" loading="lazy" />
-              <figcaption><span>03</span><strong>找个位置坐下</strong><small>看见有人也在认真做事，但不需要打招呼。</small></figcaption>
-            </figure>
-            <figure class="journey-shot journey-shot-focus">
-              <img src="${ASSET_BASE}20261012-cafe-window-focus-view.png" alt="咖啡馆临窗座位的沉浸式专注近景" loading="lazy" />
-              <figcaption><span>04</span><strong>开始专注</strong><small>画面安静下来，只留下计时、声音和正在做的事。</small></figcaption>
-            </figure>
-          </div>
-          <div class="section-action">
-            <button class="primary-button" data-action="enter-island">去岛上看看&nbsp; →</button>
-            <span>不用注册，先体验一次完整的专注旅程</span>
-          </div>
-        </div>
-      </section>
-
-      <section class="landing-section scenes-section" aria-labelledby="scenes-title">
-        <div class="section-shell">
-          <div class="section-heading scenes-heading">
-            <p class="landing-eyebrow">THREE PLACES, THREE MOODS</p>
-            <h2 id="scenes-title">今天的你，<br />适合哪一种地方？</h2>
-            <p>场景不是装饰。不同的光线、声音和空间感，会给开始这件事带来不同的阻力与节奏。</p>
-          </div>
-
-          <article class="scene-story scene-story-cafe">
-            <div class="scene-story-visual">
-              <img src="${scenes.cafe.image}" alt="四种光线氛围的四时咖啡馆" loading="lazy" />
-              <span class="scene-index">01 / CITY</span>
+      <main>
+        <section class="landing-v2-hero" aria-labelledby="welcome-title">
+          <div class="landing-v2-orb landing-v2-orb-a" aria-hidden="true"></div>
+          <div class="landing-v2-orb landing-v2-orb-b" aria-hidden="true"></div>
+          <div class="landing-v2-hero-copy">
+            <p class="landing-v2-eyebrow"><span></span>${copy.heroKicker}</p>
+            <h1 id="welcome-title">${lines(copy.heroTitle)}</h1>
+            <p class="landing-v2-lead">${copy.heroBody}</p>
+            <div class="landing-v2-actions">
+              <button class="landing-v2-primary" data-action="enter-island">${copy.heroCta}<span aria-hidden="true">→</span></button>
+              <a class="landing-v2-text-link" href="#how">${copy.heroSecondary}<span aria-hidden="true">↓</span></a>
             </div>
-            <div class="scene-story-copy">
-              <span class="scene-icon">${regionIcon("city")}</span>
-              <p class="landing-eyebrow">四时咖啡馆</p>
-              <h3>让生活的声音，<br />陪你轻轻开始。</h3>
-              <p>晴日、雨雾、黄昏和月夜会给开始带来不同的节奏。选一间今天最想待着的房间，让咖啡馆的日常声音陪你进入状态。</p>
-              <div class="sound-line"><span>环境声</span><strong>天气环境 · 咖啡馆底噪 · 偶尔杯碟声</strong></div>
+            <p class="landing-v2-note">${copy.heroNote}</p>
+          </div>
+
+          <div class="landing-v2-product" aria-label="${copy.cafe}">
+            <div class="landing-v2-product-frame">
+              <div class="landing-v2-product-bar"><i></i><i></i><i></i><span>focus-isle.app / café</span></div>
+              <img src="${scenes.cafe.image}" alt="${copy.cafe}" />
+              <div class="landing-v2-product-card">
+                <span>${copy.focusMode}</span>
+                <strong>25:00</strong>
+                <small>${copy.focusReady}</small>
+              </div>
+              <div class="landing-v2-open-pill"><span></span>${copy.openNow} · ${copy.cafe}</div>
             </div>
-          </article>
+            <p class="landing-v2-product-caption"><span>◌</span>${copy.focusStatus}</p>
+          </div>
+          <span class="landing-v2-version">${copy.beta}</span>
+        </section>
 
-          <article class="scene-story scene-story-library">
-            <div class="scene-story-visual">
-              <img src="${scenes.library.image}" alt="高窗与长桌构成的穹顶图书馆" loading="lazy" />
-              <span class="scene-index">02 / ACADEMY</span>
+        <section class="landing-v2-bridge" id="story" aria-labelledby="problem-title">
+          <div class="landing-v2-shell landing-v2-bridge-grid">
+            <div>
+              <p class="landing-v2-eyebrow">${copy.bridgeEyebrow}</p>
+              <h2 id="problem-title">${lines(copy.bridgeTitle)}</h2>
             </div>
-            <div class="scene-story-copy">
-              <span class="scene-icon">${regionIcon("academy")}</span>
-              <p class="landing-eyebrow">穹顶图书馆</p>
-              <h3>当你需要秩序，<br />就来一张安静的长桌。</h3>
-              <p>高窗把光铺在木桌上，翻页声很轻。明确、克制的空间感，适合阅读、备考、研究和那些需要慢慢做完的难题。</p>
-              <div class="sound-line"><span>环境声</span><strong>静谧室内 · 轻微翻页 · 壁炉声</strong></div>
+            <div class="landing-v2-bridge-copy">
+              <p>${copy.bridgeBody}</p>
+              <div class="landing-v2-threshold" aria-label="${copy.bridgeA}, ${copy.bridgeB}, ${copy.bridgeC}">
+                <span>01<small>${copy.bridgeA}</small></span><i>→</i>
+                <span>02<small>${copy.bridgeB}</small></span><i>→</i>
+                <span>03<small>${copy.bridgeC}</small></span>
+              </div>
             </div>
-          </article>
+          </div>
+        </section>
 
-          <article class="scene-story scene-story-forest">
-            <div class="scene-story-visual">
-              <img src="${scenes.forest.image}" alt="溪流、苔石与树木环绕的苔溪森林" loading="lazy" />
-              <span class="scene-index">03 / FOREST</span>
+        <section class="landing-v2-how" id="how" aria-labelledby="how-title">
+          <div class="landing-v2-shell">
+            <div class="landing-v2-section-head">
+              <div><p class="landing-v2-eyebrow">${copy.howEyebrow}</p><h2 id="how-title">${lines(copy.howTitle)}</h2></div>
+              <p>${copy.howBody}</p>
             </div>
-            <div class="scene-story-copy">
-              <span class="scene-icon">${regionIcon("forest")}</span>
-              <p class="landing-eyebrow">苔溪森林</p>
-              <h3>先让呼吸慢下来，<br />再让想法慢慢出现。</h3>
-              <p>溪流绕过苔石，风穿过树叶。自然、低压力的氛围，适合创作、思考、复盘和长时间的独立工作。</p>
-              <div class="sound-line"><span>环境声</span><strong>溪流 · 林间风 · 远处鸟鸣</strong></div>
+            <div class="landing-v2-steps">
+              <article>
+                <div class="landing-v2-step-visual"><img src="${islandImage}" alt="${copy.step1Title}" loading="lazy" /><span>01</span></div>
+                <h3>${copy.step1Title}</h3><p>${copy.step1Body}</p>
+              </article>
+              <article>
+                <div class="landing-v2-step-visual"><img src="${scenes.cafe.image}" alt="${copy.step2Title}" loading="lazy" /><span>02</span></div>
+                <h3>${copy.step2Title}</h3><p>${copy.step2Body}</p>
+              </article>
+              <article>
+                <div class="landing-v2-step-visual"><img src="${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.png" alt="${copy.step3Title}" loading="lazy" /><span>03</span></div>
+                <h3>${copy.step3Title}</h3><p>${copy.step3Body}</p>
+              </article>
             </div>
-          </article>
+            <div class="landing-v2-center-action"><button class="landing-v2-primary" data-action="enter-island">${copy.howCta}<span aria-hidden="true">→</span></button></div>
+          </div>
+        </section>
 
-          <p class="future-note">湖畔、海滨与雪山还在岛屿的远处。未来先去哪里，会听取岛民的真实感受。</p>
-        </div>
-      </section>
+        <section class="landing-v2-presence" id="why" aria-labelledby="presence-title">
+          <div class="landing-v2-shell">
+            <div class="landing-v2-presence-intro">
+              <p class="landing-v2-eyebrow">${copy.presenceEyebrow}</p>
+              <h2 id="presence-title">${lines(copy.presenceTitle)}</h2>
+              <p>${copy.presenceBody}</p>
+            </div>
+            <div class="landing-v2-principles">
+              <article><span>01</span><h3>${copy.noCamera}</h3><p>${copy.noCameraBody}</p></article>
+              <article><span>02</span><h3>${copy.noChat}</h3><p>${copy.noChatBody}</p></article>
+              <article><span>03</span><h3>${copy.noFeed}</h3><p>${copy.noFeedBody}</p></article>
+            </div>
+          </div>
+        </section>
 
-      <section class="landing-section philosophy-section" aria-labelledby="philosophy-title">
-        <div class="philosophy-glow" aria-hidden="true"></div>
-        <div class="section-shell philosophy-shell">
-          <div class="philosophy-heading">
-            <p class="landing-eyebrow">PRESENCE WITHOUT PRESSURE</p>
-            <h2 id="philosophy-title">有人陪伴，<br />互不打扰。</h2>
-            <p>我们想保留共同在场的安心感，同时拿走被看见、被回应和必须社交的压力。</p>
+        <section class="landing-v2-offer" id="pricing" aria-labelledby="pricing-title">
+          <div class="landing-v2-shell">
+            <div class="landing-v2-offer-head">
+              <p class="landing-v2-eyebrow">${copy.offerEyebrow}</p>
+              <h2 id="pricing-title">${lines(copy.offerTitle)}</h2>
+              <p>${copy.offerBody}</p>
+            </div>
+            <div class="landing-v2-price-grid">
+              <article class="landing-v2-price landing-v2-price-trial"><span>${copy.trial}</span><strong>${copy.trialPrice}</strong><p>${copy.trialLine}</p><button data-action="enter-island">${copy.navCta}<i>→</i></button></article>
+              <article class="landing-v2-price"><span>${copy.monthly}</span><strong>${copy.monthlyPrice}<small>/mo</small></strong><p>${copy.monthlyLine}</p></article>
+              <article class="landing-v2-price landing-v2-price-featured"><em>${copy.annualBadge}</em><span>${copy.annual}</span><strong>${copy.annualPrice}<small>/yr</small></strong><p>${copy.annualLine}</p></article>
+              <article class="landing-v2-price"><span>${copy.founder}</span><strong>${copy.founderPrice}</strong><p>${copy.founderLine}</p></article>
+            </div>
+            <p class="landing-v2-price-note">${copy.priceNote}</p>
           </div>
-          <div class="principle-list">
-            <article><span>01</span><div><h3>不打开摄像头</h3><p>不用整理自己，也不用承担持续被注视的压力。</p></div></article>
-            <article><span>02</span><div><h3>没有聊天与私信</h3><p>不需要认识任何人，也没有必须及时回应的信息。</p></div></article>
-            <article><span>03</span><div><h3>少一点设置</h3><p>先选地方、找位置坐下，再让注意力自然安静下来。</p></div></article>
-          </div>
-          <div class="design-flow" aria-label="专注岛的体验设计逻辑">
-            <div><span>进入仪式</span><strong>像进入游戏一样出发</strong></div>
-            <i aria-hidden="true">→</i>
-            <div><span>共同在场</span><strong>看见大家安静做事</strong></div>
-            <i aria-hidden="true">→</i>
-            <div><span>沉浸桌面</span><strong>界面主动退到身后</strong></div>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="landing-section value-section" aria-labelledby="value-title">
-        <div class="section-shell value-shell">
-          <div class="value-visual">
-            <img src="${ASSET_BASE}20261012-cafe-lounge-focus-view.png" alt="咖啡馆安静角落里的沉浸式专注桌面" loading="lazy" />
-            <p>“不需要努力变成另一个人。<br />只是换一个地方，重新开始。”</p>
+        <section class="landing-v2-final" aria-labelledby="final-cta-title">
+          <img src="${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.png" alt="" aria-hidden="true" loading="lazy" />
+          <div class="landing-v2-final-overlay"></div>
+          <div class="landing-v2-final-copy">
+            <p class="landing-v2-eyebrow">${copy.finalEyebrow}</p>
+            <h2 id="final-cta-title">${lines(copy.finalTitle)}</h2>
+            <p>${copy.finalBody}</p>
+            <button class="landing-v2-primary" data-action="enter-island">${copy.finalCta}<span aria-hidden="true">→</span></button>
           </div>
-          <div class="value-copy">
-            <p class="landing-eyebrow">WHAT WE HOPE YOU FEEL</p>
-            <h2 id="value-title">我们希望你在这里，<br />获得三件很轻的事。</h2>
-            <ol>
-              <li><span>01</span><div><strong>开始变得容易一点</strong><p>不用先把一切准备完美，先坐下，再做眼前的一小步。</p></div></li>
-              <li><span>02</span><div><strong>独处不再那么空</strong><p>你仍然拥有自己的空间，同时知道此刻有人也在认真生活。</p></div></li>
-              <li><span>03</span><div><strong>陪伴不成为打扰</strong><p>没有消息、表演或社交任务，注意力可以留给真正想完成的事。</p></div></li>
-            </ol>
-          </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      <section class="landing-section final-cta-section" aria-labelledby="final-cta-title">
-        <img src="${islandImage}" alt="" aria-hidden="true" loading="lazy" />
-        <div class="final-cta-overlay"></div>
-        <div class="final-cta-content">
-          <span class="free-badge">目前内测完全免费</span>
-          <h2 id="final-cta-title">今天，去岛上<br />找个位置坐下。</h2>
-          <p>不需要准备好一整天。只要从下一段专注开始。</p>
-          <button class="primary-button" data-action="enter-island">免费进入专注岛&nbsp; →</button>
-        </div>
-      </section>
-
-      <section class="feedback-section" aria-labelledby="feedback-heading">
-        <div class="section-shell feedback-shell">
-          <div>
-            <p class="landing-eyebrow">BUILD THE ISLAND WITH US</p>
-            <h2 id="feedback-heading">帮我们把这座岛建得更好。</h2>
-            <p>欢迎告诉我们：哪个场景让你更容易进入状态、哪一步还不够顺，以及你还想去怎样的空间。</p>
-          </div>
-          <div class="feedback-action">
-            ${feedbackAction}
-            <small>${FEEDBACK_FORM_URL ? "将在新标签页打开反馈表单" : "正式反馈表单正在准备，开放后会在这里出现"}</small>
-          </div>
-        </div>
-      </section>
-
-      <footer class="landing-footer">
-        <div class="section-shell">
-          ${brand()}
-          <p>一个有人陪伴、互不打扰的沉浸式专注空间。</p>
-          <p><a href="/privacy">隐私政策</a> · <a href="/terms">服务条款</a></p>
-          <button class="footer-enter" data-action="enter-island">进入专注岛&nbsp; →</button>
+      <footer class="landing-v2-footer">
+        <div class="landing-v2-shell">
+          <a class="landing-v2-brand" href="#top">${logo}<span><strong>${english ? "Focus Isle" : "专注岛"}</strong><small>${copy.brandTag}</small></span></a>
+          <p>${copy.footerLine}</p>
+          <div><a href="/privacy">${copy.privacy}</a><a href="/terms">${copy.terms}</a><button data-action="enter-island">${copy.navCta} →</button></div>
         </div>
       </footer>
     </div>`;
 }
+
+
+const LANDING_COPY = (() => {
+  const en = {
+    label:"English",navHow:"How it works",navWhy:"Why it works",navPricing:"Pricing",signIn:"Sign in",startFree:"Start free",heroKicker:"IMMERSIVE FOCUS SPACE",heroTitle:"Find Your Quiet.",heroLead:"Step onto the island and begin with 25 calm minutes.",heroCta:"Start 25 Minutes Free",heroMeta:"No camera · No chat · Your first session is free",explore:"SCROLL TO EXPLORE",cafe:"Café",academy:"Academy",lakeside:"Lakeside",seaside:"Seaside",snow:"Snowy Mountain",openNow:"OPEN NOW",comingSoon:"COMING SOON",whyKicker:"WHY FOCUS ISLE",whyTitle:"The hardest part isn't focus. It's starting.",whyBody:"Focus Isle turns the moment before work into a place you can enter—quiet, visual, and free from social pressure.",card1Title:"One island",card1Body:"A clear threshold between everyday noise and the work ahead.",card2Title:"Five places",card2Body:"Café, academy, lakeside, seaside, and snowy mountain—each with a different rhythm.",card3Title:"25 minutes",card3Body:"One calm first session. Enough time to begin without carrying the whole day.",howKicker:"HOW IT WORKS",howTitle:"Three gentle shifts into focus.",step1Title:"Choose a place",step1Body:"Start with the atmosphere you need today. The café is open now; more destinations are on the way.",step2Title:"Take a quiet seat",step2Body:"Enter a small room, choose an open seat, and settle in without cameras, chat, or introductions.",step3Title:"Let everything else disappear",step3Body:"Begin 25 minutes and keep only the timer, the ambience, and the work in front of you.",pricingKicker:"START FREE",pricingTitle:"Try one real session. Stay if it helps.",pricingBody:"Your first 25-minute focus session is free. Choose a plan only after you have felt the experience.",first:"First session",firstBody:"One complete 25-minute focus.",monthly:"Monthly",monthlyBody:"Flexible access to the core experience.",annual:"Annual",annualBody:"A quieter commitment for the year.",lifetime:"Founder lifetime",lifetimeBody:"One payment while founder access remains available.",finalTitle:"Your next 25 minutes can start here.",finalBody:"You do not need the whole day figured out. Just choose a place and begin.",finalCta:"Start My Free Session",privacy:"Privacy",terms:"Terms"
+  };
+  const languages = {
+    en,
+    "zh-CN": {...en,label:"简体中文",navHow:"如何使用",navWhy:"为什么有效",navPricing:"价格",signIn:"登录",startFree:"免费开始",heroKicker:"沉浸式专注空间",heroTitle:"找到你的安静。",heroLead:"登上专注岛，从平静的 25 分钟开始。",heroCta:"免费开始 25 分钟",heroMeta:"无需摄像头 · 没有聊天 · 第一次专注免费",explore:"向下探索",cafe:"咖啡馆",academy:"学院",lakeside:"湖畔",seaside:"海滨",snow:"雪山",openNow:"当前开放",comingSoon:"即将开放",whyKicker:"为什么选择专注岛",whyTitle:"最难的不是专注，而是开始。",whyBody:"专注岛把开始工作前的那一刻，变成一个可以进入的空间：安静、可感知，也没有社交压力。",card1Title:"一座岛",card1Body:"在日常杂音与眼前任务之间，建立一个清楚的入口。",card2Title:"五个地方",card2Body:"咖啡馆、学院、湖畔、海滨与雪山，每个地方都有不同节奏。",card3Title:"25 分钟",card3Body:"一次平静的首次专注，不需要背负一整天。",howKicker:"如何使用",howTitle:"三个温和的切换，进入专注。",step1Title:"选择一个地方",step1Body:"从今天需要的氛围开始。咖啡馆当前开放，更多地点正在准备。",step2Title:"找个安静座位",step2Body:"进入一间小房间，选一个空位，不开摄像头，也不需要聊天。",step3Title:"让其他东西退到身后",step3Body:"开始 25 分钟，只留下计时、环境声和眼前的事情。",pricingKicker:"免费开始",pricingTitle:"先完成一次真实专注，再决定是否留下。",pricingBody:"第一次 25 分钟专注免费。先体验，再选择适合的方案。",first:"首次体验",firstBody:"一次完整的 25 分钟专注。",monthly:"月付",monthlyBody:"灵活使用核心专注体验。",annual:"年付",annualBody:"用更低成本保留一整年。",lifetime:"创始终身版",lifetimeBody:"创始权益开放期间一次性购买。",finalTitle:"接下来的 25 分钟，可以从这里开始。",finalBody:"不必先想好一整天。选一个地方，然后开始。",finalCta:"开始我的免费专注",privacy:"隐私政策",terms:"服务条款"},
+    "zh-TW": {...en,label:"繁體中文",navHow:"如何使用",navWhy:"為什麼有效",navPricing:"價格",signIn:"登入",startFree:"免費開始",heroKicker:"沉浸式專注空間",heroTitle:"找到你的安靜。",heroLead:"登上專注島，從平靜的 25 分鐘開始。",heroCta:"免費開始 25 分鐘",heroMeta:"無需攝影機 · 沒有聊天 · 第一次專注免費",explore:"向下探索",cafe:"咖啡館",academy:"學院",lakeside:"湖畔",seaside:"海濱",snow:"雪山",openNow:"目前開放",comingSoon:"即將開放",whyKicker:"為什麼選擇專注島",whyTitle:"最難的不是專注，而是開始。",whyBody:"專注島把開始工作前的那一刻，變成一個可以進入的安靜空間。",howKicker:"如何使用",howTitle:"三個溫和的切換，進入專注。",pricingKicker:"免費開始",pricingTitle:"先完成一次真實專注，再決定是否留下。",finalTitle:"接下來的 25 分鐘，可以從這裡開始。",finalCta:"開始我的免費專注",privacy:"隱私政策",terms:"服務條款"},
+    ja: {...en,label:"日本語",navHow:"使い方",navWhy:"選ばれる理由",navPricing:"料金",signIn:"ログイン",startFree:"無料で始める",heroKicker:"没入型フォーカス空間",heroTitle:"自分の静けさを。",heroLead:"集中島に渡り、穏やかな25分から始めましょう。",heroCta:"25分間、無料で始める",heroMeta:"カメラ不要 · チャットなし · 初回セッション無料",explore:"下へスクロール",cafe:"カフェ",academy:"アカデミー",lakeside:"湖畔",seaside:"海辺",snow:"雪山",openNow:"営業中",comingSoon:"近日公開",whyKicker:"FOCUS ISLE の理由",whyTitle:"難しいのは集中ではなく、始めること。",whyBody:"仕事を始める直前の時間を、静かで視覚的な場所へ変えます。",howKicker:"使い方",howTitle:"集中へ向かう、三つの穏やかな切り替え。",pricingKicker:"無料で始める",pricingTitle:"まず一度、実際に集中してみましょう。",finalTitle:"次の25分は、ここから始められます。",finalCta:"無料セッションを始める"},
+    ko: {...en,label:"한국어",navHow:"이용 방법",navWhy:"효과가 있는 이유",navPricing:"요금",signIn:"로그인",startFree:"무료 시작",heroKicker:"몰입형 집중 공간",heroTitle:"나만의 고요를 찾으세요.",heroLead:"집중의 섬에 올라 평온한 25분으로 시작하세요.",heroCta:"25분 무료로 시작",heroMeta:"카메라 없음 · 채팅 없음 · 첫 집중 무료",explore:"아래로 탐색",cafe:"카페",academy:"아카데미",lakeside:"호숫가",seaside:"해변",snow:"설산",openNow:"현재 운영 중",comingSoon:"곧 공개",whyKicker:"FOCUS ISLE을 선택하는 이유",whyTitle:"어려운 건 집중이 아니라 시작입니다.",whyBody:"일을 시작하기 전의 순간을 조용하고 시각적인 공간으로 바꿉니다.",howKicker:"이용 방법",howTitle:"집중으로 이어지는 세 번의 부드러운 전환.",pricingKicker:"무료 시작",pricingTitle:"한 번 직접 집중해 보고 결정하세요.",finalTitle:"다음 25분은 여기서 시작할 수 있습니다.",finalCta:"무료 집중 시작"},
+    es: {...en,label:"Español",navHow:"Cómo funciona",navWhy:"Por qué funciona",navPricing:"Precios",signIn:"Entrar",startFree:"Empezar gratis",heroKicker:"ESPACIO DE CONCENTRACIÓN INMERSIVO",heroTitle:"Encuentra tu calma.",heroLead:"Llega a la isla y comienza con 25 minutos de calma.",heroCta:"Empieza 25 minutos gratis",heroMeta:"Sin cámara · Sin chat · Primera sesión gratis",explore:"DESLIZA PARA EXPLORAR",cafe:"Cafetería",academy:"Academia",lakeside:"Lago",seaside:"Costa",snow:"Montaña nevada",openNow:"ABIERTO",comingSoon:"PRÓXIMAMENTE",whyKicker:"POR QUÉ FOCUS ISLE",whyTitle:"Lo difícil no es concentrarse. Es empezar.",whyBody:"Focus Isle convierte el momento antes de trabajar en un lugar tranquilo al que puedes entrar.",howKicker:"CÓMO FUNCIONA",howTitle:"Tres cambios suaves hacia la concentración.",pricingKicker:"EMPIEZA GRATIS",pricingTitle:"Prueba una sesión real. Quédate si te ayuda.",finalTitle:"Tus próximos 25 minutos pueden empezar aquí.",finalCta:"Empezar mi sesión gratis"},
+    fr: {...en,label:"Français",navHow:"Comment ça marche",navWhy:"Pourquoi ça marche",navPricing:"Tarifs",signIn:"Connexion",startFree:"Commencer gratuitement",heroKicker:"ESPACE DE CONCENTRATION IMMERSIF",heroTitle:"Trouvez votre calme.",heroLead:"Rejoignez l’île et commencez par 25 minutes de calme.",heroCta:"Commencer 25 min gratuitement",heroMeta:"Sans caméra · Sans chat · Première session offerte",explore:"DÉFILER POUR EXPLORER",cafe:"Café",academy:"Académie",lakeside:"Bord du lac",seaside:"Bord de mer",snow:"Montagne enneigée",openNow:"OUVERT",comingSoon:"BIENTÔT",whyKicker:"POURQUOI FOCUS ISLE",whyTitle:"Le plus difficile n’est pas de se concentrer. C’est de commencer.",whyBody:"Focus Isle transforme l’instant avant le travail en un lieu calme où entrer.",howKicker:"COMMENT ÇA MARCHE",howTitle:"Trois transitions douces vers la concentration.",pricingKicker:"COMMENCER GRATUITEMENT",pricingTitle:"Essayez une vraie session. Restez si elle vous aide.",finalTitle:"Vos prochaines 25 minutes peuvent commencer ici.",finalCta:"Commencer ma session gratuite"},
+    de: {...en,label:"Deutsch",navHow:"So funktioniert es",navWhy:"Warum es wirkt",navPricing:"Preise",signIn:"Anmelden",startFree:"Kostenlos starten",heroKicker:"IMMERSIVER FOKUSRAUM",heroTitle:"Finde deine Ruhe.",heroLead:"Betritt die Insel und beginne mit 25 ruhigen Minuten.",heroCta:"25 Minuten kostenlos starten",heroMeta:"Keine Kamera · Kein Chat · Erste Sitzung kostenlos",explore:"NACH UNTEN ENTDECKEN",cafe:"Café",academy:"Akademie",lakeside:"Seeufer",seaside:"Küste",snow:"Schneeberg",openNow:"GEÖFFNET",comingSoon:"BALD",whyKicker:"WARUM FOCUS ISLE",whyTitle:"Das Schwerste ist nicht der Fokus. Es ist der Anfang.",whyBody:"Focus Isle macht aus dem Moment vor der Arbeit einen ruhigen Ort, den du betreten kannst.",howKicker:"SO FUNKTIONIERT ES",howTitle:"Drei sanfte Schritte in den Fokus.",pricingKicker:"KOSTENLOS STARTEN",pricingTitle:"Teste eine echte Sitzung. Bleib, wenn sie hilft.",finalTitle:"Deine nächsten 25 Minuten können hier beginnen.",finalCta:"Kostenlose Sitzung starten"},
+    pt: {...en,label:"Português",navHow:"Como funciona",navWhy:"Por que funciona",navPricing:"Preços",signIn:"Entrar",startFree:"Começar grátis",heroKicker:"ESPAÇO DE FOCO IMERSIVO",heroTitle:"Encontre sua calma.",heroLead:"Entre na ilha e comece com 25 minutos de calma.",heroCta:"Começar 25 minutos grátis",heroMeta:"Sem câmera · Sem chat · Primeira sessão grátis",explore:"ROLE PARA EXPLORAR",cafe:"Café",academy:"Academia",lakeside:"Lago",seaside:"Litoral",snow:"Montanha nevada",openNow:"ABERTO",comingSoon:"EM BREVE",whyKicker:"POR QUE FOCUS ISLE",whyTitle:"O mais difícil não é focar. É começar.",whyBody:"Focus Isle transforma o momento antes do trabalho em um lugar calmo para entrar.",howKicker:"COMO FUNCIONA",howTitle:"Três transições suaves para o foco.",pricingKicker:"COMEÇAR GRÁTIS",pricingTitle:"Experimente uma sessão real. Fique se ajudar.",finalTitle:"Seus próximos 25 minutos podem começar aqui.",finalCta:"Começar minha sessão grátis"}
+  };
+  return languages;
+})();
+
+const LANDING_FINAL_TEMPLATE = `
+<header class="site-nav" data-nav>
+  <a class="brand" href="#top" aria-label="Focus Isle">
+    <svg viewBox="0 0 128 128" fill="none" aria-hidden="true">
+      <circle cx="64" cy="64" r="50" stroke="currentColor" stroke-width="6"/>
+      <circle cx="64" cy="37" r="7" fill="#F3C978"/>
+      <path d="M64 49 46 76h36L64 49Z" fill="currentColor"/>
+      <path d="M42 64c5 10 12 15 22 15s17-5 22-15" stroke="#173D34" stroke-width="4.5" stroke-linecap="round"/>
+      <path d="M64 78c-13 0-24 5-34 15 13 4 24 2 34-4 10 6 21 8 34 4-10-10-21-15-34-15Z" fill="currentColor"/>
+      <path d="M35 101c10-3 19-3 29 0s19 3 29 0" stroke="#F3C978" stroke-width="4" stroke-linecap="round"/>
+    </svg>
+    <span>Focus Isle</span>
+  </a>
+  <nav class="nav-links" aria-label="Landing page navigation">
+    <a href="#how" data-i18n="navHow">How it works</a>
+    <a href="#why" data-i18n="navWhy">Why it works</a>
+    <a href="#pricing" data-i18n="navPricing">Pricing</a>
+  </nav>
+  <div class="nav-actions">
+    <div class="language" data-language>
+      <button class="language-toggle" type="button" aria-expanded="false" aria-haspopup="menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 4 6 4 9s-1 6-4 9c-3-3-4-6-4-9s1-6 4-9Z"/></svg>
+        <span data-language-label>English</span><span>⌄</span>
+      </button>
+      <ul class="language-menu" role="menu">
+        <li><button type="button" role="menuitem" data-lang="en"><span>EN</span><span>English</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="zh-CN"><span>CN</span><span>简体中文</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="zh-TW"><span>TW</span><span>繁體中文</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="ja"><span>JP</span><span>日本語</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="ko"><span>KR</span><span>한국어</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="es"><span>ES</span><span>Español</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="fr"><span>FR</span><span>Français</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="de"><span>DE</span><span>Deutsch</span><span>✓</span></button></li>
+        <li><button type="button" role="menuitem" data-lang="pt"><span>PT</span><span>Português</span><span>✓</span></button></li>
+      </ul>
+    </div>
+    <button type="button" class="sign-in" data-action="open-sign-in" data-i18n="signIn">Sign in</button>
+    <button type="button" class="nav-cta" data-action="enter-island" data-i18n="startFree">Start free</button>
+  </div>
+</header>
+
+<main>
+  <section class="hero" id="top">
+    <div class="hero-backdrop" aria-hidden="true"></div>
+    <div class="island-stage">
+      <img src="/assets/20261012-focus-island-map-detailed.png" alt="Focus Isle with a café village, academy, lake, seaside and snowy mountain" />
+      <button type="button" class="scene-marker marker-cafe" data-action="enter-island"><i>●</i><span data-i18n="cafe">Café</span><small data-i18n="openNow">OPEN NOW</small></button>
+      <button type="button" class="scene-marker marker-academy" data-action="locked"><i>●</i><span data-i18n="academy">Academy</span><small data-i18n="comingSoon">COMING SOON</small></button>
+      <button type="button" class="scene-marker marker-lake" data-action="locked"><i>●</i><span data-i18n="lakeside">Lakeside</span><small data-i18n="comingSoon">COMING SOON</small></button>
+      <button type="button" class="scene-marker marker-seaside" data-action="locked"><i>●</i><span data-i18n="seaside">Seaside</span><small data-i18n="comingSoon">COMING SOON</small></button>
+      <button type="button" class="scene-marker marker-snow" data-action="locked"><i>●</i><span data-i18n="snow">Snowy Mountain</span><small data-i18n="comingSoon">COMING SOON</small></button>
+    </div>
+    <div class="hero-shade" aria-hidden="true"></div>
+    <div class="hero-copy" data-hero-copy>
+      <p class="eyebrow" data-i18n="heroKicker">IMMERSIVE FOCUS SPACE</p>
+      <h1 id="welcome-title" data-i18n="heroTitle">Find Your Quiet.</h1>
+      <p class="hero-lead" data-i18n="heroLead">Step onto the island and begin with 25 calm minutes.</p>
+      <button type="button" class="primary" data-action="enter-island"><span data-i18n="heroCta">Start 25 Minutes Free</span><span aria-hidden="true">→</span></button>
+      <p class="hero-meta" data-i18n="heroMeta">No camera · No chat · Your first session is free</p>
+    </div>
+    <a class="scroll-cue" href="#why"><span data-i18n="explore">SCROLL TO EXPLORE</span></a>
+  </section>
+
+  <section class="why" id="why">
+    <div class="section-shell">
+      <div class="why-intro">
+        <p class="section-kicker" data-i18n="whyKicker">WHY FOCUS ISLE</p>
+        <h2 class="word-reveal" data-word-reveal data-i18n="whyTitle">The hardest part isn't focus. It's starting.</h2>
+        <p data-i18n="whyBody">Focus Isle turns the moment before work into a place you can enter—quiet, visual, and free from social pressure.</p>
+      </div>
+      <div class="truth-grid">
+        <article class="truth-card reveal"><span>01</span><strong data-i18n="card1Title">One island</strong><p data-i18n="card1Body">A clear threshold between everyday noise and the work ahead.</p></article>
+        <article class="truth-card reveal"><span>02</span><strong data-i18n="card2Title">Five places</strong><p data-i18n="card2Body">Café, academy, lakeside, seaside, and snowy mountain—each with a different rhythm.</p></article>
+        <article class="truth-card reveal"><span>03</span><strong data-i18n="card3Title">25 minutes</strong><p data-i18n="card3Body">One calm first session. Enough time to begin without carrying the whole day.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="how" id="how">
+    <div class="section-shell">
+      <p class="section-kicker" data-i18n="howKicker">HOW IT WORKS</p>
+      <h2 class="word-reveal" data-word-reveal data-dark-words data-i18n="howTitle">Three gentle shifts into focus.</h2>
+      <div class="feature-list">
+        <article class="feature-row reveal"><div class="feature-visual"><img src="/assets/20261012-focus-island-map-detailed.png" alt="Focus Isle map" loading="lazy" /></div><div class="feature-copy"><span>01</span><h3 data-i18n="step1Title">Choose a place</h3><p data-i18n="step1Body">Start with the atmosphere you need today. The café is open now; more destinations are on the way.</p></div></article>
+        <article class="feature-row reveal"><div class="feature-visual"><img src="/assets/20261028-cafe-room-static-seat-master.png" alt="Warm six-seat café" loading="lazy" /></div><div class="feature-copy"><span>02</span><h3 data-i18n="step2Title">Take a quiet seat</h3><p data-i18n="step2Body">Enter a small room, choose an open seat, and settle in without cameras, chat, or introductions.</p></div></article>
+        <article class="feature-row reveal"><div class="feature-visual"><img src="/assets/20261028-cafe-rain-clearing-focus-view.png" alt="Immersive café focus view" loading="lazy" /></div><div class="feature-copy"><span>03</span><h3 data-i18n="step3Title">Let everything else disappear</h3><p data-i18n="step3Body">Begin 25 minutes and keep only the timer, the ambience, and the work in front of you.</p></div></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="pricing" id="pricing">
+    <div class="section-shell">
+      <div class="pricing-head">
+        <p class="section-kicker" data-i18n="pricingKicker">START FREE</p>
+        <h2 class="word-reveal" data-word-reveal data-i18n="pricingTitle">Try one real session. Stay if it helps.</h2>
+        <p data-i18n="pricingBody">Your first 25-minute focus session is free. Choose a plan only after you have felt the experience.</p>
+      </div>
+      <div class="price-grid">
+        <button type="button" class="price-card reveal" data-action="enter-island"><span data-i18n="first">First session</span><strong>$0</strong><p data-i18n="firstBody">One complete 25-minute focus.</p></button>
+        <button type="button" class="price-card reveal" data-billing-plan="plus_monthly"><span data-i18n="monthly">Monthly</span><strong>$4.99</strong><p data-i18n="monthlyBody">Flexible access to the core experience.</p></button>
+        <button type="button" class="price-card is-featured reveal" data-billing-plan="plus_annual"><span data-i18n="annual">Annual</span><strong>$19.99</strong><p data-i18n="annualBody">A quieter commitment for the year.</p></button>
+        <button type="button" class="price-card reveal" data-billing-plan="founder_lifetime"><span data-i18n="lifetime">Founder lifetime</span><strong>$39.99</strong><p data-i18n="lifetimeBody">One payment while founder access remains available.</p></button>
+      </div>
+    </div>
+  </section>
+
+  <section class="final-cta">
+    <img src="/assets/20261028-cafe-rain-clearing-focus-view.png" alt="" aria-hidden="true" loading="lazy" />
+    <div class="final-copy reveal"><h2 data-i18n="finalTitle">Your next 25 minutes can start here.</h2><p data-i18n="finalBody">You do not need the whole day figured out. Just choose a place and begin.</p><button type="button" class="primary" data-action="enter-island"><span data-i18n="finalCta">Start My Free Session</span><span aria-hidden="true">→</span></button></div>
+  </section>
+</main>
+
+<footer class="footer"><div class="section-shell"><a class="brand" href="#top">Focus Isle</a><div class="footer-links"><a href="/privacy" data-i18n="privacy">Privacy</a><a href="/terms" data-i18n="terms">Terms</a></div></div></footer>
+<p class="sr-only" aria-live="polite" data-live></p>
+`;
+
+let landingExperienceCleanup = null;
+
+function currentLandingLanguage() {
+  const saved = localStorage.getItem("focusIsleLandingLanguage");
+  return LANDING_COPY[saved] ? saved : "en";
+}
+
+function prepareLandingWords(root, updateScroll) {
+  root.querySelectorAll("[data-word-reveal]").forEach((heading) => {
+    const text = heading.textContent.trim();
+    heading.innerHTML = text.split(/\s+/).map((word) => `<span>${escapeHtml(word)}</span>`).join(" ");
+  });
+  updateScroll();
+}
+
+function applyLandingLanguage(code, { announce = false, updateScroll = () => {} } = {}) {
+  const root = document.querySelector(".landing-final");
+  if (!root) return;
+  const language = LANDING_COPY[code] ? code : "en";
+  const copy = LANDING_COPY[language];
+  root.querySelectorAll("[data-i18n]").forEach((node) => {
+    const value = copy[node.dataset.i18n];
+    if (value) node.textContent = value;
+  });
+  const label = root.querySelector("[data-language-label]");
+  if (label) label.textContent = copy.label;
+  root.querySelectorAll("[data-lang]").forEach((button) => {
+    button.setAttribute("aria-current", String(button.dataset.lang === language));
+  });
+  localStorage.setItem("focusIsleLandingLanguage", language);
+  const productLanguage = language === "zh-CN" ? "zh-CN" : "en";
+  if (preferences.language !== productLanguage) {
+    preferences.language = productLanguage;
+    savePreferences();
+    window.FocusI18n?.setLanguage(productLanguage);
+  }
+  document.documentElement.lang = language;
+  document.title = language === "zh-CN" ? "专注岛 · 找到你的安静" : "Focus Isle · Find Your Quiet";
+  const description = document.querySelector('meta[name="description"]');
+  if (description) description.content = copy.heroLead;
+  if (announce) {
+    const live = root.querySelector("[data-live]");
+    if (live) live.textContent = copy.label;
+  }
+  root.querySelector("[data-language]")?.classList.remove("is-open");
+  root.querySelector(".language-toggle")?.setAttribute("aria-expanded", "false");
+  prepareLandingWords(root, updateScroll);
+}
+
+function initLandingExperience() {
+  const root = document.querySelector(".landing-final");
+  if (!root) return;
+  const nav = root.querySelector("[data-nav]");
+  const languageRoot = root.querySelector("[data-language]");
+  const toggle = root.querySelector(".language-toggle");
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let observer = null;
+  let ticking = false;
+
+  const clampValue = (value, min, max) => Math.min(max, Math.max(min, value));
+  const updateScroll = () => {
+    ticking = false;
+    const y = scrollY;
+    nav?.classList.toggle("is-scrolled", y > 36);
+    root.style.setProperty("--hero-progress", reduceMotion ? "0" : String(clampValue(y / (innerHeight * 0.65), 0, 1)));
+    root.querySelectorAll("[data-word-reveal]").forEach((heading) => {
+      const rect = heading.getBoundingClientRect();
+      const progress = reduceMotion ? 1 : clampValue((innerHeight * 0.88 - rect.top) / (innerHeight * 0.62), 0, 1);
+      const words = [...heading.querySelectorAll("span")];
+      words.forEach((word, index) => {
+        const start = index / Math.max(words.length, 1) * 0.72;
+        const local = clampValue((progress - start) / 0.24, 0, 1);
+        word.style.color = heading.hasAttribute("data-dark-words")
+          ? `rgba(23,61,52,${0.18 + local * 0.82})`
+          : `rgba(255,255,255,${0.2 + local * 0.8})`;
+      });
+    });
+  };
+  const onScroll = () => {
+    if (!ticking) {
+      ticking = true;
+      requestAnimationFrame(updateScroll);
+    }
+  };
+  const setMenu = (open) => {
+    languageRoot?.classList.toggle("is-open", open);
+    toggle?.setAttribute("aria-expanded", String(open));
+  };
+  const onToggle = () => setMenu(!languageRoot?.classList.contains("is-open"));
+  const onLanguageClick = (event) => {
+    const button = event.currentTarget;
+    applyLandingLanguage(button.dataset.lang, { announce: true, updateScroll });
+  };
+  const onDocumentClick = (event) => {
+    if (languageRoot && !languageRoot.contains(event.target)) setMenu(false);
+  };
+  const onDocumentKeydown = (event) => {
+    if (event.key === "Escape") setMenu(false);
+  };
+
+  toggle?.addEventListener("click", onToggle);
+  root.querySelectorAll("[data-lang]").forEach((button) => button.addEventListener("click", onLanguageClick));
+  document.addEventListener("click", onDocumentClick);
+  document.addEventListener("keydown", onDocumentKeydown);
+  addEventListener("scroll", onScroll, { passive: true });
+  addEventListener("resize", updateScroll, { passive: true });
+
+  observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add("is-visible");
+      observer?.unobserve(entry.target);
+    }
+  }), { threshold: 0.16, rootMargin: "0px 0px -8%" });
+  root.querySelectorAll(".reveal").forEach((node) => observer.observe(node));
+  applyLandingLanguage(currentLandingLanguage(), { updateScroll });
+
+  landingExperienceCleanup = () => {
+    toggle?.removeEventListener("click", onToggle);
+    root.querySelectorAll("[data-lang]").forEach((button) => button.removeEventListener("click", onLanguageClick));
+    document.removeEventListener("click", onDocumentClick);
+    document.removeEventListener("keydown", onDocumentKeydown);
+    removeEventListener("scroll", onScroll);
+    removeEventListener("resize", updateScroll);
+    observer?.disconnect();
+  };
+}
+
+function renderWelcome() {
+  app.innerHTML = `<div class="landing-final" data-no-auto-i18n>${LANDING_FINAL_TEMPLATE}</div>`;
+  requestAnimationFrame(initLandingExperience);
+}
+
 
 function renderIsland() {
   app.innerHTML = `
@@ -2510,11 +3212,10 @@ function renderStaticCafeOccupants() {
     const minutes = focusedMinutes(lease);
     const status = lease.focusStartedAt ? `已专注 ${minutes} 分钟` : "已入座";
     const displayName = escapeHtml(String(lease.displayName || "安静旅人").replace(/^岛民\s*[·・]\s*/, ""));
-    const entering = mine && state.awaitingImmersiveFocus;
     const [left, top, width, height] = slot.occupant_anchor;
     const [labelLeft, labelTop] = slot.label_anchor;
     return `
-      <div class="static-seat-occupant ${mine ? "is-mine" : ""} ${entering ? "is-entering" : ""}" style="--left:${left}%;--top:${top}%;--width:${width}%;--height:${height}%;--avatar:${Number(lease.avatarSkin || 0)};${slot.flip ? "--flip:-1;" : ""}">
+      <div class="static-seat-occupant ${mine ? "is-mine" : ""}" style="--left:${left}%;--top:${top}%;--width:${width}%;--height:${height}%;--avatar:${Number(lease.avatarSkin || 0)};${slot.flip ? "--flip:-1;" : ""}">
         <span class="static-seat-avatar" style="background-image:url('${slot.occupied_asset}')" aria-hidden="true"></span>
       </div>
       <div class="static-seat-label ${mine ? "is-mine" : ""} ${npc ? "is-npc" : ""}" style="left:${labelLeft}%;top:${labelTop}%">
@@ -2531,10 +3232,10 @@ function renderStaticCafeRoom() {
     <section class="view room static-seat-room ${state.staticSeatCalibration.enabled ? "is-static-seat-calibration" : ""}">
       ${topbar({ back: "back-island", showPresence: false })}
       ${state.currentSeatId && state.sessionStartedAt && !awaitingImmersive ? renderSessionHud("room") : ""}
-      <aside class="static-seat-calibration-tools" aria-label="座位编号校准工具">
-        <button type="button" data-action="toggle-static-seat-calibration">${state.staticSeatCalibration.enabled ? "完成编号调整" : "开发者 · 调整编号"}</button>
-        ${state.staticSeatCalibration.enabled ? `<span>直接拖动 1–6 号编号</span><button type="button" data-action="reset-static-seat-markers">恢复默认</button>` : ""}
-      </aside>
+      ${state.isDeveloper && state.staticSeatCalibration.enabled ? `<aside class="static-seat-calibration-tools" aria-label="座位编号校准工具">
+        <button type="button" data-action="toggle-static-seat-calibration">完成编号调整</button>
+        <span>直接拖动 1–6 号编号</span><button type="button" data-action="reset-static-seat-markers">恢复默认</button>
+      </aside>` : ""}
       <div class="room-stage">
         <img class="scene-image" src="${scenes.cafe.image}" alt="四时咖啡馆六座静态房间" />
         <div class="room-title">${regionIcon("city", "room-region-icon")}<span>四时咖啡馆 · ${roomMode}</span></div>
@@ -2609,8 +3310,8 @@ function renderRoom() {
             <button class="primary-button" data-action="${primaryAction}" ${primaryDisabled ? "disabled" : ""}>${primaryText}</button>
           </div>
         </div>
-        ${animatedCafe ? renderCafeSpriteTuningPanel() : ""}
-        ${editableLibrary ? renderLibrarySceneEditorPanel() : ""}
+        ${animatedCafe && state.isDeveloper ? renderCafeSpriteTuningPanel() : ""}
+        ${editableLibrary && state.isDeveloper ? renderLibrarySceneEditorPanel() : ""}
       </div>
     </section>`;
   if (animatedCafe) requestAnimationFrame(() => startCafePresence());
@@ -3052,7 +3753,14 @@ function formatTime() {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function setTimerMode(mode) {
+async function setTimerMode(mode) {
+  if ((mode === 0 || mode === 50) && !["subscription", "lifetime", "admin", "offline_grace"].includes(state.accessStatus?.entitlementType)) {
+    const access = await getAccessStatus({ refresh: true }).catch(() => null);
+    if (!access || !["subscription", "lifetime", "admin", "offline_grace"].includes(access.entitlementType)) {
+      openPaywall("paid_timer_mode_required");
+      return;
+    }
+  }
   if (state.isRunning) syncTimerFromClock();
   state.sessionPhase = "focus";
   state.timerMode = mode;
@@ -3067,7 +3775,7 @@ function setTimerMode(mode) {
   else renderFocus();
 }
 
-function toggleTimer() {
+async function toggleTimer() {
   const timerHadStarted = Boolean(state.sessionStartedAt);
   if (state.isRunning) {
     syncTimerFromClock();
@@ -3076,6 +3784,7 @@ function toggleTimer() {
     suspendAudio();
     persistActiveSession(true);
   } else {
+    if (!timerHadStarted && !await authorizeFocusStart()) return;
     state.isRunning = true;
     state.sessionStartedAt = state.sessionStartedAt || Date.now();
     lastTick = Date.now();
@@ -3167,6 +3876,13 @@ async function finishSession(forcedStatus = null) {
   stopAudio();
   const status = forcedStatus || (state.elapsedSeconds === 0 ? "not_started" : state.timerMode <= 0 ? "free_completed" : "ended_early");
   state.sessionResult = buildSessionResult(status);
+  if (state.cloudFocusClientId) {
+    const cloudStatus = status === "completed" || status === "free_completed" ? "completed" : status === "not_started" ? "interrupted" : "ended_early";
+    await api(`/api/focus/sessions/${encodeURIComponent(state.cloudFocusClientId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: cloudStatus, actualSeconds: state.elapsedSeconds, pausedSeconds: 0 }),
+    }).catch(() => {});
+  }
   if (state.elapsedSeconds > 0) saveSessionResult(state.sessionResult);
   if (status === "completed" && [25, 50].includes(state.timerMode)) {
     notifyFocusComplete();
@@ -3207,25 +3923,36 @@ function setRestDuration(minutes) {
   renderFocus();
 }
 
-function startNextFocusSession() {
+async function startNextFocusSession() {
+  state.cloudFocusClientId = null;
   stopTicker();
   state.sessionPhase = "focus";
   state.timerMode = [25, 50].includes(state.nextFocusMode) ? state.nextFocusMode : 25;
   state.durationSeconds = state.timerMode * 60;
   state.remainingSeconds = state.durationSeconds;
   state.elapsedSeconds = 0;
-  state.sessionStartedAt = Date.now();
+  state.sessionStartedAt = null;
   state.sessionResult = null;
   state.restStartedAt = null;
   state.restCustomOpen = false;
-  state.isRunning = true;
+  state.isRunning = false;
   state.sessionPanelOpen = false;
-  lastTick = Date.now();
-  document.title = "专注中 · 专注岛";
+  lastTick = null;
+  document.title = "准备专注 · 专注岛";
   renderFocus();
+  if (!await authorizeFocusStart()) {
+    persistActiveSession(true);
+    return;
+  }
+  state.sessionStartedAt = Date.now();
+  state.isRunning = true;
+  lastTick = state.sessionStartedAt;
+  document.title = "专注中 · 专注岛";
+  startTicker();
   updateAudio();
   persistActiveSession(true);
   sendHeartbeat();
+  renderFocus();
 }
 
 function notifyFocusComplete() {
@@ -3256,6 +3983,7 @@ function notifyFocusComplete() {
 function buildSessionResult(status) {
   return {
     id: `${state.sessionStartedAt || Date.now()}-${state.sceneId}-${state.roomId}`,
+    clientSessionId: state.cloudFocusClientId,
     sceneId: state.sceneId,
     roomId: state.roomId,
     seat: state.selectedSeat,
@@ -3307,6 +4035,7 @@ function persistActiveSession(force = false) {
     restStartedAt: state.restStartedAt,
     nextFocusMode: state.nextFocusMode,
     sessionStartedAt: state.sessionStartedAt,
+    cloudFocusClientId: state.cloudFocusClientId,
     companions: state.companions,
     focusImageChoice: state.focusImageChoice,
     sounds: state.sounds,
@@ -3341,6 +4070,7 @@ function restoreActiveSession() {
       restCustomOpen: false,
       nextFocusMode: [25, 50].includes(Number(saved.nextFocusMode)) ? Number(saved.nextFocusMode) : 25,
       sessionStartedAt: saved.sessionStartedAt,
+      cloudFocusClientId: saved.cloudFocusClientId || null,
       companions: saved.companions || 6,
       focusImageChoice: saved.focusImageChoice || "window",
       sounds: { ...state.sounds, ...saved.sounds },
@@ -3365,6 +4095,8 @@ function restoreActiveSession() {
         }],
         serverNow: Date.now(),
       };
+    } else {
+      state.localNpcRoster = createLocalNpcLeases({ excludeSeatIds: [saved.selectedSeat + 1] });
     }
     if (state.sessionPhase === "rest") {
       const offlineSeconds = Math.max(0, Math.floor((Date.now() - saved.savedAt) / 1000));
@@ -3414,6 +4146,7 @@ function resetTimerState({ keepMode = true } = {}) {
   state.remainingSeconds = state.durationSeconds;
   state.elapsedSeconds = 0;
   state.sessionStartedAt = null;
+  state.cloudFocusClientId = null;
   state.sessionResult = null;
   state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
   state.restRemainingSeconds = state.restDurationSeconds;
@@ -3849,14 +4582,14 @@ document.addEventListener("click", (event) => {
   }
 
   const seatMarkerElement = event.target.closest("[data-cafe-seat-marker-object]");
-  if (seatMarkerElement && state.cafeDebugMode.enabled) {
+  if (seatMarkerElement && state.isDeveloper && state.cafeDebugMode.enabled) {
     state.cafeSceneEditor.activeObjectId = seatMarkerElement.dataset.cafeSeatMarkerObject;
     renderRoom();
     return;
   }
 
   const librarySeatMarkerElement = event.target.closest("[data-library-seat-marker-object]");
-  if (librarySeatMarkerElement && state.libraryDebugMode.enabled) {
+  if (librarySeatMarkerElement && state.isDeveloper && state.libraryDebugMode.enabled) {
     state.librarySceneEditor.activeObjectId = librarySeatMarkerElement.dataset.librarySeatMarkerObject;
     renderRoom();
     return;
@@ -3964,6 +4697,36 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const billingButton = event.target.closest("[data-billing-plan]");
+  if (billingButton) {
+    billingButton.disabled = true;
+    billingButton.classList.add("is-loading");
+    api("/api/billing/checkout", { method: "POST", body: JSON.stringify({ plan: billingButton.dataset.billingPlan }) })
+      .then(({ checkoutUrl }) => { window.location.assign(checkoutUrl); })
+      .catch((error) => {
+        billingButton.disabled = false;
+        billingButton.classList.remove("is-loading");
+        if (error.status === 401 || error.status === 403) openAuthGate(error.message);
+        else if (error.message === "founder_lifetime_unavailable") showToast("创始终身版当前不可购买");
+        else if (error.message === "billing_price_mismatch") showToast("价格校验未通过，已安全阻止打开结账页");
+        else if (error.message === "billing_plan_not_configured") showToast("该方案尚未绑定 Stripe Price");
+        else showToast("暂时无法打开结账页");
+      });
+    return;
+  }
+
+  const billingPortalButton = event.target.closest('[data-action="open-billing-portal"]');
+  if (billingPortalButton) {
+    billingPortalButton.disabled = true;
+    api("/api/billing/portal", { method: "POST", body: "{}" })
+      .then(({ portalUrl }) => { window.location.assign(portalUrl); })
+      .catch(() => {
+        billingPortalButton.disabled = false;
+        showToast("暂时无法打开 Stripe 账单管理");
+      });
+    return;
+  }
+
   const profileMonthButton = event.target.closest("[data-profile-month-delta]");
   if (profileMonthButton) {
     const [year, month] = state.personalCenter.monthKey.split("-").map(Number);
@@ -4057,14 +4820,14 @@ document.addEventListener("click", (event) => {
   }
 
   const sceneObjectElement = event.target.closest("[data-cafe-scene-object]");
-  if (sceneObjectElement && state.cafeDebugMode.enabled) {
+  if (sceneObjectElement && state.isDeveloper && state.cafeDebugMode.enabled) {
     state.cafeSceneEditor.activeObjectId = sceneObjectElement.dataset.cafeSceneObject;
     renderRoom();
     return;
   }
 
   const libraryObjectElement = event.target.closest("[data-library-scene-object]");
-  if (libraryObjectElement && state.libraryDebugMode.enabled) {
+  if (libraryObjectElement && state.isDeveloper && state.libraryDebugMode.enabled) {
     state.librarySceneEditor.activeObjectId = libraryObjectElement.dataset.librarySceneObject;
     renderRoom();
     return;
@@ -4073,6 +4836,8 @@ document.addEventListener("click", (event) => {
   const actionElement = event.target.closest("[data-action]");
   if (!actionElement) return;
   const action = actionElement.dataset.action;
+  const developerAction = /(?:cafe|library)-(?:debug|scene|sprite)|static-seat|publish-(?:cafe|library)|select-(?:cafe|library)|nudge-(?:cafe|library)|flip-(?:cafe|library)|duplicate-(?:cafe|library)|delete-(?:cafe|library)|reset-(?:cafe|library)|copy-(?:cafe|library)|release-cafe-seat/.test(action);
+  if (developerAction && !state.isDeveloper) return;
 
   if (action === "profile") {
     openPersonalCenter();
@@ -4108,6 +4873,26 @@ document.addEventListener("click", (event) => {
     showToast("昵称已保存");
     return;
   }
+  if (action === "open-cafe-developer-editor") {
+    if (!state.isDeveloper || state.view !== "room" || state.sceneId !== "cafe") return;
+    closePersonalCenter();
+    state.staticSeatCalibration.enabled = false;
+    state.cafeDebugMode.enabled = true;
+    state.cafeSpriteTuning.enabled = true;
+    clearImmersiveAutoEnter();
+    renderRoom();
+    return;
+  }
+  if (action === "open-static-seat-calibration") {
+    if (!state.isDeveloper || state.view !== "room" || state.sceneId !== "cafe") return;
+    closePersonalCenter();
+    state.cafeDebugMode.enabled = false;
+    state.cafeSpriteTuning.enabled = false;
+    state.staticSeatCalibration.enabled = true;
+    clearImmersiveAutoEnter();
+    renderStaticCafeRoom();
+    return;
+  }
   if (action === "cancel-profile-confirm") {
     state.personalCenter.confirmAction = null;
     renderPersonalCenter();
@@ -4118,10 +4903,42 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  if (action === "open-sign-in") {
+    state.authMode = "sign-in";
+    openAuthGate("", "enter-island");
+    return;
+  }
+
   if (action === "enter-island") {
     window.scrollTo({ top: 0, behavior: "auto" });
-    state.view = "island";
-    render();
+    getAccessStatus({ refresh: true }).then((access) => {
+      if (!access.authenticated || !access.canEnterProduct) {
+        openAuthGate(access.paywallReason, "enter-island");
+        return;
+      }
+      state.view = "island";
+      render();
+      importLocalHistory();
+    }).catch((error) => openAuthGate(error.message || "access_service_unavailable", "enter-island"));
+  }
+  if (action === "close-access-overlay") closeAccessOverlay();
+  if (action === "toggle-auth-mode") {
+    state.authMode = state.authMode === "sign-up" ? "sign-in" : "sign-up";
+    state.authError = "";
+    renderAccessOverlay();
+  }
+  if (action === "auth-sign-in-from-paywall") {
+    state.authMode = "sign-in";
+    state.accessOverlay = "auth";
+    state.authError = "";
+    renderAccessOverlay();
+  }
+  if (action === "reset-password") {
+    const email = String(document.querySelector('[data-auth-form] input[name="email"]')?.value || state.authEmail).trim();
+    if (!email) { showToast("请先填写邮箱"); return; }
+    turnstileToken().then((captchaToken) => api("/api/auth/password/reset", { method: "POST", body: JSON.stringify({ email, captchaToken }) }))
+      .then(() => showToast("如果账号存在，重置邮件已经发送"))
+      .catch(() => showToast("暂时无法发送重置邮件"));
   }
   if (action === "scroll-story") {
     document.querySelector("#story")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -4193,22 +5010,26 @@ document.addEventListener("click", (event) => {
   if (action === "return-room") returnRoom();
   if (action === "return-island") returnIsland();
   if (action === "toggle-static-seat-calibration") {
+    if (!state.isDeveloper) return;
     state.staticSeatCalibration.enabled = !state.staticSeatCalibration.enabled;
     if (state.staticSeatCalibration.enabled) clearImmersiveAutoEnter();
     renderStaticCafeRoom();
   }
   if (action === "reset-static-seat-markers") {
+    if (!state.isDeveloper) return;
     resetStaticSeatMarkerPositions();
     renderStaticCafeRoom();
     showToast("座位编号已恢复默认位置");
   }
   if (action === "toggle-cafe-debug-mode") {
+    if (!state.isDeveloper) return;
     state.cafeDebugMode.enabled = !state.cafeDebugMode.enabled;
     state.cafeSpriteTuning.enabled = state.cafeDebugMode.enabled;
     if (state.cafeDebugMode.enabled) clearImmersiveAutoEnter();
     renderRoom();
   }
   if (action === "toggle-library-debug-mode") {
+    if (!state.isDeveloper) return;
     state.libraryDebugMode.enabled = !state.libraryDebugMode.enabled;
     renderRoom();
   }
@@ -4361,18 +5182,21 @@ document.addEventListener("input", (event) => {
   }
   const libraryObjectInput = event.target.closest("[data-library-object-input]");
   if (libraryObjectInput) {
+    if (!state.isDeveloper) return;
     const field = libraryObjectInput.dataset.libraryObjectInput;
     updateLibrarySceneObject(state.librarySceneEditor.activeObjectId, { [field]: Number(libraryObjectInput.value) });
     return;
   }
   const objectInput = event.target.closest("[data-object-input]");
   if (objectInput) {
+    if (!state.isDeveloper) return;
     const field = objectInput.dataset.objectInput;
     updateCafeSceneObject(state.cafeSceneEditor.activeObjectId, { [field]: Number(objectInput.value) });
     return;
   }
   const input = event.target.closest("[data-tune-input]");
   if (!input) return;
+  if (!state.isDeveloper) return;
   const field = input.dataset.tuneInput;
   updateCafeSpriteTuning(state.cafeSpriteTuning.activeSeatId, { [field]: Number(input.value) });
 });
@@ -4396,7 +5220,7 @@ document.addEventListener("change", (event) => {
 
 document.addEventListener("pointerdown", (event) => {
   const staticMarkerElement = event.target.closest?.("[data-static-seat-marker]");
-  if (staticMarkerElement && state.staticSeatCalibration.enabled && state.view === "room" && state.sceneId === "cafe") {
+  if (staticMarkerElement && state.isDeveloper && state.staticSeatCalibration.enabled && state.view === "room" && state.sceneId === "cafe") {
     if (event.button !== undefined && event.button !== 0) return;
     const stageElement = staticMarkerElement.closest(".seat-layer");
     const seatId = Number(staticMarkerElement.dataset.staticSeatMarker);
@@ -4416,8 +5240,8 @@ document.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     return;
   }
-  const cafeEditorActive = state.sceneId === "cafe" && state.cafeDebugMode.enabled;
-  const libraryEditorActive = state.sceneId === "library" && state.libraryDebugMode.enabled;
+  const cafeEditorActive = state.isDeveloper && state.sceneId === "cafe" && state.cafeDebugMode.enabled;
+  const libraryEditorActive = state.isDeveloper && state.sceneId === "library" && state.libraryDebugMode.enabled;
   if ((!cafeEditorActive && !libraryEditorActive) || state.view !== "room") return;
   if (event.button !== undefined && event.button !== 0) return;
   const objectElement = event.target.closest("[data-cafe-scene-object], [data-cafe-seat-marker-object], [data-library-scene-object], [data-library-seat-marker-object]");
@@ -4506,6 +5330,7 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (state.view !== "room" || !["cafe", "library"].includes(state.sceneId)) return;
+  if (!state.isDeveloper) return;
   const libraryEditorActive = state.sceneId === "library" && state.libraryDebugMode.enabled;
   if (!libraryEditorActive && !state.cafeSpriteTuning.enabled && !state.cafeDebugMode.enabled) return;
   const deltas = {
@@ -4547,6 +5372,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) void recoverCafeSeat("visibility");
   if (!["focus", "room"].includes(state.view) || (!state.isRunning && state.sessionPhase !== "rest")) return;
   if (syncTimerFromClock()) return;
   persistActiveSession(true);
@@ -4555,6 +5381,9 @@ document.addEventListener("visibilitychange", () => {
     document.querySelectorAll("[data-rest-clock]").forEach((timerElement) => { timerElement.textContent = formatRestTime(); });
   }
 });
+
+window.addEventListener("pageshow", () => { void recoverCafeSeat("pageshow"); });
+window.addEventListener("online", () => { void recoverCafeSeat("online"); });
 
 window.addEventListener("pagehide", () => {
   if (["focus", "room"].includes(state.view) && (state.isRunning || state.sessionPhase === "rest")) syncTimerFromClock();
@@ -4576,9 +5405,103 @@ window.addEventListener("focus-island:realtime-offline", () => {
   if (syncLabel) syncLabel.textContent = "实时连接中断，已启用快照校准";
 });
 
+document.addEventListener("submit", async (event) => {
+  const accountForm = event.target.closest('[data-account-form="password"]');
+  if (accountForm) {
+    event.preventDefault();
+    const values = new FormData(accountForm);
+    const currentPassword = String(values.get("currentPassword") || "");
+    const password = String(values.get("password") || "");
+    const confirmPassword = String(values.get("confirmPassword") || "");
+    if (password !== confirmPassword) {
+      showToast("两次输入的新密码不一致");
+      accountForm.querySelector('[name="confirmPassword"]')?.focus();
+      return;
+    }
+    const submitButton = accountForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    submitButton.textContent = "正在修改…";
+    try {
+      await api("/api/auth/password/update", { method: "POST", body: JSON.stringify({ currentPassword, password }) });
+      accountForm.reset();
+      showToast("密码已修改，请妥善保存新密码");
+    } catch (error) {
+      showToast(authErrorCopy(error.message));
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = "确认修改密码";
+    }
+    return;
+  }
+  const form = event.target.closest("[data-auth-form]");
+  if (!form) return;
+  event.preventDefault();
+  if (state.authPending) return;
+  state.authPending = true;
+  state.authError = "";
+  renderAccessOverlay();
+  const values = new FormData(form);
+  const flow = form.dataset.authForm;
+  try {
+    if (flow === "sign-up") {
+      const email = String(values.get("email") || "").trim();
+      const password = String(values.get("password") || "");
+      const confirmPassword = String(values.get("confirmPassword") || "");
+      if (password !== confirmPassword) throw new Error("password_mismatch");
+      state.authEmail = email;
+      const captchaToken = await turnstileToken();
+      const result = await api("/api/auth/sign-up", { method: "POST", body: JSON.stringify({ email, password, confirmPassword, captchaToken }) });
+      await completeAuthenticatedFlow(result);
+    } else if (flow === "sign-in") {
+      const email = String(values.get("email") || "").trim();
+      state.authEmail = email;
+      const captchaToken = await turnstileToken();
+      const result = await api("/api/auth/sign-in", { method: "POST", body: JSON.stringify({ email, password: String(values.get("password") || ""), captchaToken }) });
+      const mergeToken = sessionStorage.getItem(STORAGE_KEYS.pendingMergeToken);
+      if (mergeToken) {
+        await api("/api/auth/merge/complete", { method: "POST", body: JSON.stringify({ mergeToken }) });
+        sessionStorage.removeItem(STORAGE_KEYS.pendingMergeToken);
+      }
+      await completeAuthenticatedFlow(result);
+    }
+  } catch (error) {
+    state.authError = error.message;
+    if (error.message === "email_already_registered") {
+      try {
+        const prepared = await api("/api/auth/merge/prepare", { method: "POST", body: "{}" });
+        sessionStorage.setItem(STORAGE_KEYS.pendingMergeToken, prepared.mergeToken);
+      } catch (_) { /* Fresh users have nothing to merge. */ }
+      state.authMode = "sign-in";
+      state.accessOverlay = "auth";
+    }
+  } finally {
+    state.authPending = false;
+    renderAccessOverlay();
+  }
+});
+
 document.addEventListener("pointermove", () => scheduleHudFade(), { passive: true });
 document.addEventListener("keydown", () => scheduleHudFade());
 
 applyPreferencesToState();
 restoreActiveSession();
 render();
+prepareLifetimeInviteFromUrl();
+
+const billingReturnState = new URLSearchParams(window.location.search).get("billing");
+if (billingReturnState === "confirming") {
+  openPaywall("payment_confirmation_pending");
+  const poll = window.setInterval(async () => {
+    const access = await getAccessStatus({ refresh: true }).catch(() => null);
+    if (access && ["subscription", "lifetime", "admin"].includes(access.entitlementType)) {
+      window.clearInterval(poll);
+      closeAccessOverlay();
+      window.history.replaceState({}, "", window.location.pathname);
+      showToast("付款已确认，专注权限已解锁");
+    }
+  }, 2000);
+  window.setTimeout(() => window.clearInterval(poll), 60_000);
+} else if (billingReturnState === "canceled") {
+  window.history.replaceState({}, "", window.location.pathname);
+  showToast("已取消结账，没有产生扣款");
+}

@@ -11,6 +11,13 @@ export async function POST(request: Request, context: { params: Promise<{ sceneI
   if (!identity) return json({ error: "invalid_identity" }, { status: 400 });
   const auth = await authenticatedSupabase();
   if (!auth) return json({ error: "authentication_required" }, { status: 401 });
+  const { data: access, error: accessError } = await auth.supabase.rpc("get_my_access_status");
+  if (accessError) return json({ error: "access_service_unavailable" }, { status: 503 });
+  const accessState = access as { canStartFocus?: boolean; paywallReason?: string } | null;
+  if (!accessState?.canStartFocus) {
+    const reason = accessState?.paywallReason || "payment_required";
+    return json({ error: reason }, { status: reason === "payment_required" ? 402 : 403 });
+  }
   const { data, error } = await auth.supabase.rpc("allocate_room", {
     p_scene_id: sceneId,
     p_session_id: identity.sessionId,
