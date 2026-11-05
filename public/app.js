@@ -2759,23 +2759,179 @@ const LANDING_COPY = (() => {
   return languages;
 })();
 
+const LANDING_DETAIL_COPY = {
+  en: {
+    navWhy: "Experience",
+    navWorlds: "Worlds",
+    navFaq: "FAQ",
+    heroKicker: "YOUR ISLAND OF ATTENTION",
+    heroTitle: "Your focus has a place.",
+    heroLead: "Choose a quiet corner. Take a breath. Begin with what matters.",
+    heroCta: "Enter the café",
+    heroMeta: "No camera · No chat · No pressure",
+    cafeMood: "Warm light · quiet company · soft rain",
+    academyMood: "Turning pages · fireplace · deep work",
+    creek: "Moss Creek",
+    creekMood: "Running water · green shade · room to breathe",
+    sceneCafeKicker: "RAIN AT THE WINDOW",
+    sceneAcademyKicker: "A ROOM FOR LONG THOUGHTS",
+    sceneCreekKicker: "OPEN AIR, CLEAR MIND",
+    manifestoKicker: "FOR THE MOMENT BEFORE FOCUS",
+    manifestoTitle: "You don’t need more pressure. You need a place that makes beginning feel lighter.",
+    manifestoBody: "Come as you are. Choose one quiet corner. Let the room hold the noise while you do one thing that matters.",
+    howTitle: "Arrive. Sit. Begin.",
+    howBody: "Three small steps between the noise outside and the work in front of you.",
+    step1Label: "ARRIVE",
+    step1Title: "Leave the noise outside.",
+    step1Body: "Step onto the island and enter the café that is open today.",
+    step2Label: "TAKE YOUR PLACE",
+    step2Title: "Find a corner that feels yours.",
+    step2Body: "Choose one of six seats. Your place appears, and the room gets out of the way.",
+    step3Label: "BEGIN GENTLY",
+    step3Title: "Give one thing your attention.",
+    step3Body: "Set the time. Keep only the sounds you want. Let everything else wait.",
+    experienceKicker: "INSIDE A FOCUS SESSION",
+    experienceTitle: "Held by the room. Free to do the work.",
+    experienceBody: "A little atmosphere, a little structure, and less to think about.",
+    experienceVisual: "A quiet place for the thing that matters.",
+    experience1Title: "A gentle beginning.",
+    experience1Body: "Choose 25 minutes, 50 minutes, or simply count upward. No complicated setup.",
+    experience2Title: "A room that stays with you.",
+    experience2Body: "Blend café ambience, white noise, and quiet music until the space feels right.",
+    experience3Title: "Space to disappear into the work.",
+    experience3Body: "The controls fade when you no longer need them. Pause, return, or recover after a refresh without losing the thread.",
+    worldsKicker: "THE ISLAND IS GROWING",
+    worldsTitle: "Different days need different kinds of quiet.",
+    worldsBody: "Some days need rain at the window. Others need pages, water, or snow. The café is open; the rest of the island is on its way.",
+    openWorldBody: "Warm light, quiet company, and rain beyond the glass.",
+    futureKicker: "COMING NEXT",
+    futureTitle: "More places to meet yourself.",
+    futureBody: "Each new world will offer a different atmosphere, without adding more pressure.",
+    pricingKicker: "SIMPLE ACCESS",
+    pricingTitle: "Stay when it helps.",
+    pricingBody: "Try one free 25-minute session. Continue only if the island earns a place in your routine.",
+    monthlyBody: "Come and go with no long commitment.",
+    annualBody: "Make the island part of your rhythm.",
+    lifetimeBody: "For early supporters who want to stay.",
+    chooseMonthly: "Choose monthly",
+    chooseAnnual: "Choose annual",
+    chooseLifetime: "Get founder access",
+    faqKicker: "QUESTIONS, ANSWERED CALMLY",
+    faqTitle: "Before you take a seat.",
+    faqBody: "Everything you need to know before starting your first session.",
+    faq1Q: "What is Focus Isle?",
+    faq1A: "Focus Isle is a browser-based focus experience. Enter a virtual island, choose a quiet space, take a seat, and begin a timed or open-ended session.",
+    faq2Q: "Which focus world can I use today?",
+    faq2A: "Canal Café is open now. Old Academy, Moss Creek, Lakeside, Seaside, and Snowfield are coming soon.",
+    faq3Q: "Do I need a camera or microphone?",
+    faq3A: "No. Focus Isle does not require a camera, microphone, or live chat.",
+    faq4Q: "What is included in the free session?",
+    faq4A: "Your first session can run for up to 25 minutes and includes the café view, timer, and available sound controls.",
+    finalKicker: "THE CAFÉ IS OPEN",
+    finalTitle: "You don’t have to feel ready. Just take a seat.",
+    finalBody: "Start with 25 quiet minutes. That is enough for today.",
+    finalCta: "Start free for 25 minutes",
+    footerBody: "Immersive focus spaces for deep work, quiet study, and calmer beginnings.",
+    account: "Account",
+    refund: "Refund policy",
+  },
+  "zh-CN": {
+    navWhy: "专注体验",
+    navWorlds: "场景",
+    navFaq: "常见问题",
+    heroKicker: "你的注意力之岛",
+    heroTitle: "专注，也可以有一个地方。",
+    heroLead: "选一个安静角落。深呼吸，然后开始重要的事。",
+    heroCta: "进入咖啡馆",
+    heroMeta: "无需摄像头 · 没有聊天 · 没有压力",
+    cafeMood: "暖光 · 安静陪伴 · 轻柔雨声",
+    academyMood: "翻书声 · 壁炉 · 深度工作",
+    creek: "苔溪",
+    creekMood: "流水 · 绿荫 · 自由呼吸",
+    sceneCafeKicker: "窗外细雨",
+    sceneAcademyKicker: "适合长时间思考的房间",
+    sceneCreekKicker: "走进自然，清空思绪",
+    manifestoKicker: "为开始专注前的那一刻",
+    manifestoTitle: "你不需要更多压力，只需要一个让开始变轻一点的地方。",
+    manifestoBody: "按你此刻的状态来就好。选一个安静角落，让空间接住杂音，只做眼前重要的一件事。",
+    howTitle: "抵达。坐下。开始。",
+    howBody: "从外界杂音到眼前工作，只需要三个小步骤。",
+    step1Label: "抵达",
+    step1Title: "把杂音留在岛外。",
+    step1Body: "登上专注岛，走进今天已经开放的咖啡馆。",
+    step2Label: "找到位置",
+    step2Title: "选一个像是属于你的角落。",
+    step2Body: "从六个座位中选一个，人物出现后，房间会安静退到身后。",
+    step3Label: "轻轻开始",
+    step3Title: "把注意力留给一件事。",
+    step3Body: "设定时间，只留下想听的声音，让其他事情暂时等待。",
+    experienceKicker: "一次专注的内部体验",
+    experienceTitle: "被空间接住，自由投入工作。",
+    experienceBody: "一点氛围、一点结构，少一点需要思考的事。",
+    experienceVisual: "给重要的事情，一个安静的位置。",
+    experience1Title: "温和地开始。",
+    experience1Body: "选择 25 分钟、50 分钟或自由正计时，不需要复杂设置。",
+    experience2Title: "让空间陪着你。",
+    experience2Body: "自由混合咖啡馆环境声、白噪音和轻音乐，直到感觉刚好。",
+    experience3Title: "沉进工作里。",
+    experience3Body: "不再需要时，控制界面会淡出。暂停、回来或刷新，都不会轻易丢掉进度。",
+    worldsKicker: "这座岛仍在生长",
+    worldsTitle: "不同的日子，需要不同的安静。",
+    worldsBody: "有时需要窗边细雨，有时需要书页、水声或雪光。咖啡馆已经开放，岛上的其他地方正在赶来。",
+    openWorldBody: "暖光、安静陪伴，以及玻璃窗外的雨。",
+    futureKicker: "即将到来",
+    futureTitle: "去更多地方，重新遇见自己。",
+    futureBody: "每个新场景都会带来不同氛围，但不会增加新的压力。",
+    pricingKicker: "简单使用",
+    pricingTitle: "如果有帮助，再留下来。",
+    pricingBody: "先免费完成一次 25 分钟专注。只有当这座岛真的进入你的日常，再选择继续。",
+    monthlyBody: "灵活使用，不需要长期承诺。",
+    annualBody: "让专注岛成为日常节奏的一部分。",
+    lifetimeBody: "给愿意长期留下的早期支持者。",
+    chooseMonthly: "选择月付",
+    chooseAnnual: "选择年付",
+    chooseLifetime: "获取创始权益",
+    faqKicker: "平静地回答几个问题",
+    faqTitle: "坐下之前。",
+    faqBody: "开始第一次专注前，你需要知道的事情。",
+    faq1Q: "专注岛是什么？",
+    faq1A: "专注岛是一款浏览器沉浸式专注产品。进入虚拟海岛，选择安静空间，找个座位，开始倒计时或自由正计时。",
+    faq2Q: "现在可以使用哪个场景？",
+    faq2A: "运河咖啡馆已经开放；学院、苔溪、湖畔、海滨和雪原即将开放。",
+    faq3Q: "需要摄像头或麦克风吗？",
+    faq3A: "不需要。开始专注不需要摄像头、麦克风或实时聊天。",
+    faq4Q: "免费体验包含什么？",
+    faq4A: "第一次专注最长 25 分钟，包含咖啡馆视角、计时器和当前可用的声音控制。",
+    finalKicker: "咖啡馆已经开放",
+    finalTitle: "不必先准备好。找个位置坐下就够了。",
+    finalBody: "先从安静的 25 分钟开始。今天做到这里，也很好。",
+    finalCta: "免费开始 25 分钟",
+    footerBody: "为深度工作、安静学习和更轻松的开始准备的沉浸式专注空间。",
+    account: "账户",
+    refund: "退款政策",
+  },
+};
+
+Object.entries(LANDING_DETAIL_COPY.en).forEach(([key, value]) => {
+  Object.values(LANDING_COPY).forEach((copy) => {
+    if (!(key in copy)) copy[key] = value;
+  });
+});
+Object.assign(LANDING_COPY.en, LANDING_DETAIL_COPY.en);
+Object.assign(LANDING_COPY["zh-CN"], LANDING_DETAIL_COPY["zh-CN"]);
+
 const LANDING_FINAL_TEMPLATE = `
 <header class="site-nav" data-nav>
   <a class="brand" href="#top" aria-label="Focus Isle">
-    <svg viewBox="0 0 128 128" fill="none" aria-hidden="true">
-      <circle cx="64" cy="64" r="50" stroke="currentColor" stroke-width="6"/>
-      <circle cx="64" cy="37" r="7" fill="#F3C978"/>
-      <path d="M64 49 46 76h36L64 49Z" fill="currentColor"/>
-      <path d="M42 64c5 10 12 15 22 15s17-5 22-15" stroke="#173D34" stroke-width="4.5" stroke-linecap="round"/>
-      <path d="M64 78c-13 0-24 5-34 15 13 4 24 2 34-4 10 6 21 8 34 4-10-10-21-15-34-15Z" fill="currentColor"/>
-      <path d="M35 101c10-3 19-3 29 0s19 3 29 0" stroke="#F3C978" stroke-width="4" stroke-linecap="round"/>
-    </svg>
+    <img src="/assets/20261031-focus-isle-logo-icon.svg" alt="" width="39" height="39" />
     <span>Focus Isle</span>
   </a>
   <nav class="nav-links" aria-label="Landing page navigation">
     <a href="#how" data-i18n="navHow">How it works</a>
-    <a href="#why" data-i18n="navWhy">Why it works</a>
+    <a href="#experience" data-i18n="navWhy">Experience</a>
+    <a href="#worlds" data-i18n="navWorlds">Worlds</a>
     <a href="#pricing" data-i18n="navPricing">Pricing</a>
+    <a href="#faq" data-i18n="navFaq">FAQ</a>
   </nav>
   <div class="nav-actions">
     <div class="language" data-language>
@@ -2801,77 +2957,120 @@ const LANDING_FINAL_TEMPLATE = `
 </header>
 
 <main>
-  <section class="hero" id="top">
-    <div class="hero-backdrop" aria-hidden="true"></div>
-    <div class="island-stage">
-      <img src="/assets/20261012-focus-island-map-detailed.png" alt="Focus Isle with a café village, academy, lake, seaside and snowy mountain" />
-      <button type="button" class="scene-marker marker-cafe" data-action="enter-island"><i>●</i><span data-i18n="cafe">Café</span><small data-i18n="openNow">OPEN NOW</small></button>
-      <button type="button" class="scene-marker marker-academy" data-action="locked"><i>●</i><span data-i18n="academy">Academy</span><small data-i18n="comingSoon">COMING SOON</small></button>
-      <button type="button" class="scene-marker marker-lake" data-action="locked"><i>●</i><span data-i18n="lakeside">Lakeside</span><small data-i18n="comingSoon">COMING SOON</small></button>
-      <button type="button" class="scene-marker marker-seaside" data-action="locked"><i>●</i><span data-i18n="seaside">Seaside</span><small data-i18n="comingSoon">COMING SOON</small></button>
-      <button type="button" class="scene-marker marker-snow" data-action="locked"><i>●</i><span data-i18n="snow">Snowy Mountain</span><small data-i18n="comingSoon">COMING SOON</small></button>
+  <section class="hero" id="top" aria-labelledby="welcome-title">
+    <div class="hero-copy">
+      <p class="eyebrow" data-i18n="heroKicker">YOUR ISLAND OF ATTENTION</p>
+      <h1 id="welcome-title" data-i18n="heroTitle">Your focus has a place.</h1>
+      <p class="hero-lead" data-i18n="heroLead">Choose a quiet corner. Take a breath. Begin with what matters.</p>
+      <div class="hero-actions">
+        <button type="button" class="primary" data-action="enter-island"><span data-i18n="heroCta">Enter the café</span><span aria-hidden="true">↗</span></button>
+        <small><span data-i18n="firstBody">One complete 25-minute focus.</span></small>
+      </div>
+      <p class="hero-meta" data-i18n="heroMeta">No camera · No chat · No pressure</p>
     </div>
-    <div class="hero-shade" aria-hidden="true"></div>
-    <div class="hero-copy" data-hero-copy>
-      <p class="eyebrow" data-i18n="heroKicker">IMMERSIVE FOCUS SPACE</p>
-      <h1 id="welcome-title" data-i18n="heroTitle">Find Your Quiet.</h1>
-      <p class="hero-lead" data-i18n="heroLead">Step onto the island and begin with 25 calm minutes.</p>
-      <button type="button" class="primary" data-action="enter-island"><span data-i18n="heroCta">Start 25 Minutes Free</span><span aria-hidden="true">→</span></button>
-      <p class="hero-meta" data-i18n="heroMeta">No camera · No chat · Your first session is free</p>
+    <div class="gallery" aria-roledescription="carousel" aria-label="Focus Isle world previews">
+      <div class="deck" aria-live="polite">
+        <article class="scene is-active">
+          <img src="/assets/20261012-cafe-window-focus-view.png" alt="A warm café focus desk overlooking a rainy canal" fetchpriority="high" />
+          <span class="badge" data-i18n="openNow">OPEN NOW</span>
+          <div class="scene-copy"><small data-i18n="sceneCafeKicker">RAIN AT THE WINDOW</small><h2 data-i18n="cafe">Café</h2><p data-i18n="cafeMood">Warm light · quiet company · soft rain</p></div><span class="scene-index">01</span>
+        </article>
+        <article class="scene is-next" aria-hidden="true">
+          <img src="/assets/20261011-library-focus-room.png" alt="A sunlit academy library with wooden desks and a fireplace" />
+          <span class="badge is-soon" data-i18n="comingSoon">COMING SOON</span>
+          <div class="scene-copy"><small data-i18n="sceneAcademyKicker">A ROOM FOR LONG THOUGHTS</small><h2 data-i18n="academy">Academy</h2><p data-i18n="academyMood">Turning pages · fireplace · deep work</p></div><span class="scene-index">02</span>
+        </article>
+        <article class="scene is-prev" aria-hidden="true">
+          <img src="/assets/20261011-forest-creek-focus-room.png" alt="An open-air focus space beside a forest creek" />
+          <span class="badge is-soon" data-i18n="comingSoon">COMING SOON</span>
+          <div class="scene-copy"><small data-i18n="sceneCreekKicker">OPEN AIR, CLEAR MIND</small><h2 data-i18n="creek">Moss Creek</h2><p data-i18n="creekMood">Running water · green shade · room to breathe</p></div><span class="scene-index">03</span>
+        </article>
+      </div>
+      <div class="gallery-controls">
+        <div class="arrowset"><button type="button" class="arrow prev-btn" aria-label="Previous world">←</button><button type="button" class="arrow next-btn" aria-label="Next world">→</button></div>
+        <div class="dots" aria-label="Choose world"><button type="button" class="dot is-active" aria-label="Show Canal Café"></button><button type="button" class="dot" aria-label="Show Old Academy"></button><button type="button" class="dot" aria-label="Show Moss Creek"></button></div>
+      </div>
     </div>
-    <a class="scroll-cue" href="#why"><span data-i18n="explore">SCROLL TO EXPLORE</span></a>
   </section>
 
-  <section class="why" id="why">
-    <div class="section-shell">
-      <div class="why-intro">
-        <p class="section-kicker" data-i18n="whyKicker">WHY FOCUS ISLE</p>
-        <h2 class="word-reveal" data-word-reveal data-i18n="whyTitle">The hardest part isn't focus. It's starting.</h2>
-        <p data-i18n="whyBody">Focus Isle turns the moment before work into a place you can enter—quiet, visual, and free from social pressure.</p>
-      </div>
-      <div class="truth-grid">
-        <article class="truth-card reveal"><span>01</span><strong data-i18n="card1Title">One island</strong><p data-i18n="card1Body">A clear threshold between everyday noise and the work ahead.</p></article>
-        <article class="truth-card reveal"><span>02</span><strong data-i18n="card2Title">Five places</strong><p data-i18n="card2Body">Café, academy, lakeside, seaside, and snowy mountain—each with a different rhythm.</p></article>
-        <article class="truth-card reveal"><span>03</span><strong data-i18n="card3Title">25 minutes</strong><p data-i18n="card3Body">One calm first session. Enough time to begin without carrying the whole day.</p></article>
-      </div>
-    </div>
+  <section class="manifesto" id="why" aria-labelledby="manifesto-title">
+    <p class="section-kicker" data-i18n="manifestoKicker">FOR THE MOMENT BEFORE FOCUS</p>
+    <h2 id="manifesto-title" data-i18n="manifestoTitle">You don’t need more pressure. You need a place that makes beginning feel lighter.</h2>
+    <p data-i18n="manifestoBody">Come as you are. Choose one quiet corner. Let the room hold the noise while you do one thing that matters.</p>
   </section>
 
   <section class="how" id="how">
     <div class="section-shell">
-      <p class="section-kicker" data-i18n="howKicker">HOW IT WORKS</p>
-      <h2 class="word-reveal" data-word-reveal data-dark-words data-i18n="howTitle">Three gentle shifts into focus.</h2>
-      <div class="feature-list">
-        <article class="feature-row reveal"><div class="feature-visual"><img src="/assets/20261012-focus-island-map-detailed.png" alt="Focus Isle map" loading="lazy" /></div><div class="feature-copy"><span>01</span><h3 data-i18n="step1Title">Choose a place</h3><p data-i18n="step1Body">Start with the atmosphere you need today. The café is open now; more destinations are on the way.</p></div></article>
-        <article class="feature-row reveal"><div class="feature-visual"><img src="/assets/20261028-cafe-room-static-seat-master.png" alt="Warm six-seat café" loading="lazy" /></div><div class="feature-copy"><span>02</span><h3 data-i18n="step2Title">Take a quiet seat</h3><p data-i18n="step2Body">Enter a small room, choose an open seat, and settle in without cameras, chat, or introductions.</p></div></article>
-        <article class="feature-row reveal"><div class="feature-visual"><img src="/assets/20261028-cafe-rain-clearing-focus-view.png" alt="Immersive café focus view" loading="lazy" /></div><div class="feature-copy"><span>03</span><h3 data-i18n="step3Title">Let everything else disappear</h3><p data-i18n="step3Body">Begin 25 minutes and keep only the timer, the ambience, and the work in front of you.</p></div></article>
+      <div class="section-head reveal"><div><p class="section-kicker" data-i18n="navHow">How it works</p><h2 data-i18n="howTitle">Arrive. Sit. Begin.</h2></div><p data-i18n="howBody">Three small steps between the noise outside and the work in front of you.</p></div>
+      <div class="step-grid">
+        <article class="step reveal"><div class="step-no"><span data-i18n="step1Label">ARRIVE</span><b>01</b></div><div class="step-visual"><img src="/assets/20261012-focus-island-map-detailed.png" alt="Focus Isle map" loading="lazy" /></div><h3 data-i18n="step1Title">Leave the noise outside.</h3><p data-i18n="step1Body">Step onto the island and enter the café that is open today.</p><small data-i18n="openNow">OPEN NOW</small></article>
+        <article class="step reveal"><div class="step-no"><span data-i18n="step2Label">TAKE YOUR PLACE</span><b>02</b></div><div class="step-visual"><img src="/assets/20261028-cafe-room-static-seat-master.png" alt="Warm six-seat café" loading="lazy" /></div><h3 data-i18n="step2Title">Find a corner that feels yours.</h3><p data-i18n="step2Body">Choose one of six seats. Your place appears, and the room gets out of the way.</p><small>ONE CLICK · NO WAITING ROOM</small></article>
+        <article class="step reveal"><div class="step-no"><span data-i18n="step3Label">BEGIN GENTLY</span><b>03</b></div><div class="step-visual"><img src="/assets/20261012-cafe-lounge-focus-view.png" alt="A warm café lounge prepared for focus" loading="lazy" /></div><h3 data-i18n="step3Title">Give one thing your attention.</h3><p data-i18n="step3Body">Set the time. Keep only the sounds you want. Let everything else wait.</p><small>25 MIN · 50 MIN · OPEN-ENDED</small></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="experience" id="experience" aria-labelledby="experience-title">
+    <div class="section-shell">
+      <div class="section-head reveal"><div><p class="section-kicker" data-i18n="experienceKicker">INSIDE A FOCUS SESSION</p><h2 id="experience-title" data-i18n="experienceTitle">Held by the room. Free to do the work.</h2></div><p data-i18n="experienceBody">A little atmosphere, a little structure, and less to think about.</p></div>
+      <div class="experience-layout">
+        <figure class="experience-visual reveal"><img src="/assets/20261028-cafe-rain-clearing-focus-view.png" alt="A warm café window view after rain" loading="lazy" /><figcaption><small data-i18n="openNow">OPEN NOW</small><h3 data-i18n="experienceVisual">A quiet place for the thing that matters.</h3></figcaption></figure>
+        <div class="feature-list">
+          <article class="feature reveal"><span>01</span><div><h3 data-i18n="experience1Title">A gentle beginning.</h3><p data-i18n="experience1Body">Choose 25 minutes, 50 minutes, or simply count upward. No complicated setup.</p><div class="pills"><small>25 MINUTES</small><small>50 MINUTES</small><small>OPEN-ENDED</small></div></div></article>
+          <article class="feature reveal"><span>02</span><div><h3 data-i18n="experience2Title">A room that stays with you.</h3><p data-i18n="experience2Body">Blend café ambience, white noise, and quiet music until the space feels right.</p><div class="pills"><small>CAFÉ AMBIENCE</small><small>WHITE NOISE</small><small>QUIET MUSIC</small></div></div></article>
+          <article class="feature reveal"><span>03</span><div><h3 data-i18n="experience3Title">Space to disappear into the work.</h3><p data-i18n="experience3Body">The controls fade when you no longer need them. Pause, return, or recover after a refresh without losing the thread.</p></div></article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="worlds" id="worlds" aria-labelledby="worlds-title">
+    <div class="section-shell">
+      <div class="section-head reveal"><div><p class="section-kicker" data-i18n="worldsKicker">THE ISLAND IS GROWING</p><h2 id="worlds-title" data-i18n="worldsTitle">Different days need different kinds of quiet.</h2></div><p data-i18n="worldsBody">Some days need rain at the window. Others need pages, water, or snow. The café is open; the rest of the island is on its way.</p></div>
+      <div class="world-showcase">
+        <article class="open-world reveal"><img src="/assets/20261013-cafe-sofa-real-focus-view.png" alt="A warm café sofa and notebook beside a rain-lit canal" loading="lazy" /><div class="open-world-copy"><div><span data-i18n="openNow">OPEN NOW</span><h3 data-i18n="cafe">Café</h3></div><p data-i18n="openWorldBody">Warm light, quiet company, and rain beyond the glass.</p></div></article>
+        <aside class="future-worlds reveal"><span data-i18n="futureKicker">COMING NEXT</span><h3 data-i18n="futureTitle">More places to meet yourself.</h3><p data-i18n="futureBody">Each new world will offer a different atmosphere, without adding more pressure.</p><div class="future-list">
+          <div><b data-i18n="academy">Academy</b><small>PAGES · FIRELIGHT</small></div>
+          <div><b data-i18n="creek">Moss Creek</b><small>WATER · GREEN SHADE</small></div>
+          <div><b data-i18n="lakeside">Lakeside</b><small>STILL WATER · OPEN SKY</small></div>
+          <div><b data-i18n="seaside">Seaside</b><small>SALT AIR · HORIZON</small></div>
+          <div><b data-i18n="snow">Snowfield</b><small>SNOW LIGHT · SILENCE</small></div>
+        </div></aside>
       </div>
     </div>
   </section>
 
   <section class="pricing" id="pricing">
     <div class="section-shell">
-      <div class="pricing-head">
-        <p class="section-kicker" data-i18n="pricingKicker">START FREE</p>
-        <h2 class="word-reveal" data-word-reveal data-i18n="pricingTitle">Try one real session. Stay if it helps.</h2>
-        <p data-i18n="pricingBody">Your first 25-minute focus session is free. Choose a plan only after you have felt the experience.</p>
-      </div>
+      <div class="section-head reveal"><div><p class="section-kicker" data-i18n="pricingKicker">SIMPLE ACCESS</p><h2 data-i18n="pricingTitle">Stay when it helps.</h2></div><p data-i18n="pricingBody">Try one free 25-minute session. Continue only if the island earns a place in your routine.</p></div>
       <div class="price-grid">
-        <button type="button" class="price-card reveal" data-action="enter-island"><span data-i18n="first">First session</span><strong>$0</strong><p data-i18n="firstBody">One complete 25-minute focus.</p></button>
-        <button type="button" class="price-card reveal" data-billing-plan="plus_monthly"><span data-i18n="monthly">Monthly</span><strong>$4.99</strong><p data-i18n="monthlyBody">Flexible access to the core experience.</p></button>
-        <button type="button" class="price-card is-featured reveal" data-billing-plan="plus_annual"><span data-i18n="annual">Annual</span><strong>$19.99</strong><p data-i18n="annualBody">A quieter commitment for the year.</p></button>
-        <button type="button" class="price-card reveal" data-billing-plan="founder_lifetime"><span data-i18n="lifetime">Founder lifetime</span><strong>$39.99</strong><p data-i18n="lifetimeBody">One payment while founder access remains available.</p></button>
+        <article class="price-card reveal"><span data-i18n="monthly">Monthly</span><strong>$4.99 <small>/ month</small></strong><p data-i18n="monthlyBody">Come and go with no long commitment.</p><ul><li>Full café experience</li><li>All timers and sound controls</li></ul><button type="button" data-billing-plan="plus_monthly" data-i18n="chooseMonthly">Choose monthly</button></article>
+        <article class="price-card is-featured reveal"><em>BEST VALUE</em><span data-i18n="annual">Annual</span><strong>$19.99 <small>/ year</small></strong><p data-i18n="annualBody">Make the island part of your rhythm.</p><ul><li>Everything in monthly</li><li>One year of access</li></ul><button type="button" data-billing-plan="plus_annual" data-i18n="chooseAnnual">Choose annual</button></article>
+        <article class="price-card reveal"><span data-i18n="lifetime">Founder lifetime</span><strong>$39.99 <small>/ once</small></strong><p data-i18n="lifetimeBody">For early supporters who want to stay.</p><ul><li>Lifetime product access</li><li>Limited founder availability</li></ul><button type="button" data-billing-plan="founder_lifetime" data-i18n="chooseLifetime">Get founder access</button></article>
+      </div>
+      <p class="price-note">USD pricing. Taxes, eligibility, and final availability are confirmed in Stripe Checkout. Focus Isle is currently in beta.</p>
+    </div>
+  </section>
+
+  <section class="faq" id="faq" aria-labelledby="faq-title">
+    <div class="section-shell faq-layout">
+      <div class="faq-title reveal"><p class="section-kicker" data-i18n="faqKicker">QUESTIONS, ANSWERED CALMLY</p><h2 id="faq-title" data-i18n="faqTitle">Before you take a seat.</h2><p data-i18n="faqBody">Everything you need to know before starting your first session.</p></div>
+      <div class="faq-list">
+        <details class="reveal"><summary data-i18n="faq1Q">What is Focus Isle?</summary><p data-i18n="faq1A">Focus Isle is a browser-based focus experience.</p></details>
+        <details class="reveal"><summary data-i18n="faq2Q">Which focus world can I use today?</summary><p data-i18n="faq2A">Canal Café is open now.</p></details>
+        <details class="reveal"><summary data-i18n="faq3Q">Do I need a camera or microphone?</summary><p data-i18n="faq3A">No camera, microphone, or live chat is required.</p></details>
+        <details class="reveal"><summary data-i18n="faq4Q">What is included in the free session?</summary><p data-i18n="faq4A">Your first session can run for up to 25 minutes.</p></details>
       </div>
     </div>
   </section>
 
-  <section class="final-cta">
-    <img src="/assets/20261028-cafe-rain-clearing-focus-view.png" alt="" aria-hidden="true" loading="lazy" />
-    <div class="final-copy reveal"><h2 data-i18n="finalTitle">Your next 25 minutes can start here.</h2><p data-i18n="finalBody">You do not need the whole day figured out. Just choose a place and begin.</p><button type="button" class="primary" data-action="enter-island"><span data-i18n="finalCta">Start My Free Session</span><span aria-hidden="true">→</span></button></div>
+  <section class="final-cta" aria-labelledby="final-title">
+    <img src="/assets/20261013-cafe-window-real-focus-view.png" alt="" aria-hidden="true" loading="lazy" />
+    <div class="final-copy reveal"><p class="section-kicker" data-i18n="finalKicker">THE CAFÉ IS OPEN</p><h2 id="final-title" data-i18n="finalTitle">You don’t have to feel ready. Just take a seat.</h2><p data-i18n="finalBody">Start with 25 quiet minutes. That is enough for today.</p><button type="button" class="primary" data-action="enter-island"><span data-i18n="finalCta">Start free for 25 minutes</span><span aria-hidden="true">↗</span></button></div>
   </section>
 </main>
 
-<footer class="footer"><div class="section-shell"><a class="brand" href="#top">Focus Isle</a><div class="footer-links"><a href="/privacy" data-i18n="privacy">Privacy</a><a href="/terms" data-i18n="terms">Terms</a></div></div></footer>
+<footer class="footer"><div class="section-shell"><div><a class="brand" href="#top"><img src="/assets/20261031-focus-isle-logo-icon.svg" alt="" width="39" height="39" />Focus Isle</a><p data-i18n="footerBody">Immersive focus spaces for deep work, quiet study, and calmer beginnings.</p></div><div class="footer-links"><a href="#how" data-i18n="navHow">How it works</a><a href="#experience" data-i18n="navWhy">Experience</a><a href="#worlds" data-i18n="navWorlds">Worlds</a><a href="#pricing" data-i18n="navPricing">Pricing</a><a href="/privacy" data-i18n="privacy">Privacy</a><a href="/terms" data-i18n="terms">Terms</a></div></div></footer>
 <p class="sr-only" aria-live="polite" data-live></p>
 `;
 
@@ -2912,7 +3111,7 @@ function applyLandingLanguage(code, { announce = false, updateScroll = () => {} 
     window.FocusI18n?.setLanguage(productLanguage);
   }
   document.documentElement.lang = language;
-  document.title = language === "zh-CN" ? "专注岛 · 找到你的安静" : "Focus Isle · Find Your Quiet";
+  document.title = language === "zh-CN" ? "专注岛 · 沉浸式专注空间" : "Focus Isle — Immersive Focus Spaces for Deep Work";
   const description = document.querySelector('meta[name="description"]');
   if (description) description.content = copy.heroLead;
   if (announce) {
@@ -2930,9 +3129,14 @@ function initLandingExperience() {
   const nav = root.querySelector("[data-nav]");
   const languageRoot = root.querySelector("[data-language]");
   const toggle = root.querySelector(".language-toggle");
+  const sceneNodes = [...root.querySelectorAll(".scene")];
+  const dotNodes = [...root.querySelectorAll(".dot")];
+  const previousButton = root.querySelector(".prev-btn");
+  const nextButton = root.querySelector(".next-btn");
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let observer = null;
   let ticking = false;
+  let currentScene = 0;
 
   const clampValue = (value, min, max) => Math.min(max, Math.max(min, value));
   const updateScroll = () => {
@@ -2974,9 +3178,25 @@ function initLandingExperience() {
   const onDocumentKeydown = (event) => {
     if (event.key === "Escape") setMenu(false);
   };
+  const renderScene = (index) => {
+    currentScene = (index + sceneNodes.length) % sceneNodes.length;
+    sceneNodes.forEach((scene, sceneIndex) => {
+      scene.classList.remove("is-active", "is-next", "is-prev");
+      const delta = (sceneIndex - currentScene + sceneNodes.length) % sceneNodes.length;
+      scene.classList.add(delta === 0 ? "is-active" : delta === 1 ? "is-next" : "is-prev");
+      if (delta === 0) scene.removeAttribute("aria-hidden");
+      else scene.setAttribute("aria-hidden", "true");
+    });
+    dotNodes.forEach((dot, dotIndex) => dot.classList.toggle("is-active", dotIndex === currentScene));
+  };
+  const onPreviousScene = () => renderScene(currentScene - 1);
+  const onNextScene = () => renderScene(currentScene + 1);
 
   toggle?.addEventListener("click", onToggle);
   root.querySelectorAll("[data-lang]").forEach((button) => button.addEventListener("click", onLanguageClick));
+  previousButton?.addEventListener("click", onPreviousScene);
+  nextButton?.addEventListener("click", onNextScene);
+  dotNodes.forEach((dot, dotIndex) => dot.addEventListener("click", () => renderScene(dotIndex)));
   document.addEventListener("click", onDocumentClick);
   document.addEventListener("keydown", onDocumentKeydown);
   addEventListener("scroll", onScroll, { passive: true });
@@ -2994,6 +3214,8 @@ function initLandingExperience() {
   landingExperienceCleanup = () => {
     toggle?.removeEventListener("click", onToggle);
     root.querySelectorAll("[data-lang]").forEach((button) => button.removeEventListener("click", onLanguageClick));
+    previousButton?.removeEventListener("click", onPreviousScene);
+    nextButton?.removeEventListener("click", onNextScene);
     document.removeEventListener("click", onDocumentClick);
     document.removeEventListener("keydown", onDocumentKeydown);
     removeEventListener("scroll", onScroll);

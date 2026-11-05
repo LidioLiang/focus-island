@@ -22,7 +22,7 @@ test("landing page loads without requesting retired Godot runtime assets", async
   });
 
   await page.goto("/");
-  await expect(page).toHaveTitle(/Focus Isle · Find Your Quiet/);
+  await expect(page).toHaveTitle(/Focus Isle — Immersive Focus Spaces for Deep Work/);
   await expect(page.locator("#welcome-title")).toBeVisible();
   await expect(page.locator('[data-action="enter-island"]').first()).toBeVisible();
   expect(retiredRuntimeRequests).toEqual([]);
@@ -30,6 +30,19 @@ test("landing page loads without requesting retired Godot runtime assets", async
 });
 
 test("an unauthenticated visitor is routed to the account gate", async ({ page }) => {
+  await page.route("**/api/access/status", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authenticated: false,
+        canEnterProduct: false,
+        canStartFocus: false,
+        paywallReason: "authentication_required",
+        developer: false,
+      }),
+    });
+  });
   await page.goto("/");
   await page.locator('[data-action="enter-island"]').first().click();
   await expect(page.locator('[role="dialog"][aria-labelledby="auth-title"]')).toBeVisible();
