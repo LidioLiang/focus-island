@@ -13,8 +13,8 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=46/);
-  assert.match(layoutSource, /styles\.css\?v=36/);
+  assert.match(pageSource, /app\.js\?v=47/);
+  assert.match(layoutSource, /styles\.css\?v=37/);
   assert.match(source, /language: \/\^zh\\b\/i\.test\(window\.navigator\.language/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);
   assert.match(i18nRuntime, /MutationObserver/);
@@ -23,7 +23,7 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(i18nRuntime, /translateDocument\(\);\s*observeDocument\(\);/);
   assert.match(layoutSource, /i18n\.js\?v=10" strategy="afterInteractive"/);
   assert.match(layoutSource, /landing-final\.css\?v=2/);
-  assert.match(layoutSource, /locales\/en\.js\?v=11/);
+  assert.match(layoutSource, /locales\/en\.js\?v=12/);
   assert.match(i18nRuntime, /englishPhrases/);
   assert.match(i18nRuntime, /\$1 focus sessions/);
   assert.match(i18nRuntime, /\$1 records/);
@@ -65,7 +65,7 @@ test("production cafe entry allocates a room and opens the static room", () => {
 });
 
 test("production cafe room uses the calibrated sunny master and six static occupied-seat overlays", () => {
-  assert.match(source, /20261028-cafe-room-static-seat-master\.png/);
+  assert.match(source, /20261028-cafe-room-static-seat-master\.webp/);
   for (let seatId = 1; seatId <= 6; seatId += 1) {
     assert.match(source, new RegExp(`20261028-cafe-seat-0${seatId}-occupied\\.png`));
   }
@@ -179,7 +179,7 @@ test("centered focus settings expose timer, sound and scene options", () => {
   assert.doesNotMatch(hud, /class="sound-subheading"/);
   assert.match(hud, /focusViewButton\("window"/);
   assert.match(hud, /focusViewButton\("bar"/);
-  assert.match(hud, /focusViewButton\("clearing", "雨后初晴", `\$\{ASSET_BASE\}20261028-cafe-rain-clearing-focus-view\.png`\)/);
+  assert.match(hud, /focusViewButton\("clearing", "雨后初晴", `\$\{ASSET_BASE\}20261028-cafe-rain-clearing-focus-view\.webp`\)/);
   assert.match(hud, /focusViewButton\("lounge"/);
   assert.doesNotMatch(hud, /focusViewButton\("night"/);
   assert.doesNotMatch(hud, /月夜咖啡馆/);
@@ -188,7 +188,7 @@ test("centered focus settings expose timer, sound and scene options", () => {
 
 test("the third focus scene is a seated rain-clearing work view instead of the empty cafe master", () => {
   const focusImages = source.slice(source.indexOf("function selectedFocusImage"), source.indexOf("function renderSessionHud"));
-  assert.match(focusImages, /clearing: `\$\{ASSET_BASE\}20261028-cafe-rain-clearing-focus-view\.png`/);
+  assert.match(focusImages, /clearing: `\$\{ASSET_BASE\}20261028-cafe-rain-clearing-focus-view\.webp`/);
   assert.doesNotMatch(focusImages, /晴朗月夜学习场景/);
 });
 

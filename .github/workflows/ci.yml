@@ -29,6 +29,10 @@ jobs:
       - run: npm run licenses:check
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run build
+      - name: Install Chromium for browser regression checks
+        run: npx playwright install --with-deps chromium
+      - name: Check public entry, static room and focus recovery in Chromium
+        run: npm run test:e2e:chromium
       - name: Secret and oversized-file guard
         run: node scripts/repository-guard.mjs
 

@@ -9,7 +9,7 @@ const CAFE_IMMERSIVE_AUTO_ENTER_MS = 5000;
 const CAFE_IMMERSIVE_CROSSFADE_MS = 1400;
 const CAFE_ROOM_3D_READY_TIMEOUT_MS = 12000;
 const CAFE_ROOM_RENDERER_QUERY_KEY = "roomRenderer";
-const CAFE_ROOM_RENDERER_STORAGE_KEY = "focusIslandInternalCafeRoomRendererV1";
+const CAFE_ROOM_RENDERER_STORAGE_KEY = "focusIslandInternalCafeRoomRendererV2";
 const CAFE_ROOM_RENDERER_STATIC = "static";
 const CAFE_ROOM_RENDERER_GODOT_3D = "godot3d";
 const CAFE_ROOM_3D_SRC_QUERY_KEY = "godot3dSrc";
@@ -35,16 +35,16 @@ const scenes = {
     islandLabel: "四时咖啡厅",
     icon: "city",
     online: 0,
-    image: `${ASSET_BASE}20261028-cafe-room-static-seat-master.png`,
+    image: `${ASSET_BASE}20261028-cafe-room-static-seat-master.webp`,
     debugImage: `${ASSET_BASE}20261015-cafe-room-empty-stage-wide.png`,
-    focusViews: Object.fromEntries([1, 2, 3, 4, 5, 6].map((seatId) => [seatId, `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`])),
+    focusViews: Object.fromEntries([1, 2, 3, 4, 5, 6].map((seatId) => [seatId, `${ASSET_BASE}20261013-cafe-window-real-focus-view.webp`])),
     description: "在六座咖啡馆里选一张喜欢的位置，和其他人安静地开始今天的专注。",
     sounds: ["咖啡馆底噪", "窗外环境声", "偶尔杯碟声"],
     filter: 620,
     rooms: [
-      { id: "cafe-01", name: "四时咖啡馆", occupied: 0, image: `${ASSET_BASE}20261028-cafe-room-static-seat-master.png` },
-      { id: "cafe-02", name: "四时咖啡馆", occupied: 0, image: `${ASSET_BASE}20261028-cafe-room-static-seat-master.png` },
-      { id: "cafe-03", name: "四时咖啡馆", occupied: 0, image: `${ASSET_BASE}20261028-cafe-room-static-seat-master.png` },
+      { id: "cafe-01", name: "四时咖啡馆", occupied: 0, image: `${ASSET_BASE}20261028-cafe-room-static-seat-master.webp` },
+      { id: "cafe-02", name: "四时咖啡馆", occupied: 0, image: `${ASSET_BASE}20261028-cafe-room-static-seat-master.webp` },
+      { id: "cafe-03", name: "四时咖啡馆", occupied: 0, image: `${ASSET_BASE}20261028-cafe-room-static-seat-master.webp` },
     ],
     seats: [
       [28.11, 52.0723, false], [39.1746, 47.5027, false],
@@ -172,7 +172,7 @@ const staticSeatSlots = [
   { seat_id: 6, hit_area: [66.0885, 83.9532], occupant_anchor: [59.2105, 49.3092, 15.5502, 35.0691], label_anchor: [66.99, 49.2], desk_zone_id: "lounge", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-06-occupied.png`, flip: false },
 ];
 
-const islandImage = `${ASSET_BASE}20261012-focus-island-map-detailed.png`;
+const islandImage = `${ASSET_BASE}20261012-focus-island-map-detailed.webp`;
 const STORAGE_KEYS = {
   activeSession: "focusIslandActiveSessionV1",
   history: "focusIslandHistoryV1",
@@ -198,13 +198,13 @@ const FOCUS_MUSIC_TRACKS = {
 const MUSIC_VOLUME_BOOST = 1.3;
 const CAFE_AMBIENT_GAIN = 0.09;
 const SOUND_OPTION_ART = {
-  mute: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
-  ambient: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
-  white: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
-  "rainy-notes": `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
-  "warm-reverie": `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
+  mute: `${ASSET_BASE}20261013-cafe-window-real-focus-view.webp`,
+  ambient: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.webp`,
+  white: `${ASSET_BASE}20261013-cafe-window-real-focus-view.webp`,
+  "rainy-notes": `${ASSET_BASE}20261013-cafe-window-real-focus-view.webp`,
+  "warm-reverie": `${ASSET_BASE}20261013-cafe-bar-real-focus-view.webp`,
   "moonlit-walk": `${ASSET_BASE}20261015-晴朗月夜学习场景.png`,
-  "island-breeze": `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`,
+  "island-breeze": `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.webp`,
 };
 const AVATAR_OPTIONS = [
   { id: 0, name: "暖光旅人", image: `${ASSET_BASE}20261028-profile-avatar-warm-light.png` },
@@ -299,6 +299,9 @@ const state = {
   authPending: false,
   authContinuation: null,
   cloudFocusClientId: null,
+  focusRecovery: null,
+  developerDiagnostics: null,
+  developerDiagnosticsPending: false,
   sounds: { ...preferences.sounds },
   musicTrack: preferences.musicTrack,
   soundVolumes: { ...preferences.soundVolumes },
@@ -336,6 +339,11 @@ let staticSeatMarkerDrag = null;
 let onlineIdentityPromise = null;
 let onlineUserId = null;
 let seatRecoveryPromise = null;
+let accessStatusPromise = null;
+let accessStatusFetchedAt = 0;
+let focusAuthorizationPromise = null;
+let finishSessionPromise = null;
+let pendingFocusUpdatePromise = null;
 
 let identity = getOrCreateIdentity();
 
@@ -520,6 +528,7 @@ async function api(path, options = {}) {
     ...options,
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     cache: "no-store",
+    signal: options.signal || AbortSignal.timeout(15000),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -592,11 +601,15 @@ async function ensureOnlineIdentity() {
 
 async function getAccessStatus({ refresh = false } = {}) {
   if (state.accessStatus && !refresh) return state.accessStatus;
-  const response = await fetch("/api/access/status", { cache: "no-store" });
-  const status = await response.json().catch(() => ({ authenticated: false, paywallReason: "access_service_unavailable" }));
-  state.accessStatus = status;
-  state.isDeveloper = status.developer === true;
-  return status;
+  if (!accessStatusPromise) accessStatusPromise = (async () => {
+    const response = await fetch("/api/access/status", { cache: "no-store" });
+    const status = await response.json().catch(() => ({ authenticated: false, paywallReason: "access_service_unavailable" }));
+    state.accessStatus = status;
+    state.isDeveloper = status.developer === true;
+    accessStatusFetchedAt = Date.now();
+    return status;
+  })().finally(() => { accessStatusPromise = null; });
+  return accessStatusPromise;
 }
 
 function billingPrice(plan, fallback) {
@@ -674,6 +687,7 @@ function openPaywall(reason = "payment_required") {
 function closeAccessOverlay() {
   state.accessOverlay = null;
   state.authContinuation = null;
+  state.focusRecovery = null;
   document.querySelector(".access-overlay")?.remove();
 }
 
@@ -689,6 +703,7 @@ function authErrorCopy(code) {
     rate_limited: "尝试次数过多，请稍后再试。",
     closed_beta_full: "本轮 100 名封闭测试名额已满，感谢关注。",
     access_service_unavailable: "暂时无法验证使用资格，请稍后再试。",
+    focus_session_finished: "上次专注已结束，请重新选择开始。",
     invalid_current_password: "当前密码不正确。",
     current_password_required: "请输入当前密码后再修改。",
     billing_price_mismatch: "结账价格与 v1.1 定价不一致，已安全阻止扣款。",
@@ -700,7 +715,24 @@ function renderAccessOverlay() {
   if (!state.accessOverlay) return;
   const shell = document.createElement("div");
   shell.className = "access-overlay";
-  if (state.accessOverlay === "paywall") {
+  if (state.accessOverlay === "leave-focus") {
+    shell.innerHTML = `<section class="access-dialog" role="alertdialog" aria-modal="true" aria-labelledby="leave-focus-title">
+      <h2 id="leave-focus-title">结束本轮并返回海岛？</h2><p>已专注的时间会保存，本轮座位将释放。</p>
+      <button type="button" class="primary-button" data-action="confirm-leave-focus">结束并返回海岛</button>
+      <button type="button" class="access-link" data-action="close-access-overlay">继续专注</button>
+    </section>`;
+  } else if (state.accessOverlay === "focus-recovery") {
+    const previous = state.focusRecovery;
+    shell.innerHTML = `<section class="access-dialog" role="dialog" aria-modal="true" aria-labelledby="focus-recovery-title">
+      <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
+      <p class="access-eyebrow">RESUME FOCUS</p><h2 id="focus-recovery-title">上次专注尚未结束</h2>
+      <p>可以继续上次的计时，或结束上次记录后重新开始。如果另一设备仍在专注，结束操作也会结束那一轮。</p>
+      <p>${previous?.timer_mode ? `${Number(previous.timer_mode)} 分钟` : "自由专注"} · ${previous?.started_at ? escapeHtml(new Date(previous.started_at).toLocaleString()) : ""}</p>
+      <button type="button" class="primary-button" data-action="continue-previous-focus" ${state.authPending ? "disabled" : ""}>继续上次专注</button>
+      <button type="button" class="access-link" data-action="replace-previous-focus" ${state.authPending ? "disabled" : ""}>结束上次并重新开始</button>
+      ${state.authError ? `<p class="access-error">${escapeHtml(authErrorCopy(state.authError))}</p>` : ""}
+    </section>`;
+  } else if (state.accessOverlay === "paywall") {
     shell.innerHTML = `<section class="access-dialog paywall-dialog" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
       <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
       <p class="access-eyebrow">FOCUS ISLE PLUS</p>
@@ -752,13 +784,19 @@ async function importLocalHistory() {
 async function completeAuthenticatedFlow(result) {
   onlineUserId = result.userId;
   state.isDeveloper = result.developer === true;
-  onlineIdentityPromise = null;
+  onlineIdentityPromise = Promise.resolve({ authenticated: true, anonymous: false, userId: result.userId, developer: state.isDeveloper });
+  state.accessStatus = result.access || null;
+  accessStatusFetchedAt = result.access ? Date.now() : 0;
   await claimPendingLifetimeInvite();
-  state.accessStatus = null;
-  await getAccessStatus({ refresh: true });
-  await importLocalHistory();
+  if (!state.accessStatus) await getAccessStatus({ refresh: true });
   const continuation = state.authContinuation;
   closeAccessOverlay();
+  // History import and signed-grace refresh must not block the first screen.
+  void importLocalHistory();
+  void flushPendingFocusUpdates();
+  if (["subscription", "lifetime", "admin"].includes(state.accessStatus?.entitlementType)) {
+    void getAccessStatus({ refresh: true }).catch(() => {});
+  }
   if (continuation === "start-focus" && state.view === "room" && state.selectedSeat !== null) {
     await enterImmersiveFocus();
     return;
@@ -769,8 +807,15 @@ async function completeAuthenticatedFlow(result) {
 
 async function authorizeFocusStart() {
   if (state.cloudFocusClientId) return true;
+  if (focusAuthorizationPromise) return focusAuthorizationPromise;
+  focusAuthorizationPromise = requestFocusAuthorization().finally(() => { focusAuthorizationPromise = null; });
+  return focusAuthorizationPromise;
+}
+
+async function requestFocusAuthorization() {
   const clientSessionId = crypto.randomUUID();
   try {
+    await flushPendingFocusUpdates();
     await api("/api/focus/sessions/start", { method: "POST", body: JSON.stringify({
       clientSessionId, sceneId: state.sceneId || "cafe", roomId: state.roomId || "",
       seatId: state.selectedSeat === null ? null : state.selectedSeat + 1, timerMode: state.timerMode,
@@ -780,11 +825,76 @@ async function authorizeFocusStart() {
   } catch (error) {
     if (error.status === 402) openPaywall(error.message);
     else if (error.status === 401 || error.status === 403) openAuthGate(error.message, "start-focus");
-    else if (error.status === 409 && error.message === "active_session_exists") showToast("检测到另一段专注仍在进行，请先回到原页面结束，或等待本轮结束后重试");
+    else if (error.status === 409 && error.message === "active_session_exists") await openFocusRecovery();
     else if (error.status === 429) showToast("操作有些频繁，请稍等一分钟后重试");
     else showToast("暂时无法开始专注，请稍后再试");
     return false;
   }
+}
+
+async function openFocusRecovery() {
+  clearImmersiveAutoEnter();
+  try {
+    const result = await api("/api/focus/sessions?active=1");
+    const previous = result.sessions?.[0];
+    if (!previous) { showToast("上次专注已结束，请再次开始"); return; }
+    state.focusRecovery = previous;
+    state.authError = "";
+    state.authPending = false;
+    state.accessOverlay = "focus-recovery";
+    renderAccessOverlay();
+  } catch (_) { showToast("暂时无法读取上次专注，请稍后重试"); }
+}
+
+async function resolvePreviousFocus(restart) {
+  const previous = state.focusRecovery;
+  if (!previous || state.authPending) return;
+  state.authPending = true;
+  renderAccessOverlay();
+  try {
+    if (restart) {
+      await api(`/api/focus/sessions/${encodeURIComponent(previous.client_session_id)}`, {
+        method: "PATCH", body: JSON.stringify({ status: "interrupted", actualSeconds: Number(previous.actual_seconds) || 0, pausedSeconds: Number(previous.paused_seconds) || 0 }),
+      });
+      closeAccessOverlay();
+      state.cloudFocusClientId = null;
+      state.sessionStartedAt = null;
+      state.elapsedSeconds = 0;
+      state.remainingSeconds = state.durationSeconds;
+      state.isRunning = false;
+      persistActiveSession(true);
+      if (!await startFocusFromSeat()) return;
+    } else {
+      // Revalidate the exact prior session; never create a second trial.
+      const result = await api("/api/focus/sessions/start", { method: "POST", body: JSON.stringify({
+        clientSessionId: previous.client_session_id, sceneId: previous.scene_id,
+        roomId: previous.room_id || "", seatId: previous.seat_id, timerMode: previous.timer_mode,
+      }) });
+      const session = result.session;
+      if (!session || !["running", "paused"].includes(session.status)) throw new Error("focus_session_finished");
+      closeAccessOverlay();
+      state.cloudFocusClientId = session.client_session_id;
+      state.timerMode = session.timer_mode;
+      state.durationSeconds = session.planned_seconds;
+      state.sessionStartedAt = Date.parse(session.started_at);
+      const elapsed = session.status === "paused" ? Number(session.actual_seconds) || 0
+        : Math.max(Number(session.actual_seconds) || 0, Math.floor((Date.now() - state.sessionStartedAt) / 1000) - (Number(session.paused_seconds) || 0));
+      state.elapsedSeconds = state.timerMode > 0 ? Math.min(elapsed, state.durationSeconds) : elapsed;
+      state.remainingSeconds = Math.max(0, state.durationSeconds - state.elapsedSeconds);
+      state.sessionPhase = "focus";
+      state.isRunning = session.status === "running";
+      lastTick = Date.now();
+      persistActiveSession(true);
+    }
+    closePersonalCenter();
+    state.view = "focus";
+    render();
+    if (state.isRunning && state.timerMode > 0 && state.remainingSeconds === 0) await finishSession("completed");
+  } catch (error) {
+    state.authError = error.message;
+    if (state.accessOverlay === "focus-recovery") renderAccessOverlay();
+    else showToast("上次专注状态已变化，请重新开始");
+  } finally { state.authPending = false; if (state.accessOverlay === "focus-recovery") renderAccessOverlay(); }
 }
 
 function currentRoomApiId() {
@@ -853,7 +963,7 @@ async function enterCafeRoom() {
   showToast("正在为你准备咖啡馆座位…");
   let access = null;
   try {
-    access = await getAccessStatus({ refresh: true });
+    access = await getAccessStatus({ refresh: Date.now() - accessStatusFetchedAt > 15000 });
     if (!access.authenticated || !access.emailVerified) {
       openAuthGate(access.paywallReason);
       return;
@@ -1839,14 +1949,22 @@ function refreshCafeSeatMarkers() {
   if (!markerLayer || state.sceneId !== "cafe") return;
   const renderedSeatEntries = cafeVisibleSeatEntries();
   const staticRoom = Boolean(document.querySelector(".static-seat-room"));
-  markerLayer.innerHTML = staticRoom
+  const markerMarkup = staticRoom
     ? staticSeatSlots.map((slot) => {
       const [markerLeft, markerTop] = staticSeatMarkerPosition(slot);
       return renderSeat([markerLeft, markerTop, false], slot.seat_id - 1, "cafe", { staticMarker: true });
     }).join("")
     : renderedSeatEntries.map(({ seat, index }) => renderSeat(seat, index, "cafe")).join("");
+  if (markerLayer.dataset.renderKey !== markerMarkup) {
+    markerLayer.innerHTML = markerMarkup;
+    markerLayer.dataset.renderKey = markerMarkup;
+  }
   const staticOccupants = document.querySelector(".static-occupants");
-  if (staticOccupants) staticOccupants.innerHTML = renderStaticCafeOccupants();
+  const occupantMarkup = staticOccupants ? renderStaticCafeOccupants() : "";
+  if (staticOccupants && staticOccupants.dataset.renderKey !== occupantMarkup) {
+    staticOccupants.innerHTML = occupantMarkup;
+    staticOccupants.dataset.renderKey = occupantMarkup;
+  }
   syncCafeSceneObjectLayers();
   syncCafeSeatActorLayers();
   const openSeats = renderedSeatEntries.filter(({ index }) => !leaseForSeat(index)).length;
@@ -2380,11 +2498,22 @@ function renderPersonalAccount() {
 
 function renderDeveloperTools() {
   const inCafeRoom = state.view === "room" && state.sceneId === "cafe";
+  const diagnostics = state.developerDiagnostics;
+  const rows = [
+    ["版本", PUBLIC_CONFIG.appVersion || "1.1.1"], ["房间渲染", "静态 MVP"],
+    ["房间", state.roomId || "—"], ["连接", state.localRoom ? "本地岛民" : state.roomId ? "在线" : "未入房"],
+    ["座位", state.currentSeatId || "—"], ["计时状态", state.sessionPhase === "rest" ? "休息" : state.isRunning ? "专注中" : "已暂停 / 未开始"],
+    ["本地专注会话", state.cloudFocusClientId || "—"],
+  ];
   return `<div class="profile-developer-layout">
     <section class="profile-settings-card profile-developer-card">
-      <div class="profile-settings-heading"><span>DEVELOPER · SERVER AUTHORIZED</span><h2>场景编辑工具</h2></div>
-      <p>此入口只对 Supabase <code>app_metadata.role=developer</code> 的账号显示。编辑结果仍保存在当前设备，不会自动发布到生产环境。</p>
-      <div class="profile-data-action"><div><strong>咖啡厅场景编辑器</strong><small>${inCafeRoom ? "调整物件、人物、座位和层级" : "请先进入咖啡厅房间"}</small></div><button type="button" data-action="open-cafe-developer-editor" ${inCafeRoom ? "" : "disabled"}>打开编辑器</button></div>
+      <div class="profile-settings-heading"><span>DEVELOPER · STATIC MVP</span><h2>静态 MVP 开发者工具</h2></div>
+      <p>仅服务端开发者账号可用。诊断当前房间、座位和专注会话；不会修改生产配置。</p>
+      <dl class="developer-status-grid" data-no-auto-i18n>${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>
+      <div class="profile-data-action"><div><strong>在线诊断</strong><small>${state.developerDiagnosticsPending ? "正在读取…" : "读取三间真人房与本账号云端活动会话"}</small></div><button type="button" data-action="developer-refresh-diagnostics" ${state.developerDiagnosticsPending ? "disabled" : ""}>刷新诊断</button></div>
+      ${diagnostics ? `<pre class="developer-diagnostics" data-no-auto-i18n>${escapeHtml(JSON.stringify(diagnostics, null, 2))}</pre>` : ""}
+      <div class="profile-data-action"><div><strong>上次专注恢复</strong><small>继续云端会话，或确认结束后重新开始</small></div><button type="button" data-action="developer-recover-focus" ${state.currentSeatId ? "" : "disabled"}>检查并恢复</button></div>
+      <div class="profile-data-action"><div><strong>恢复当前静态版本</strong><small>退出旧版编辑器并恢复默认座位编号，保留账号、记录和专注计时</small></div><button type="button" data-action="developer-reset-static">恢复静态视图</button></div>
       <div class="profile-data-action"><div><strong>静态座位编号校准</strong><small>${inCafeRoom ? "拖动 1–6 号座位编号" : "请先进入咖啡厅房间"}</small></div><button type="button" data-action="open-static-seat-calibration" ${inCafeRoom ? "" : "disabled"}>开始校准</button></div>
     </section>
     <section class="profile-settings-card">
@@ -2392,6 +2521,18 @@ function renderDeveloperTools() {
       <p class="profile-storage-note">客户端不会根据邮箱或密码开启开发模式。退出该开发者账号后，所有开发入口立即隐藏；服务端角色同时授予测试专注权限。</p>
     </section>
   </div>`;
+}
+
+async function refreshDeveloperDiagnostics() {
+  if (!state.isDeveloper || state.developerDiagnosticsPending) return;
+  state.developerDiagnosticsPending = true;
+  renderPersonalCenter();
+  try { state.developerDiagnostics = await api("/api/developer/diagnostics"); }
+  catch (error) { state.developerDiagnostics = { error: error.message }; }
+  finally {
+    state.developerDiagnosticsPending = false;
+    if (state.personalCenter.open) renderPersonalCenter();
+  }
 }
 
 function renderPersonalCenterConfirm() {
@@ -2678,7 +2819,7 @@ function renderWelcomeLegacy() {
                 <h3>${copy.step2Title}</h3><p>${copy.step2Body}</p>
               </article>
               <article>
-                <div class="landing-v2-step-visual"><img src="${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.png" alt="${copy.step3Title}" loading="lazy" /><span>03</span></div>
+                <div class="landing-v2-step-visual"><img src="${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.webp" alt="${copy.step3Title}" loading="lazy" /><span>03</span></div>
                 <h3>${copy.step3Title}</h3><p>${copy.step3Body}</p>
               </article>
             </div>
@@ -2719,7 +2860,7 @@ function renderWelcomeLegacy() {
         </section>
 
         <section class="landing-v2-final" aria-labelledby="final-cta-title">
-          <img src="${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.png" alt="" aria-hidden="true" loading="lazy" />
+          <img src="${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.webp" alt="" aria-hidden="true" loading="lazy" />
           <div class="landing-v2-final-overlay"></div>
           <div class="landing-v2-final-copy">
             <p class="landing-v2-eyebrow">${copy.finalEyebrow}</p>
@@ -3003,8 +3144,8 @@ const LANDING_FINAL_TEMPLATE = `
     <div class="section-shell">
       <div class="section-head reveal"><div><p class="section-kicker" data-i18n="navHow">How it works</p><h2 data-i18n="howTitle">Arrive. Sit. Begin.</h2></div><p data-i18n="howBody">Three small steps between the noise outside and the work in front of you.</p></div>
       <div class="step-grid">
-        <article class="step reveal"><div class="step-no"><span data-i18n="step1Label">ARRIVE</span><b>01</b></div><div class="step-visual"><img src="/assets/20261012-focus-island-map-detailed.png" alt="Focus Isle map" loading="lazy" /></div><h3 data-i18n="step1Title">Leave the noise outside.</h3><p data-i18n="step1Body">Step onto the island and enter the café that is open today.</p><small data-i18n="openNow">OPEN NOW</small></article>
-        <article class="step reveal"><div class="step-no"><span data-i18n="step2Label">TAKE YOUR PLACE</span><b>02</b></div><div class="step-visual"><img src="/assets/20261028-cafe-room-static-seat-master.png" alt="Warm six-seat café" loading="lazy" /></div><h3 data-i18n="step2Title">Find a corner that feels yours.</h3><p data-i18n="step2Body">Choose one of six seats. Your place appears, and the room gets out of the way.</p><small>ONE CLICK · NO WAITING ROOM</small></article>
+        <article class="step reveal"><div class="step-no"><span data-i18n="step1Label">ARRIVE</span><b>01</b></div><div class="step-visual"><img src="/assets/20261012-focus-island-map-detailed.webp" alt="Focus Isle map" loading="lazy" /></div><h3 data-i18n="step1Title">Leave the noise outside.</h3><p data-i18n="step1Body">Step onto the island and enter the café that is open today.</p><small data-i18n="openNow">OPEN NOW</small></article>
+        <article class="step reveal"><div class="step-no"><span data-i18n="step2Label">TAKE YOUR PLACE</span><b>02</b></div><div class="step-visual"><img src="/assets/20261028-cafe-room-static-seat-master.webp" alt="Warm six-seat café" loading="lazy" /></div><h3 data-i18n="step2Title">Find a corner that feels yours.</h3><p data-i18n="step2Body">Choose one of six seats. Your place appears, and the room gets out of the way.</p><small>ONE CLICK · NO WAITING ROOM</small></article>
         <article class="step reveal"><div class="step-no"><span data-i18n="step3Label">BEGIN GENTLY</span><b>03</b></div><div class="step-visual"><img src="/assets/20261012-cafe-lounge-focus-view.png" alt="A warm café lounge prepared for focus" loading="lazy" /></div><h3 data-i18n="step3Title">Give one thing your attention.</h3><p data-i18n="step3Body">Set the time. Keep only the sounds you want. Let everything else wait.</p><small>25 MIN · 50 MIN · OPEN-ENDED</small></article>
       </div>
     </div>
@@ -3014,7 +3155,7 @@ const LANDING_FINAL_TEMPLATE = `
     <div class="section-shell">
       <div class="section-head reveal"><div><p class="section-kicker" data-i18n="experienceKicker">INSIDE A FOCUS SESSION</p><h2 id="experience-title" data-i18n="experienceTitle">Held by the room. Free to do the work.</h2></div><p data-i18n="experienceBody">A little atmosphere, a little structure, and less to think about.</p></div>
       <div class="experience-layout">
-        <figure class="experience-visual reveal"><img src="/assets/20261028-cafe-rain-clearing-focus-view.png" alt="A warm café window view after rain" loading="lazy" /><figcaption><small data-i18n="openNow">OPEN NOW</small><h3 data-i18n="experienceVisual">A quiet place for the thing that matters.</h3></figcaption></figure>
+        <figure class="experience-visual reveal"><img src="/assets/20261028-cafe-rain-clearing-focus-view.webp" alt="A warm café window view after rain" loading="lazy" /><figcaption><small data-i18n="openNow">OPEN NOW</small><h3 data-i18n="experienceVisual">A quiet place for the thing that matters.</h3></figcaption></figure>
         <div class="feature-list">
           <article class="feature reveal"><span>01</span><div><h3 data-i18n="experience1Title">A gentle beginning.</h3><p data-i18n="experience1Body">Choose 25 minutes, 50 minutes, or simply count upward. No complicated setup.</p><div class="pills"><small>25 MINUTES</small><small>50 MINUTES</small><small>OPEN-ENDED</small></div></div></article>
           <article class="feature reveal"><span>02</span><div><h3 data-i18n="experience2Title">A room that stays with you.</h3><p data-i18n="experience2Body">Blend café ambience, white noise, and quiet music until the space feels right.</p><div class="pills"><small>CAFÉ AMBIENCE</small><small>WHITE NOISE</small><small>QUIET MUSIC</small></div></div></article>
@@ -3028,7 +3169,7 @@ const LANDING_FINAL_TEMPLATE = `
     <div class="section-shell">
       <div class="section-head reveal"><div><p class="section-kicker" data-i18n="worldsKicker">THE ISLAND IS GROWING</p><h2 id="worlds-title" data-i18n="worldsTitle">Different days need different kinds of quiet.</h2></div><p data-i18n="worldsBody">Some days need rain at the window. Others need pages, water, or snow. The café is open; the rest of the island is on its way.</p></div>
       <div class="world-showcase">
-        <article class="open-world reveal"><img src="/assets/20261013-cafe-sofa-real-focus-view.png" alt="A warm café sofa and notebook beside a rain-lit canal" loading="lazy" /><div class="open-world-copy"><div><span data-i18n="openNow">OPEN NOW</span><h3 data-i18n="cafe">Café</h3></div><p data-i18n="openWorldBody">Warm light, quiet company, and rain beyond the glass.</p></div></article>
+        <article class="open-world reveal"><img src="/assets/20261013-cafe-sofa-real-focus-view.webp" alt="A warm café sofa and notebook beside a rain-lit canal" loading="lazy" /><div class="open-world-copy"><div><span data-i18n="openNow">OPEN NOW</span><h3 data-i18n="cafe">Café</h3></div><p data-i18n="openWorldBody">Warm light, quiet company, and rain beyond the glass.</p></div></article>
         <aside class="future-worlds reveal"><span data-i18n="futureKicker">COMING NEXT</span><h3 data-i18n="futureTitle">More places to meet yourself.</h3><p data-i18n="futureBody">Each new world will offer a different atmosphere, without adding more pressure.</p><div class="future-list">
           <div><b data-i18n="academy">Academy</b><small>PAGES · FIRELIGHT</small></div>
           <div><b data-i18n="creek">Moss Creek</b><small>WATER · GREEN SHADE</small></div>
@@ -3065,7 +3206,7 @@ const LANDING_FINAL_TEMPLATE = `
   </section>
 
   <section class="final-cta" aria-labelledby="final-title">
-    <img src="/assets/20261013-cafe-window-real-focus-view.png" alt="" aria-hidden="true" loading="lazy" />
+    <img src="/assets/20261013-cafe-window-real-focus-view.webp" alt="" aria-hidden="true" loading="lazy" />
     <div class="final-copy reveal"><p class="section-kicker" data-i18n="finalKicker">THE CAFÉ IS OPEN</p><h2 id="final-title" data-i18n="finalTitle">You don’t have to feel ready. Just take a seat.</h2><p data-i18n="finalBody">Start with 25 quiet minutes. That is enough for today.</p><button type="button" class="primary" data-action="enter-island"><span data-i18n="finalCta">Start free for 25 minutes</span><span aria-hidden="true">↗</span></button></div>
   </section>
 </main>
@@ -3351,7 +3492,7 @@ function cafeRoomPreviewCard(room, selectedRoomId, capacity) {
 }
 
 function roomViewForScene() {
-  return state.sceneId === "cafe" && resolveCafeRoomRenderer() === CAFE_ROOM_RENDERER_GODOT_3D
+  return state.sceneId === "cafe" && state.isDeveloper && resolveCafeRoomRenderer() === CAFE_ROOM_RENDERER_GODOT_3D
     ? "godot-room"
     : "room";
 }
@@ -3750,10 +3891,10 @@ function scheduleHudFade() {
 function selectedFocusImage(scene = scenes[state.sceneId]) {
   if (scene.id !== "cafe") return scene.image;
   const focusImages = {
-    window: `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`,
-    bar: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`,
-    clearing: `${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.png`,
-    lounge: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`,
+    window: `${ASSET_BASE}20261013-cafe-window-real-focus-view.webp`,
+    bar: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.webp`,
+    clearing: `${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.webp`,
+    lounge: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.webp`,
   };
   return focusImages[state.focusImageChoice] || focusImages.window;
 }
@@ -3789,10 +3930,10 @@ function renderSessionHud(context = "focus") {
           <div class="session-setting-group">
             <span>场景设置</span>
             <div class="focus-scene-grid" aria-label="专注场景设置">
-              ${focusViewButton("window", "窗边视角", `${ASSET_BASE}20261013-cafe-window-real-focus-view.png`)}
-              ${focusViewButton("bar", "吧台一角", `${ASSET_BASE}20261013-cafe-bar-real-focus-view.png`)}
-              ${focusViewButton("clearing", "雨后初晴", `${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.png`)}
-              ${focusViewButton("lounge", "安静角落", `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.png`)}
+              ${focusViewButton("window", "窗边视角", `${ASSET_BASE}20261013-cafe-window-real-focus-view.webp`)}
+              ${focusViewButton("bar", "吧台一角", `${ASSET_BASE}20261013-cafe-bar-real-focus-view.webp`)}
+              ${focusViewButton("clearing", "雨后初晴", `${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.webp`)}
+              ${focusViewButton("lounge", "安静角落", `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.webp`)}
             </div>
           </div>
         </section>` : ""}
@@ -4035,7 +4176,7 @@ function startTicker() {
   }, 1000);
 }
 
-function syncTimerFromClock() {
+function syncTimerFromClock({ finishOnComplete = true } = {}) {
   if (state.sessionPhase === "rest") return syncRestTimerFromClock();
   if (!state.isRunning || !lastTick) return false;
   const now = Date.now();
@@ -4047,7 +4188,7 @@ function syncTimerFromClock() {
   if (state.timerMode > 0) {
     state.remainingSeconds = Math.max(0, state.remainingSeconds - appliedDelta);
     if (state.remainingSeconds === 0) {
-      finishSession("completed");
+      if (finishOnComplete) finishSession("completed");
       return true;
     }
   }
@@ -4077,7 +4218,45 @@ function stopTickerIfNeeded() {
   if (!["focus", "room"].includes(state.view) && !state.awaitingImmersiveFocus) stopTicker();
 }
 
+function queueFocusUpdate(clientSessionId, payload) {
+  let pending;
+  try { pending = JSON.parse(localStorage.getItem("focusIslandPendingFocusUpdatesV1") || "[]"); }
+  catch (_) { pending = []; }
+  if (!Array.isArray(pending)) pending = [];
+  pending = pending.filter((item) => item.clientSessionId !== clientSessionId);
+  pending.push({ clientSessionId, ownerUserId: onlineUserId, payload });
+  localStorage.setItem("focusIslandPendingFocusUpdatesV1", JSON.stringify(pending.slice(-20)));
+}
+
+async function flushPendingFocusUpdates() {
+  if (pendingFocusUpdatePromise) return pendingFocusUpdatePromise;
+  pendingFocusUpdatePromise = (async () => {
+    let pending;
+    try { pending = JSON.parse(localStorage.getItem("focusIslandPendingFocusUpdatesV1") || "[]"); }
+    catch (_) { return; }
+    if (!Array.isArray(pending)) return;
+    for (const item of pending) {
+      if (item.ownerUserId && item.ownerUserId !== onlineUserId) continue;
+      try {
+        await api(`/api/focus/sessions/${encodeURIComponent(item.clientSessionId)}`, {
+          method: "PATCH", body: JSON.stringify(item.payload), keepalive: true,
+        });
+      } catch (_) { break; }
+      // Re-read so a concurrently completed session is not dropped.
+      const current = JSON.parse(localStorage.getItem("focusIslandPendingFocusUpdatesV1") || "[]");
+      localStorage.setItem("focusIslandPendingFocusUpdatesV1", JSON.stringify(current.filter((entry) => entry.clientSessionId !== item.clientSessionId)));
+    }
+  })().finally(() => { pendingFocusUpdatePromise = null; });
+  return pendingFocusUpdatePromise;
+}
+
 async function finishSession(forcedStatus = null) {
+  if (finishSessionPromise) return finishSessionPromise;
+  finishSessionPromise = finishSessionOnce(forcedStatus).finally(() => { finishSessionPromise = null; });
+  return finishSessionPromise;
+}
+
+async function finishSessionOnce(forcedStatus = null) {
   if (state.sessionPhase === "rest") {
     state.restStartedAt = null;
     state.restCustomOpen = false;
@@ -4090,7 +4269,7 @@ async function finishSession(forcedStatus = null) {
     render();
     return;
   }
-  if (state.isRunning && !forcedStatus && syncTimerFromClock()) return;
+  if (state.isRunning && !forcedStatus && syncTimerFromClock({ finishOnComplete: false })) forcedStatus = "completed";
   state.isRunning = false;
   state.sessionPanelOpen = false;
   clearImmersiveAutoEnter();
@@ -4100,10 +4279,8 @@ async function finishSession(forcedStatus = null) {
   state.sessionResult = buildSessionResult(status);
   if (state.cloudFocusClientId) {
     const cloudStatus = status === "completed" || status === "free_completed" ? "completed" : status === "not_started" ? "interrupted" : "ended_early";
-    await api(`/api/focus/sessions/${encodeURIComponent(state.cloudFocusClientId)}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: cloudStatus, actualSeconds: state.elapsedSeconds, pausedSeconds: 0 }),
-    }).catch(() => {});
+    queueFocusUpdate(state.cloudFocusClientId, { status: cloudStatus, actualSeconds: state.elapsedSeconds, pausedSeconds: 0 });
+    await flushPendingFocusUpdates();
   }
   if (state.elapsedSeconds > 0) saveSessionResult(state.sessionResult);
   if (status === "completed" && [25, 50].includes(state.timerMode)) {
@@ -4329,10 +4506,11 @@ function restoreActiveSession() {
         state.durationSeconds = state.timerMode * 60;
         state.remainingSeconds = state.durationSeconds;
         state.elapsedSeconds = 0;
-        state.sessionStartedAt = Date.now();
+        state.sessionStartedAt = null;
+        state.cloudFocusClientId = null;
         state.sessionResult = null;
         state.restStartedAt = null;
-        state.isRunning = true;
+        state.isRunning = false;
       }
       lastTick = Date.now();
     } else if (state.isRunning) {
@@ -4343,6 +4521,9 @@ function restoreActiveSession() {
         state.remainingSeconds = Math.max(0, state.remainingSeconds - appliedOfflineSeconds);
         if (state.remainingSeconds === 0) {
           state.isRunning = false;
+          if (state.cloudFocusClientId) {
+            queueFocusUpdate(state.cloudFocusClientId, { status: "completed", actualSeconds: state.elapsedSeconds, pausedSeconds: 0 });
+          }
           state.sessionResult = buildSessionResult("completed");
           saveSessionResult(state.sessionResult);
           state.sessionPhase = "rest";
@@ -4765,7 +4946,7 @@ async function copyTextToClipboard(text) {
   }
 }
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", async (event) => {
   const clickedOutsideFocusSettings = state.view === "focus"
     && state.sessionPanelOpen
     && !event.target.closest(".session-control-panel")
@@ -5058,8 +5239,41 @@ document.addEventListener("click", (event) => {
   const actionElement = event.target.closest("[data-action]");
   if (!actionElement) return;
   const action = actionElement.dataset.action;
-  const developerAction = /(?:cafe|library)-(?:debug|scene|sprite)|static-seat|publish-(?:cafe|library)|select-(?:cafe|library)|nudge-(?:cafe|library)|flip-(?:cafe|library)|duplicate-(?:cafe|library)|delete-(?:cafe|library)|reset-(?:cafe|library)|copy-(?:cafe|library)|release-cafe-seat/.test(action);
+  const developerAction = /developer-|(?:cafe|library)-(?:debug|scene|sprite)|static-seat|publish-(?:cafe|library)|select-(?:cafe|library)|nudge-(?:cafe|library)|flip-(?:cafe|library)|duplicate-(?:cafe|library)|delete-(?:cafe|library)|reset-(?:cafe|library)|copy-(?:cafe|library)|release-cafe-seat/.test(action);
   if (developerAction && !state.isDeveloper) return;
+  if (action === "continue-previous-focus" || action === "replace-previous-focus") {
+    void resolvePreviousFocus(action === "replace-previous-focus");
+    return;
+  }
+  if (action === "developer-refresh-diagnostics") { void refreshDeveloperDiagnostics(); return; }
+  if (action === "developer-recover-focus") { closePersonalCenter(); void openFocusRecovery(); return; }
+  if (action === "developer-reset-static") {
+    state.cafeDebugMode.enabled = false;
+    state.cafeSpriteTuning.enabled = false;
+    state.libraryDebugMode.enabled = false;
+    state.staticSeatCalibration.enabled = false;
+    resetStaticSeatMarkerPositions();
+    localStorage.setItem(CAFE_ROOM_RENDERER_STORAGE_KEY, CAFE_ROOM_RENDERER_STATIC);
+    const url = new URL(window.location.href);
+    url.searchParams.delete(CAFE_ROOM_RENDERER_QUERY_KEY);
+    url.searchParams.delete(CAFE_ROOM_3D_SRC_QUERY_KEY);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    if (state.view === "godot-room") state.view = "room";
+    closePersonalCenter();
+    render();
+    return;
+  }
+  if (action === "confirm-leave-focus") {
+    closeAccessOverlay();
+    await finishSession();
+    resetTimerState();
+    state.view = "island";
+    state.selectedSeat = null;
+    state.roomId = null;
+    state.localRoom = false;
+    render();
+    return;
+  }
 
   if (action === "profile") {
     openPersonalCenter();
@@ -5096,13 +5310,7 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "open-cafe-developer-editor") {
-    if (!state.isDeveloper || state.view !== "room" || state.sceneId !== "cafe") return;
-    closePersonalCenter();
-    state.staticSeatCalibration.enabled = false;
-    state.cafeDebugMode.enabled = true;
-    state.cafeSpriteTuning.enabled = true;
-    clearImmersiveAutoEnter();
-    renderRoom();
+    showToast("请使用当前静态 MVP 开发者工具");
     return;
   }
   if (action === "open-static-seat-calibration") {
@@ -5166,7 +5374,12 @@ document.addEventListener("click", (event) => {
     document.querySelector("#story")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   if (action === "back-island") {
-    if (state.currentSeatId) releaseSeat();
+    if (isActiveFocusSession()) {
+      state.accessOverlay = "leave-focus";
+      renderAccessOverlay();
+      return;
+    }
+    if (state.currentSeatId) await releaseSeat();
     stopRoomPresence();
     state.view = "island";
     state.roomId = null;
@@ -5605,7 +5818,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 window.addEventListener("pageshow", () => { void recoverCafeSeat("pageshow"); });
-window.addEventListener("online", () => { void recoverCafeSeat("online"); });
+window.addEventListener("online", () => { void flushPendingFocusUpdates(); void recoverCafeSeat("online"); });
 
 window.addEventListener("pagehide", () => {
   if (["focus", "room"].includes(state.view) && (state.isRunning || state.sessionPhase === "rest")) syncTimerFromClock();

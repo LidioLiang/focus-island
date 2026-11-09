@@ -49,5 +49,9 @@ export async function POST(request: Request) {
     }
     return json({ error: code }, { status: statusFor(error.message) });
   }
+  const result = data as { session?: { status?: string } } | null;
+  if (result?.session && !["running", "paused"].includes(result.session.status || "")) {
+    return json({ error: "focus_session_finished" }, { status: 409 });
+  }
   return json(data, { headers: { "Cache-Control": "no-store" } });
 }

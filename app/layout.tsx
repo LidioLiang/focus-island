@@ -37,13 +37,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="stylesheet" href="/styles.css?v=36" />
+        <link rel="stylesheet" href="/styles.css?v=37" />
         <link rel="stylesheet" href="/landing-final.css?v=2" />
       </head>
       <body>
         {children}
         <Script src="/vendor/i18next.min.js?v=26.4.2" strategy="beforeInteractive" />
-        <Script src="/locales/en.js?v=11" strategy="beforeInteractive" />
+        <Script src="/locales/en.js?v=12" strategy="beforeInteractive" />
         <Script src="/i18n.js?v=10" strategy="afterInteractive" />
       </body>
     </html>

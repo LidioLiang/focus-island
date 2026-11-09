@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { json } from "@/lib/presence";
 import { rateLimited } from "@/lib/security";
 import { isDeveloper } from "@/lib/authorization";
+import { normalizeAccessStatus } from "@/lib/access";
 
 const schema = z.object({
   email: emailSchema,
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
   });
   if (error) return json({ error: authError(error, "sign_up_failed") }, { status: 400 });
   if (!data.user || !data.session) return json({ error: "registration_session_unavailable" }, { status: 503 });
-  const { error: accessError } = await supabase.rpc("get_my_access_status");
+  const { data: access, error: accessError } = await supabase.rpc("get_my_access_status");
   if (accessError?.message.includes("closed_beta_full")) {
     await supabase.auth.signOut();
     return json({ error: "closed_beta_full" }, { status: 403 });
@@ -45,5 +46,6 @@ export async function POST(request: Request) {
     userId: data.user.id,
     email: data.user.email,
     developer: isDeveloper(data.user),
-  });
+    access: normalizeAccessStatus((access || {}) as Record<string, unknown>, isDeveloper(data.user)),
+  }, { headers: { "Cache-Control": "no-store" } });
 }
