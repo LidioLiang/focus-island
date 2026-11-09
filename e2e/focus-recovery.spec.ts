@@ -22,6 +22,7 @@ test("leaving an active room requires confirmation and closes its cloud session"
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
   await page.goto("/");
+  await page.locator(".immersive-timer").hover();
   await page.locator('[data-action="toggle-room-view"]').first().click();
   await expect(page.locator(".static-seat-room")).toBeVisible();
   await page.locator('[data-action="back-island"]').click();
@@ -64,7 +65,8 @@ test("a previous-session conflict offers recovery and can end the old session be
   await expect(page.locator('[data-action="continue-previous-focus"]')).toBeVisible();
   await page.locator('[data-action="replace-previous-focus"]').click();
   await expect(page.locator("#focus-recovery-title")).toHaveCount(0);
-  expect(order).toEqual(["start", "end-previous", "start"]);
+  await expect.poll(() => order).toEqual(["start", "end-previous", "start"]);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("focusIslandActiveSessionV1") || "null")?.isRunning)).toBe(true);
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("focusIslandActiveSessionV1") || "null"));
   expect(saved.isRunning).toBe(true);
   expect(saved.cloudFocusClientId).not.toBe("previous-session");
