@@ -22,6 +22,22 @@ export type AccessStatus = {
   developer: boolean;
 };
 
+export function normalizeAccessStatus(value: Record<string, unknown>, developer: boolean): AccessStatus {
+  return {
+    authenticated: value.authenticated === true,
+    emailVerified: value.emailVerified === true,
+    accountType: value.accountType === "permanent" ? "permanent" : "anonymous",
+    trialStatus: (value.trialStatus as AccessStatus["trialStatus"]) || "unavailable",
+    entitlementType: (value.entitlementType as AccessStatus["entitlementType"]) || "none",
+    subscriptionStatus: typeof value.subscriptionStatus === "string" ? value.subscriptionStatus : null,
+    canEnterProduct: value.canEnterProduct === true,
+    canStartFocus: value.canStartFocus === true,
+    offlineGraceUntil: null,
+    paywallReason: typeof value.paywallReason === "string" ? value.paywallReason : null,
+    developer,
+  };
+}
+
 type AccessSnapshot = {
   userId: string;
   entitlementType: Exclude<EntitlementType, "none" | "offline_grace">;

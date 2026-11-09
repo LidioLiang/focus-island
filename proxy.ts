@@ -9,7 +9,11 @@ export async function proxy(request: NextRequest) {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (supabaseUrl && supabaseKey) {
+  // API handlers validate their own users and can refresh cookies themselves.
+  // Public images, scripts and audio must never wait on a remote Auth request.
+  const pageRequest = request.nextUrl.pathname === "/";
+  const hasAuthCookie = request.cookies.getAll().some(({ name }) => name.startsWith("sb-") && name.includes("auth-token"));
+  if (pageRequest && hasAuthCookie && supabaseUrl && supabaseKey) {
     const supabase = createServerClient(supabaseUrl, supabaseKey, {
       cookies: {
         getAll: () => request.cookies.getAll(),

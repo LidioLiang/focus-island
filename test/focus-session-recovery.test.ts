@@ -20,7 +20,7 @@ test("stale timed and free-focus sessions are interrupted before a new session s
 test("fresh concurrent sessions stay protected and surface a useful client message", () => {
   assert.match(route, /active_session_exists[\s\S]*return 409/);
   assert.match(app, /error\.status === 409 && error\.message === "active_session_exists"/);
-  assert.match(app, /检测到另一段专注仍在进行/);
+  assert.match(app, /await openFocusRecovery\(\)/);
 });
 
 test("the next focus cycle waits for cloud authorization before starting locally", () => {

@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { json } from "@/lib/presence";
 import { rateLimited } from "@/lib/security";
 import { isDeveloper } from "@/lib/authorization";
+import { normalizeAccessStatus } from "@/lib/access";
 
 const schema = z.object({ email: emailSchema, password: z.string().min(1).max(128), captchaToken: z.string().max(4096).default("") });
 
@@ -14,10 +15,13 @@ export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password, options: { captchaToken: parsed.data.captchaToken || undefined } });
   if (error || !data.user) return json({ error: authError(error) }, { status: 401 });
-  const { error: accessError } = await supabase.rpc("get_my_access_status");
+  const { data: access, error: accessError } = await supabase.rpc("get_my_access_status");
   if (accessError?.message.includes("closed_beta_full")) {
     await supabase.auth.signOut();
     return json({ error: "closed_beta_full" }, { status: 403 });
   }
-  return json({ ok: true, userId: data.user.id, email: data.user.email, developer: isDeveloper(data.user) });
+  if (accessError || !access) return json({ error: "access_service_unavailable" }, { status: 503 });
+  return json({ ok: true, userId: data.user.id, email: data.user.email, developer: isDeveloper(data.user),
+    access: normalizeAccessStatus(access as Record<string, unknown>, isDeveloper(data.user)),
+  }, { headers: { "Cache-Control": "no-store" } });
 }

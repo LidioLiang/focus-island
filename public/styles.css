@@ -3926,7 +3926,7 @@ body.hud-idle .focus .immersive-timer {
   inset: 0;
   background:
     linear-gradient(135deg, rgba(5, 31, 27, 0.9), rgba(11, 48, 39, 0.76)),
-    url("./assets/20261012-focus-island-map-detailed.png") center / cover;
+    url("./assets/20261012-focus-island-map-detailed.webp") center / cover;
   filter: saturate(0.82);
 }
 
@@ -3953,7 +3953,7 @@ body.hud-idle .focus .immersive-timer {
   color: #f8f2e4;
   background:
     linear-gradient(rgba(12, 52, 43, 0.93), rgba(17, 58, 48, 0.88)),
-    url("./assets/20261013-cafe-window-real-focus-view.png") center / cover;
+    url("./assets/20261013-cafe-window-real-focus-view.webp") center / cover;
 }
 
 .personal-center-brand .brand-mark {
@@ -4149,7 +4149,7 @@ body.hud-idle .focus .immersive-timer {
   padding: 20px 22px;
   background:
     linear-gradient(90deg, rgba(255, 249, 237, 0.94), rgba(249, 235, 204, 0.82)),
-    url("./assets/20261013-cafe-window-real-focus-view.png") right center / 55% auto no-repeat;
+    url("./assets/20261013-cafe-window-real-focus-view.webp") right center / 55% auto no-repeat;
 }
 
 .profile-hero-identity { display: grid; grid-template-columns: 78px minmax(0, 1fr); align-items: center; gap: 16px; }
@@ -4316,6 +4316,11 @@ body.hud-idle .focus .immersive-timer {
 .profile-confirm-dialog button.is-danger { border-color: transparent; color: white; background: #a95843; }
 
 body.reduce-motion .personal-center-overlay *,
+.developer-status-grid { display: grid; gap: 10px; margin: 20px 0; }
+.developer-status-grid > div { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid rgba(60, 80, 65, .12); padding: 8px 0; }
+.developer-status-grid dt { flex-shrink: 0; }
+.developer-status-grid dd { margin: 0; overflow-wrap: anywhere; text-align: right; }
+.developer-diagnostics { max-height: 280px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; padding: 16px; background: rgba(20, 45, 35, .05); border-radius: 12px; }
 body.motion-effects-off .personal-center-overlay * { animation: none !important; transition-duration: 0.01ms !important; }
 
 body.reduce-motion .view *,

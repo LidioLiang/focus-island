@@ -732,3 +732,30 @@ Object.assign(window.__FOCUS_ISLAND_LOCALES__.en, {
   "我们会努力保持服务稳定，但不保证永不中断。网络或后端不可用时，产品可降级到明确标记的本地岛民房间，不会伪造真人在线。": "We work to keep Focus Isle available, but we cannot guarantee uninterrupted service. If live services are unavailable, the app may switch to a clearly labeled offline room with NPC companions. We do not represent NPCs as live users.",
   "软件、视觉、音频和文案均受相应权利保护。公开源代码仅供查看，除非另有书面授权，不得复制、修改、分发或商用。": "The software, artwork, audio, and copy are protected by intellectual property laws. Publicly visible source code is provided for review only and may not be copied, modified, distributed, or used commercially without written permission."
 });
+
+Object.assign(window.__FOCUS_ISLAND_LOCALES__.en, {
+  "上次专注尚未结束": "Your previous focus session is still open",
+  "可以继续上次的计时，或结束上次记录后重新开始。如果另一设备仍在专注，结束操作也会结束那一轮。": "Resume the previous timer, or end it and start again. Ending it will also end that session on another device.",
+  "继续上次专注": "Resume previous session",
+  "结束上次并重新开始": "End previous session and start again",
+  "上次专注已结束，请再次开始": "Your previous session has ended. Please start again.",
+  "暂时无法读取上次专注，请稍后重试": "Could not load your previous session. Please try again.",
+  "上次专注状态已变化，请重新开始": "Your previous session has changed. Please start again.",
+  "上次专注已结束，请重新选择开始。": "Your previous session has ended. Please start a new session.",
+  "结束本轮并返回海岛？": "End this session and return to the island?",
+  "已专注的时间会保存，本轮座位将释放。": "Your focus time will be saved and your seat will be released.",
+  "结束并返回海岛": "End and return to the island",
+  "继续专注": "Keep focusing",
+  "静态 MVP 开发者工具": "Static MVP developer tools",
+  "在线诊断": "Live diagnostics",
+  "刷新诊断": "Refresh diagnostics",
+  "上次专注恢复": "Previous session recovery",
+  "检查并恢复": "Check and recover",
+  "恢复当前静态版本": "Restore current static version",
+  "恢复静态视图": "Restore static view",
+  "仅服务端开发者账号可用。诊断当前房间、座位和专注会话；不会修改生产配置。": "Available only to server-authorized developers. Inspect the current room, seat and focus session without changing production settings.",
+  "读取三间真人房与本账号云端活动会话": "Read the three shared rooms and this account’s active cloud session",
+  "继续云端会话，或确认结束后重新开始": "Resume the cloud session, or explicitly end it and start again",
+  "退出旧版编辑器并恢复默认座位编号，保留账号、记录和专注计时": "Leave the legacy editor and reset seat labels, keeping your account, history and timer",
+  "请使用当前静态 MVP 开发者工具": "Please use the current static MVP developer tools"
+});
