@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 async function openDeveloper(page: Page, developer = true) {
   await page.addInitScript(() => localStorage.setItem("focusIslandPreferencesV1", JSON.stringify({ language: "en", reduceMotion: true })));
   await page.route("**/api/access/status", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-    authenticated: true, accountType: "permanent", canEnterProduct: true, canStartFocus: true, entitlementType: "admin", developer,
+    authenticated: true, emailVerified: true, accountType: "permanent", canEnterProduct: true, canStartFocus: true, entitlementType: "admin", developer,
   }) }));
   await page.route("**/api/auth/session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true, anonymous: false, userId: "developer-test", developer }) }));
   await page.goto("/?roomRenderer=godot3d");
