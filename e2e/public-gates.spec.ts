@@ -23,33 +23,20 @@ test("landing page loads without requesting retired Godot runtime assets", async
 
   await page.goto("/");
   await expect(page).toHaveTitle(/Focus Isle — Immersive Focus Spaces for Deep Work/);
-  await expect(page.locator("#welcome-title")).toBeVisible();
-  await expect(page.locator('[data-action="enter-island"]').first()).toBeVisible();
+  await expect(page.locator('[data-place]')).toHaveCount(6);
+  await expect(page.locator('[data-auth-form]')).toHaveCount(0);
   expect(retiredRuntimeRequests).toEqual([]);
   expect(hydrationErrors).toEqual([]);
 });
 
-test("an unauthenticated visitor is routed to the account gate", async ({ page }) => {
-  await page.route("**/api/access/status", async (route) => {
-    await route.fulfill({
-      status: 401,
-      contentType: "application/json",
-      body: JSON.stringify({
-        authenticated: false,
-        canEnterProduct: false,
-        canStartFocus: false,
-        paywallReason: "authentication_required",
-        developer: false,
-      }),
-    });
-  });
+test("sign-in is optional and available only inside Settings", async ({ page }) => {
+  await page.route("**/api/auth/session", route => route.fulfill({json:{authenticated:false}}));
   await page.goto("/");
-  await page.locator('[data-action="enter-island"]').first().click();
-  await expect(page.locator('[role="dialog"][aria-labelledby="auth-title"]')).toBeVisible();
-  await expect(page.locator('[data-auth-form] input[name="email"]')).toBeVisible();
-  await expect(page.locator('[data-auth-form] input[name="password"]')).toBeVisible();
-  await expect(page.locator('[data-auth-form] input[name="confirmPassword"]')).toBeVisible();
-  await expect(page.locator('[data-auth-form="verify"]')).toHaveCount(0);
+  await expect(page.locator('[data-place]')).toHaveCount(6);
+  await expect(page.locator('[data-auth-form]')).toHaveCount(0);
+  await page.locator('[data-panel="settings"]').click();
+  await page.locator('[data-minimal="sign-in"]').click();
+  await expect(page.locator('[data-auth-form="sign-in"]')).toBeVisible();
 });
 
 test("successful sign-up skips email verification and resumes the first focus action", async ({ page }) => {
@@ -85,14 +72,16 @@ test("successful sign-up skips email verification and resumes the first focus ac
   });
 
   await page.goto("/");
-  await page.locator('[data-action="enter-island"]').first().click();
+  await page.locator('[data-panel="settings"]').click();
+  await page.locator('[data-minimal="sign-in"]').click();
+  await page.locator('[data-action="toggle-auth-mode"]').click();
   const form = page.locator('[data-auth-form="sign-up"]');
   await form.locator('input[name="email"]').fill("tester@example.com");
   await form.locator('input[name="password"]').fill("ValidPass1!");
   await form.locator('input[name="confirmPassword"]').fill("ValidPass1!");
   await form.locator('button[type="submit"]').click();
 
-  await expect(page.locator('[data-scene="cafe"]')).toBeVisible();
+  await expect(page.locator('[data-place="cafe"]')).toBeVisible();
   await expect(page.locator('[role="dialog"][aria-labelledby="auth-title"]')).toHaveCount(0);
 });
 

@@ -5,7 +5,7 @@ const importSchema = z.object({ sessions: z.array(z.record(z.string(), z.unknown
 
 export async function GET(request: Request) {
   const auth = await authenticatedSupabase();
-  if (!auth || auth.user.is_anonymous) return json({ error: "registration_required" }, { status: 401 });
+  if (!auth) return json({ error: "authentication_required" }, { status: 401 });
   const url = new URL(request.url);
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 50));
   let query = auth.supabase.from("focus_sessions").select("*").eq("user_id", auth.user.id);

@@ -13,15 +13,15 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=48/);
-  assert.match(layoutSource, /styles\.css\?v=38/);
-  assert.match(source, /language: \/\^zh\\b\/i\.test\(window\.navigator\.language/);
+  assert.match(pageSource, /app\.js\?v=49/);
+  assert.match(layoutSource, /styles\.css\?v=39/);
+  assert.match(source, /language: "en"/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);
   assert.match(i18nRuntime, /MutationObserver/);
   assert.match(i18nRuntime, /observer\.disconnect\(\)/);
   assert.match(i18nRuntime, /observer\.takeRecords\(\)/);
   assert.match(i18nRuntime, /translateDocument\(\);\s*observeDocument\(\);/);
-  assert.match(layoutSource, /i18n\.js\?v=10" strategy="afterInteractive"/);
+  assert.match(layoutSource, /i18n\.js\?v=11" strategy="afterInteractive"/);
   assert.match(layoutSource, /landing-final\.css\?v=2/);
   assert.match(layoutSource, /locales\/en\.js\?v=12/);
   assert.match(i18nRuntime, /englishPhrases/);
@@ -75,7 +75,7 @@ test("production cafe room uses the calibrated sunny master and six static occup
   const occupantRuleStart = styles.indexOf(".static-seat-occupant {");
   const occupantRule = styles.slice(occupantRuleStart, styles.indexOf("}", occupantRuleStart) + 1);
   assert.doesNotMatch(occupantRule, /animation:/);
-  assert.match(source, /seat_id: 3, hit_area: \[59\.7, 50\.6908\]/);
+  assert.match(source, /seat_id: 3, avatar_anchor: \[68\.5, 35\], hit_area: \[59\.7, 50\.6908\]/);
   assert.doesNotMatch(styles, /\.static-seat-occupant\.is-mine\s*\{[\s\S]*?drop-shadow/);
 });
 

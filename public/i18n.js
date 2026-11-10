@@ -30,7 +30,7 @@
     } catch (_) {
       // Ignore corrupt local preferences and fall back to the browser language.
     }
-    return /^zh\b/i.test(window.navigator.language || "") ? "zh-CN" : "en";
+    return "en";
   }
 
   function translatePattern(source) {

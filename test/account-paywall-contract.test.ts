@@ -44,8 +44,8 @@ test("room allocation and room-session writes enforce access below the UI", () =
   assert.match(migration, /perform public\.assert_my_product_access\(\)/);
   assert.match(migration, /before insert or update on public\.room_sessions/);
   assert.match(appSource, /await getAccessStatus\(\{ refresh: true \}\)/);
-  assert.doesNotMatch(appSource.slice(appSource.indexOf("async function ensureOnlineIdentity"), appSource.indexOf("function currentRoomApiId")), /api\/auth\/anonymous/);
-  assert.match(anonymousRoute, /ALLOW_ANONYMOUS_MIGRATION !== "true"/);
+  assert.match(appSource.slice(appSource.indexOf("async function ensureOnlineIdentity"), appSource.indexOf("function currentRoomApiId")), /api\/auth\/anonymous/);
+  assert.match(anonymousRoute, /signInAnonymously/);
 });
 
 test("focus records and billing state are private and mutated through RPC or verified webhooks", () => {
