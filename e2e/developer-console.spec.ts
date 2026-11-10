@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import packageJson from "../package.json";
 
 async function openDeveloper(page: Page, developer = true) {
   await page.addInitScript(() => localStorage.setItem("focusIslandPreferencesV1", JSON.stringify({ language: "en", reduceMotion: true })));
@@ -16,7 +17,7 @@ test("developer console shows live rooms in English and confirms the exact lefto
   let ended = false;
   const updates: string[] = [];
   await page.route("**/api/developer/diagnostics", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-    version: "1.2.1", checkedAt: new Date().toISOString(),
+    version: packageJson.version, checkedAt: new Date().toISOString(),
     activeSessions: ended ? [] : [{ client_session_id: "old-test-session", status: "running", timer_mode: 25, actual_seconds: 120 }],
     rooms: ["cafe-01", "cafe-02", "cafe-03"].map((roomId) => ({ roomId, capacity: 6, occupied: 1, available: true,
       seats: Array.from({ length: 6 }, (_, i) => ({ seatId: i + 1, state: i === 2 ? "occupied" : "available", mine: i === 2 })),
@@ -33,7 +34,7 @@ test("developer console shows live rooms in English and confirms the exact lefto
   await expect(consolePanel).toBeVisible();
   await expect(consolePanel.locator("[data-developer-room]")).toHaveCount(3);
   await expect(consolePanel.locator(".developer-seat")).toHaveCount(18);
-  await expect(consolePanel).toContainText("1.2.1");
+  await expect(consolePanel).toContainText(packageJson.version);
   expect(await consolePanel.innerText()).not.toMatch(/[\u4e00-\u9fff]/);
   await page.locator('[data-confirm-profile="developer-end-focus"]').click();
   await expect(page.getByRole("alertdialog")).toBeVisible();
@@ -57,7 +58,7 @@ test("ordinary accounts never see developer tools", async ({ page }) => {
 test("historical Godot preference cannot change the shipped developer cafe entry", async ({ page }) => {
   const runtimeRequests: string[] = [];
   page.on("request", (request) => { if (/godot-room|\.wasm(?:\?|$)|\.pck(?:\?|$)/i.test(request.url())) runtimeRequests.push(request.url()); });
-  await page.route("**/api/developer/diagnostics", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: "1.2.1", rooms: [], activeSessions: [] }) }));
+  await page.route("**/api/developer/diagnostics", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ version: packageJson.version, rooms: [], activeSessions: [] }) }));
   await page.route("**/api/scenes/cafe/allocate", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ roomId: "cafe-01", mode: "online" }) }));
   await page.route("**/api/rooms/cafe-01/state", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ leases: [], serverNow: Date.now() }) }));
   await openDeveloper(page);
