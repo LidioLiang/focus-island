@@ -43,7 +43,7 @@ function minimalSeatPosition(slot, target) {
 
 function minimalTool(panel, name, avatar = false) {
   const image = AVATAR_OPTIONS.find(item => item.id === Number(identity.avatarSkin)) || AVATAR_OPTIONS[0];
-  return `<div class="tool-wrap"><button type="button" class="tool-button ${avatar ? "avatar-tool" : ""}" data-minimal="panel" data-panel="${panel}" aria-label="${name}" aria-expanded="${minimalUi.panel === panel}" aria-controls="minimal-panel">${avatar ? `<img src="${image.image}" alt="">` : minimalIcon(panel === "scene" ? "scene" : panel)}</button><span class="tool-tip">${name}</span></div>`;
+  return `<div class="tool-wrap"><button type="button" class="tool-button ${avatar ? "avatar-tool" : ""}" data-minimal="panel" data-panel="${panel}" aria-label="${name}" aria-expanded="${minimalUi.panel === panel}" aria-controls="minimal-panel">${avatar ? `<img src="${escapeHtml(accountAvatar())}" alt="">` : minimalIcon(panel === "scene" ? "scene" : panel)}</button><span class="tool-tip">${name}</span></div>`;
 }
 
 function minimalHeader(view) {
@@ -89,7 +89,7 @@ function minimalAvatarMarkup() {
     const label = ghost ? "Layout sample" : mine ? "You" : lease.memberType === "npc" ? "Islander" : focusing ? "Focusing" : "Seated";
     const [x,y] = minimalSeatPosition(slot, "avatar");
     const edit = minimalUi.editing && state.isDeveloper;
-    return `<button type="button" class="avatar-marker ${focusing ? "rippling" : ""} ${ghost ? "ghost" : ""} ${mine ? "is-mine" : ""}" data-minimal="${edit ? "select-marker" : "avatar-info"}" ${edit ? `data-layout-target="avatar" data-layout-seat="${slot.seat_id}"` : ""} style="left:${x}%;top:${y}%" aria-label="Seat ${slot.seat_id}: ${escapeHtml(label)}"><img src="${image.image}" alt=""><span class="seat-caption">${label}</span></button>`;
+    return `<button type="button" class="avatar-marker ${focusing ? "rippling" : ""} ${ghost ? "ghost" : ""} ${mine ? "is-mine" : ""}" data-minimal="${edit ? "select-marker" : "avatar-info"}" ${edit ? `data-layout-target="avatar" data-layout-seat="${slot.seat_id}"` : ""} style="left:${x}%;top:${y}%" aria-label="Seat ${slot.seat_id}: ${escapeHtml((mine?identity.displayName:lease?.displayName || label)+" · "+label)}"><img src="${escapeHtml(accountAvatar(mine ? identity : {avatarSkin:lease?.avatarSkin,avatarUrl:lease?.avatarUrl}))}" alt=""><span class="seat-caption">${label}</span></button>`;
   }).join("");
 }
 
@@ -232,7 +232,7 @@ document.addEventListener('click',async event=>{
     if(action==='place'&&node.dataset.open!=='true'){minimalShowPlace(node);return;}
     state.sceneId='cafe';state.roomId=null;state.selectedSeat=null;state.offlineFocus=false;await enterCafeRoom();if(state.view==='room')localStorage.setItem('focusIslandLastPlaceV1','cafe');return;
   }
-  if(action==='panel'){minimalSetPanel(node.dataset.panel);if(node.dataset.panel==='settings'&&!minimalUi.identity){try{const session=await api('/api/auth/session');minimalUi.identity=session;state.isDeveloper=session.developer===true;minimalRenderPanel();}catch(_){/* Optional identity lookup never blocks local preferences. */}}return;}
+  if(action==='panel'){if(node.dataset.panel==='avatar'){minimalUi.panel=null;state.sessionPanelOpen=false;openPersonalCenter({tab:'account'});return;}minimalSetPanel(node.dataset.panel);if(node.dataset.panel==='settings'&&!minimalUi.identity){try{const session=await api('/api/auth/session');minimalUi.identity=session;state.isDeveloper=session.developer===true;minimalRenderPanel();}catch(_){/* Optional identity lookup never blocks local preferences. */}}return;}
   if(action==='close-panel'){minimalSetPanel(null);return;}
   if(action==='back-room'){state.view='room';render();return;}
   if(action==='back-island'){if(isActiveFocusSession()){minimalUi.confirm='leave';minimalRenderConfirm();}else{await releaseSeat();resetTimerState();state.view='island';state.sceneId=null;render();}return;}
@@ -246,7 +246,7 @@ document.addEventListener('click',async event=>{
   if(action==='break'){state.view='focus';beginRestStage(25);return;}
   if(action==='end-break'){document.title='Focus Isle';stopTicker();state.restStartedAt=null;state.sessionPhase='focus';localStorage.removeItem(STORAGE_KEYS.activeSession);state.view='summary';render();return;}
   if(action==='account'){minimalUi.panel=null;state.sessionPanelOpen=false;openPersonalCenter({tab:'account'});return;}
-  if(action==='sign-in'){if(isActiveFocusSession()){showToast('End your session before switching accounts.');return;}minimalUi.panel=null;state.sessionPanelOpen=false;state.authMode='sign-in';openAuthGate();return;}
+  if(action==='sign-in'){minimalUi.panel=null;state.sessionPanelOpen=false;openPersonalCenter({tab:'account'});state.personalCenter.tab='security';renderPersonalCenter();return;}
   if(action==='developer'){if(!state.isDeveloper)return;minimalUi.panel=null;state.sessionPanelOpen=false;openPersonalCenter({tab:'developer'});return;}
   if(action==='layout'){if(!state.isDeveloper)return;minimalUi.editing=!minimalUi.editing;minimalUi.panel=null;state.sessionPanelOpen=false;if(minimalUi.editing&&state.sceneId!=='cafe'){state.sceneId='cafe';await enterCafeRoom();if(state.view!=='room'||!state.roomId){minimalUi.editing=false;return;}}state.view='room';render();return;}
   if(action==='collapse-layout'){if(!state.isDeveloper)return;minimalUi.layoutCollapsed=!minimalUi.layoutCollapsed;const panel=document.querySelector('.minimal-layout-tools');panel.classList.toggle('is-collapsed',minimalUi.layoutCollapsed);node.setAttribute('aria-expanded',String(!minimalUi.layoutCollapsed));node.setAttribute('aria-label',(minimalUi.layoutCollapsed?'Expand':'Collapse')+' layout tools');node.innerHTML=minimalIcon(minimalUi.layoutCollapsed?'plus':'minus');minimalPositionLayoutPanel();return;}

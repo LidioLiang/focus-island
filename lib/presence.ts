@@ -71,6 +71,7 @@ export function legacyLease(row: Record<string, unknown>) {
     guestId: row.user_id,
     displayName: row.display_name,
     avatarSkin: row.avatar_skin,
+    avatarUrl: row.avatar_url || null,
     state: row.state,
     activity: row.activity,
     transitionStartedAt: milliseconds(row.transition_started_at as string | null),
