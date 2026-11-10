@@ -435,6 +435,7 @@ function persistIdentity() {
   if (ownLease) {
     ownLease.displayName = identity.displayName;
     ownLease.avatarSkin = identity.avatarSkin;
+    ownLease.avatarUrl = identity.avatarUrl || null;
   }
 }
 
@@ -587,12 +588,14 @@ async function ensureOnlineIdentity() {
     onlineIdentityPromise = (async () => {
       const session = await api("/api/auth/session");
       if (session.authenticated) {
+        applyAccountProfile(session.profile);
         onlineUserId = session.userId;
         state.isDeveloper = session.developer === true;
         return session;
       }
       const captchaToken = await turnstileToken();
       const guest = await api("/api/auth/anonymous", { method: "POST", body: JSON.stringify({ ...identityBody(), captchaToken }) });
+      applyAccountProfile(guest.profile);
       onlineUserId = guest.userId;
       state.isDeveloper = guest.developer === true;
       if (guest.access) { state.accessStatus = guest.access; accessStatusFetchedAt = Date.now(); }
@@ -2264,6 +2267,7 @@ function personalCenterNotice() {
 }
 
 function renderPersonalCenter() {
+  if (PUBLIC_CONFIG.minimalMvp) return renderAccountCenter();
   document.querySelector(".personal-center-overlay")?.remove();
   const tabs = [
     ["overview", "⌂", "个人概览"],
@@ -6119,4 +6123,13 @@ if (billingReturnState === "confirming") {
 } else if (billingReturnState === "canceled") {
   window.history.replaceState({}, "", window.location.pathname);
   showToast("已取消结账，没有产生扣款");
+}
+
+if (PUBLIC_CONFIG.minimalMvp) {
+  const accountQuery = new URLSearchParams(location.search);
+  if (accountQuery.has('account') || accountQuery.has('account-error')) {
+    accountCenter.error = accountQuery.has('account-error') ? accountMessage(accountQuery.get('account-error')) : '';
+    openPersonalCenter({tab:'account'});
+    history.replaceState(null,'',location.pathname);
+  }
 }

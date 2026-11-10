@@ -24,6 +24,7 @@
   let observer = null;
 
   function detectLanguage() {
+    if (window.__FOCUS_ISLAND_CONFIG__?.minimalMvp) return "en";
     try {
       const saved = JSON.parse(window.localStorage.getItem(PREFERENCES_KEY) || "null");
       if (SUPPORTED_LANGUAGES.has(saved?.language)) return saved.language;
@@ -216,7 +217,7 @@
   }
 
   function setLanguage(language, { reload = false } = {}) {
-    currentLanguage = SUPPORTED_LANGUAGES.has(language) ? language : "en";
+    currentLanguage = window.__FOCUS_ISLAND_CONFIG__?.minimalMvp ? "en" : SUPPORTED_LANGUAGES.has(language) ? language : "en";
     document.documentElement.lang = currentLanguage;
     window.i18next?.changeLanguage(currentLanguage);
     window.dispatchEvent(new CustomEvent("focus-island:language-change", { detail: { language: currentLanguage } }));

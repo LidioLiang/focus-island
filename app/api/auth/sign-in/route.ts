@@ -1,3 +1,4 @@
+import { activeAccountSession } from "@/lib/profile";
 import { z } from "zod";
 import { emailSchema, authError } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -13,6 +14,9 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return json({ error: "invalid_credentials" }, { status: 400 });
   const supabase = await createServerSupabaseClient();
+  const { data: { user: previousUser } } = await supabase.auth.getUser();
+  try { if (await activeAccountSession(supabase, previousUser)) return json({ error: "active_session_exists" }, { status: 409 }); }
+  catch { return json({ error: "focus_service_unavailable" }, { status: 503 }); }
   const { data, error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password, options: { captchaToken: parsed.data.captchaToken || undefined } });
   if (error || !data.user) return json({ error: authError(error) }, { status: 401 });
   const { data: access, error: accessError } = await supabase.rpc("get_my_access_status");

@@ -1,3 +1,4 @@
+import { readProfile } from "@/lib/profile";
 import { z } from "zod";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isDeveloper } from "@/lib/authorization";
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
   if (profileError) return json({ error: "profile_sync_failed" }, { status: 503 });
   const { data: access, error: accessError } = await supabase.rpc("get_my_access_status");
   if (accessError) return json({ error: accessError.message.includes("closed_beta_full") ? "closed_beta_full" : "access_service_unavailable" }, { status: 503 });
-  return json({ ok: true, userId: user.id, anonymous: user.is_anonymous === true,
+  return json({ profile: await readProfile(supabase, user), ok: true, userId: user.id, anonymous: user.is_anonymous === true,
     developer: isDeveloper(user), access: normalizeAccessStatus((access || {}) as Record<string, unknown>, isDeveloper(user)),
   }, { headers: { "Cache-Control": "no-store" } });
 }

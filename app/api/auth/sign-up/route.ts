@@ -1,3 +1,4 @@
+import { activeAccountSession } from "@/lib/profile";
 import { z } from "zod";
 import { emailSchema, passwordSchema, authError } from "@/lib/auth";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -21,6 +22,9 @@ export async function POST(request: Request) {
   if (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !parsed.data.captchaToken) return json({ error: "captcha_required" }, { status: 403 });
 
   const supabase = await createServerSupabaseClient();
+  const { data: { user: previousUser } } = await supabase.auth.getUser();
+  try { if (await activeAccountSession(supabase, previousUser)) return json({ error: "active_session_exists" }, { status: 409 }); }
+  catch { return json({ error: "focus_service_unavailable" }, { status: 503 }); }
   const { data: current } = await supabase.auth.getUser();
   if (current.user?.is_anonymous) {
     await supabase.auth.signOut();

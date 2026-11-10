@@ -40,13 +40,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="stylesheet" href="/styles.css?v=39" />
         <link rel="stylesheet" href="/landing-final.css?v=2" />
         <link rel="stylesheet" href="/minimal-mvp.css?v=2" />
+        <link rel="stylesheet" href="/account-center.css?v=1" />
       </head>
       <body>
         {children}
         <Script src="/vendor/i18next.min.js?v=26.4.2" strategy="beforeInteractive" />
         <Script src="/locales/en.js?v=12" strategy="beforeInteractive" />
-        <Script src="/minimal-mvp.js?v=2" strategy="beforeInteractive" />
-        <Script src="/i18n.js?v=11" strategy="afterInteractive" />
+        <Script src="/account-center.js?v=1" strategy="beforeInteractive" />
+        <Script src="/minimal-mvp.js?v=4" strategy="beforeInteractive" />
+        <Script src="/i18n.js?v=12" strategy="afterInteractive" />
       </body>
     </html>
   );
