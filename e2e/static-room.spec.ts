@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("the cafe opens with two stable islanders and the user avatar never replays an entrance animation", async ({ page }) => {
+test("the cafe opens with only real occupants and an upright portrait appears above the selected seat", async ({ page }) => {
   let occupied = false;
   let occupiedSeatId = 0;
   let identity: { sessionId: string; displayName: string; avatarSkin: number } | null = null;
@@ -69,27 +69,23 @@ test("the cafe opens with two stable islanders and the user avatar never replays
   }));
 
   await page.goto("/");
-  await page.locator('[data-action="enter-island"]').first().click();
-  await expect(page.locator('[data-scene="cafe"]')).toBeVisible();
-  await page.locator('[data-scene="cafe"]').click();
+  await expect(page.locator('[data-place="cafe"]')).toBeVisible();
+  await page.locator('[data-place="cafe"]').click();
 
   await expect(page.locator(".static-seat-room")).toBeVisible();
-  await expect(page.locator(".static-seat-label.is-npc")).toHaveCount(2);
-  await expect(page.locator(".static-seat-occupant")).toHaveCount(2);
-  expect(await page.locator(".static-seat-occupant").evaluateAll((elements) =>
-    elements.reduce((count, element) => count + element.getAnimations().length, 0)
-  )).toBe(0);
-
+  await expect(page.locator(".avatar-marker")).toHaveCount(0);
+  await expect(page.locator("button.seat.available")).toHaveCount(6);
   await page.locator("button.seat.available").first().click();
-  await expect(page.locator(".static-seat-occupant.is-mine")).toHaveCount(1);
-  await expect(page.locator(".static-seat-label.is-npc")).toHaveCount(2);
-
+  await expect(page.locator('[data-session-clock]')).toBeVisible();
+  await page.locator('[data-minimal="back-room"]').click();
+  await expect(page.locator('.avatar-marker.is-mine')).toHaveCount(1);
+  await expect(page.locator('.static-seat-occupant')).toHaveCount(0);
   for (let refresh = 0; refresh < 3; refresh += 1) {
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("focus-island:room-change", { detail: { roomId: "cafe-01" } })));
     await page.waitForTimeout(80);
   }
 
-  const userAvatar = page.locator(".static-seat-occupant.is-mine");
+  const userAvatar = page.locator(".avatar-marker.is-mine");
   await expect(userAvatar).toHaveCount(1);
   expect(await userAvatar.evaluate((element) => ({
     animations: element.getAnimations().length,
@@ -99,7 +95,7 @@ test("the cafe opens with two stable islanders and the user avatar never replays
 
 test("an expired background lease silently recovers or moves seats without resetting focus time", async ({ page }) => {
   const sessionId = "7d813b27-a6a8-46b8-9d31-5f9df8c1907e";
-  const startedAt = Date.now() - 52 * 60_000;
+  const startedAt = Date.now() - 42 * 60_000;
   let resumePayload: Record<string, unknown> | null = null;
 
   await page.addInitScript(({ sessionId: seededSessionId, startedAt: seededStartedAt }) => {
@@ -116,8 +112,8 @@ test("an expired background lease silently recovers or moves seats without reset
       selectedSeat: 0,
       timerMode: 50,
       durationSeconds: 3000,
-      remainingSeconds: 0,
-      elapsedSeconds: 3120,
+      remainingSeconds: 500,
+      elapsedSeconds: 2500,
       isRunning: true,
       sessionPhase: "focus",
       restDurationSeconds: 300,
@@ -172,7 +168,7 @@ test("an expired background lease silently recovers or moves seats without reset
   expect(resumePayload).toMatchObject({
     preferredRoomId: "cafe-01",
     preferredSeatId: 1,
-    focusing: false,
+    focusing: true,
     focusStartedAt: startedAt,
   });
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("focusIslandActiveSessionV1") || "null"));

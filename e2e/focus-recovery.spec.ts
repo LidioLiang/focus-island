@@ -23,13 +23,13 @@ test("leaving an active room requires confirmation and closes its cloud session"
   });
   await page.goto("/");
   await page.locator(".immersive-timer").hover();
-  await page.locator('[data-action="toggle-room-view"]').first().click();
+  await page.locator('[data-minimal="back-room"]').first().click();
   await expect(page.locator(".static-seat-room")).toBeVisible();
-  await page.locator('[data-action="back-island"]').click();
-  await expect(page.locator("#leave-focus-title")).toBeVisible();
+  await page.locator('[data-minimal="back-island"]').click();
+  await expect(page.locator("#minimal-confirm-title")).toBeVisible();
   expect(updates).toHaveLength(0);
-  await page.locator('[data-action="confirm-leave-focus"]').click();
-  await expect(page.locator('[data-scene="cafe"]')).toBeVisible();
+  await page.locator('[data-minimal="accept-confirm"]').click();
+  await expect(page.locator('[data-place="cafe"]')).toBeVisible();
   expect(updates).toHaveLength(1);
   expect(updates[0]).toMatchObject({ status: "ended_early" });
   expect(updates[0].actualSeconds).toBeGreaterThanOrEqual(120);

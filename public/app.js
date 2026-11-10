@@ -164,12 +164,12 @@ const scenes = {
 // The only production room-layout configuration used by the fast MVP.
 // Coordinates are percentages of the calibrated 1672 × 941 sunny cafe canvas.
 const staticSeatSlots = [
-  { seat_id: 1, hit_area: [28.11, 52.0723], occupant_anchor: [23.2057, 19.6599, 9.5694, 34.0064], label_anchor: [28, 19.5], desk_zone_id: "bar", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-01-occupied.png`, flip: false },
-  { seat_id: 2, hit_area: [39.1746, 47.5027], occupant_anchor: [32.3565, 17.6408, 10.1675, 31.1371], label_anchor: [37.44, 17.5], desk_zone_id: "bar", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-02-occupied.png`, flip: false },
-  { seat_id: 3, hit_area: [59.7, 50.6908], occupant_anchor: [62.9187, 22.848, 12.3804, 27.3114], label_anchor: [69.11, 22.7], desk_zone_id: "window", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-03-occupied.png`, flip: false },
-  { seat_id: 4, hit_area: [83.433, 56.8544], occupant_anchor: [78.0502, 28.6929, 11.4234, 31.881], label_anchor: [83.76, 28.5], desk_zone_id: "window", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-04-occupied.png`, flip: false },
-  { seat_id: 5, hit_area: [15.5502, 75.983], occupant_anchor: [8.6722, 44.102, 16.6268, 32.8374], label_anchor: [16.99, 44], desk_zone_id: "lounge", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-05-occupied.png`, flip: false },
-  { seat_id: 6, hit_area: [66.0885, 83.9532], occupant_anchor: [59.2105, 49.3092, 15.5502, 35.0691], label_anchor: [66.99, 49.2], desk_zone_id: "lounge", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-06-occupied.png`, flip: false },
+  { seat_id: 1, avatar_anchor: [28.5, 33], hit_area: [28.11, 52.0723], occupant_anchor: [23.2057, 19.6599, 9.5694, 34.0064], label_anchor: [28, 19.5], desk_zone_id: "bar", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-01-occupied.png`, flip: false },
+  { seat_id: 2, avatar_anchor: [39.3, 30], hit_area: [39.1746, 47.5027], occupant_anchor: [32.3565, 17.6408, 10.1675, 31.1371], label_anchor: [37.44, 17.5], desk_zone_id: "bar", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-02-occupied.png`, flip: false },
+  { seat_id: 3, avatar_anchor: [68.5, 35], hit_area: [59.7, 50.6908], occupant_anchor: [62.9187, 22.848, 12.3804, 27.3114], label_anchor: [69.11, 22.7], desk_zone_id: "window", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-03-occupied.png`, flip: false },
+  { seat_id: 4, avatar_anchor: [84, 43], hit_area: [83.433, 56.8544], occupant_anchor: [78.0502, 28.6929, 11.4234, 31.881], label_anchor: [83.76, 28.5], desk_zone_id: "window", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-04-occupied.png`, flip: false },
+  { seat_id: 5, avatar_anchor: [16, 53], hit_area: [15.5502, 75.983], occupant_anchor: [8.6722, 44.102, 16.6268, 32.8374], label_anchor: [16.99, 44], desk_zone_id: "lounge", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-05-occupied.png`, flip: false },
+  { seat_id: 6, avatar_anchor: [67, 63], hit_area: [66.0885, 83.9532], occupant_anchor: [59.2105, 49.3092, 15.5502, 35.0691], label_anchor: [66.99, 49.2], desk_zone_id: "lounge", occupied_asset: `${ASSET_BASE}20261028-cafe-seat-06-occupied.png`, flip: false },
 ];
 
 const islandImage = `${ASSET_BASE}20261012-focus-island-map-detailed.webp`;
@@ -227,7 +227,7 @@ if (!localStorage.getItem(STORAGE_KEYS.libraryScenePublished)) {
 }
 
 const state = {
-  view: "welcome",
+  view: PUBLIC_CONFIG.minimalMvp ? "island" : new URLSearchParams(window.location.search).has("welcome") ? "welcome" : "island",
   sceneId: null,
   roomId: null,
   localRoom: false,
@@ -362,7 +362,7 @@ function defaultPreferences() {
     sounds: { ambient: true, white: false, music: false },
     musicTrack: "rainy-notes",
     soundVolumes: { ambient: 55, white: 30, music: 24 },
-    language: /^zh\b/i.test(window.navigator.language || "") ? "zh-CN" : "en",
+    language: "en",
     motionEffects: true,
     reduceMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || false,
     hudAutoHide: true,
@@ -586,14 +586,17 @@ async function ensureOnlineIdentity() {
   if (!onlineIdentityPromise) {
     onlineIdentityPromise = (async () => {
       const session = await api("/api/auth/session");
-      if (session.authenticated && !session.anonymous) {
+      if (session.authenticated) {
         onlineUserId = session.userId;
         state.isDeveloper = session.developer === true;
         return session;
       }
-      const error = new Error(session.anonymous ? "registration_required" : "authentication_required");
-      error.status = 401;
-      throw error;
+      const captchaToken = await turnstileToken();
+      const guest = await api("/api/auth/anonymous", { method: "POST", body: JSON.stringify({ ...identityBody(), captchaToken }) });
+      onlineUserId = guest.userId;
+      state.isDeveloper = guest.developer === true;
+      if (guest.access) { state.accessStatus = guest.access; accessStatusFetchedAt = Date.now(); }
+      return { authenticated: true, anonymous: guest.anonymous, userId: guest.userId, developer: state.isDeveloper };
     })().catch((error) => {
       onlineIdentityPromise = null;
       throw error;
@@ -607,6 +610,7 @@ async function getAccessStatus({ refresh = false } = {}) {
   if (!accessStatusPromise) accessStatusPromise = (async () => {
     const response = await fetch("/api/access/status", { cache: "no-store" });
     const status = await response.json().catch(() => ({ authenticated: false, paywallReason: "access_service_unavailable" }));
+    if (!response.ok) throw Object.assign(new Error(status.paywallReason || "access_service_unavailable"), { status: response.status });
     state.accessStatus = status;
     state.isDeveloper = status.developer === true;
     accessStatusFetchedAt = Date.now();
@@ -754,8 +758,8 @@ function renderAccessOverlay() {
     shell.innerHTML = `<section class="access-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
       <p class="access-eyebrow">${signUp ? "CREATE ACCOUNT" : "WELCOME BACK"}</p>
-      <h2 id="auth-title">${state.pendingLifetimeInvite ? (signUp ? "注册领取终身体验" : "登录领取终身体验") : signUp ? "注册后免费专注一次" : "登录专注岛"}</h2>
-      <p>${state.pendingLifetimeInvite ? "你已通过限量邀请链接进入。注册成功后自动领取，名额以最终领取成功为准。" : signUp ? "填写邮箱并设置密码，注册成功后会自动继续刚才的专注操作。" : "登录后恢复云端记录与已购买权益。"}</p>
+      <h2 id="auth-title">${state.pendingLifetimeInvite ? (signUp ? "注册领取终身体验" : "登录领取终身体验") : signUp ? "Create an optional account" : "Welcome back"}</h2>
+      <p>${state.pendingLifetimeInvite ? "你已通过限量邀请链接进入。注册成功后自动领取，名额以最终领取成功为准。" : signUp ? "Keep your account details together. Café focus stays free with or without an account." : "Sign in to manage your account and existing purchases."}</p>
       <form data-auth-form="${signUp ? "sign-up" : "sign-in"}">
         <label>邮箱<input name="email" type="email" autocomplete="email" value="${escapeHtml(state.authEmail)}" required /></label>
         <label>密码<input name="password" type="password" autocomplete="${signUp ? "new-password" : "current-password"}" ${signUp ? "minlength=\"10\"" : ""} required /></label>
@@ -785,6 +789,11 @@ async function importLocalHistory() {
 }
 
 async function completeAuthenticatedFlow(result) {
+  if (PUBLIC_CONFIG.minimalMvp && onlineUserId !== result.userId) {
+    resetTimerState(); identity.sessionId = crypto.randomUUID(); persistIdentity();
+    state.currentSeatId = null; state.selectedSeat = null; state.roomId = null;
+    state.roomPresence = { leases: [], serverNow: Date.now() };
+  }
   onlineUserId = result.userId;
   state.isDeveloper = result.developer === true;
   onlineIdentityPromise = Promise.resolve({ authenticated: true, anonymous: false, userId: result.userId, developer: state.isDeveloper });
@@ -809,6 +818,7 @@ async function completeAuthenticatedFlow(result) {
 }
 
 async function authorizeFocusStart() {
+  if (PUBLIC_CONFIG.minimalMvp && state.offlineFocus) return true;
   if (state.cloudFocusClientId) return true;
   if (focusAuthorizationPromise) return focusAuthorizationPromise;
   focusAuthorizationPromise = requestFocusAuthorization().finally(() => { focusAuthorizationPromise = null; });
@@ -914,6 +924,7 @@ function shuffledCopy(values) {
 }
 
 function createLocalNpcLeases({ excludeSeatIds = [] } = {}) {
+  if (PUBLIC_CONFIG.minimalMvp) return [];
   const now = Date.now();
   const excluded = new Set(excludeSeatIds.map(Number));
   const seatIds = shuffledCopy(staticSeatSlots.map((slot) => slot.seat_id).filter((seatId) => !excluded.has(seatId))).slice(0, 2);
@@ -966,8 +977,9 @@ async function enterCafeRoom() {
   showToast("正在为你准备咖啡馆座位…");
   let access = null;
   try {
+    await ensureOnlineIdentity();
     access = await getAccessStatus({ refresh: Date.now() - accessStatusFetchedAt > 15000 });
-    if (!access.authenticated || !access.emailVerified) {
+    if (!access.authenticated) {
       openAuthGate(access.paywallReason);
       return;
     }
@@ -982,8 +994,14 @@ async function enterCafeRoom() {
     });
     state.roomId = allocation.roomId;
     state.localRoom = allocation.mode === "local";
+    if (PUBLIC_CONFIG.minimalMvp) { state.offlineFocus = false; state.presenceUnavailable = false; }
   } catch (error) {
-    if (access?.entitlementType === "offline_grace") {
+    if (PUBLIC_CONFIG.minimalMvp && (!error.status || error.status >= 500)) {
+      state.roomId = "cafe-local";
+      state.localRoom = true;
+      state.offlineFocus = true;
+      showToast("Live rooms are unavailable. You can focus on your own.");
+    } else if (access?.entitlementType === "offline_grace") {
       state.roomId = "cafe-local";
       state.localRoom = true;
       showToast("在线服务暂不可用，已使用付费离线宽限进入本地岛民房间");
@@ -1929,6 +1947,8 @@ async function syncCafeState({ refreshMarkers = true } = {}) {
   try {
     const presence = await api(`/api/rooms/${currentRoomApiId()}/state`);
     state.roomPresence = presence;
+    state.presenceUnavailable = false;
+    state.presenceFetchedAt = Date.now();
     reconcileLocalNpcRoster(presence.leases);
     const ownLease = presence.leases.find((lease) => lease.sessionId === identity.sessionId && lease.state === "occupied");
     if (ownLease) state.currentSeatId = Number(ownLease.seatId);
@@ -1940,6 +1960,7 @@ async function syncCafeState({ refreshMarkers = true } = {}) {
     syncCafeSeatActorLayers(presence.leases);
     if (refreshMarkers && state.view === "room") refreshCafeSeatMarkers();
   } catch (_) {
+    if (PUBLIC_CONFIG.minimalMvp) { state.presenceUnavailable = true; if (state.view === "room") refreshMinimalSeats(); }
     const syncLabel = document.querySelector(".room-sync-label");
     if (syncLabel) syncLabel.textContent = "正在重新连接…";
   } finally {
@@ -1948,6 +1969,7 @@ async function syncCafeState({ refreshMarkers = true } = {}) {
 }
 
 function refreshCafeSeatMarkers() {
+  if (PUBLIC_CONFIG.minimalMvp) return refreshMinimalSeats();
   const markerLayer = document.querySelector(".seat-markers");
   if (!markerLayer || state.sceneId !== "cafe") return;
   const renderedSeatEntries = cafeVisibleSeatEntries();
@@ -2208,7 +2230,7 @@ function openPersonalCenter({ tab = "overview" } = {}) {
   if (state.isRunning || state.sessionPhase === "rest") syncTimerFromClock();
   persistActiveSession(true);
   state.personalCenter.open = true;
-  state.personalCenter.tab = tab === "developer" && state.isDeveloper ? "developer" : "overview";
+  state.personalCenter.tab = tab === "developer" && state.isDeveloper ? "developer" : PUBLIC_CONFIG.minimalMvp && tab === "account" ? "account" : "overview";
   state.personalCenter.monthKey = shanghaiDateKey(Date.now()).slice(0, 7);
   state.personalCenter.selectedDate = shanghaiDateKey(Date.now());
   state.personalCenter.filters = { scene: "all", status: "all", mode: "all" };
@@ -3476,6 +3498,7 @@ function renderWelcome() {
 
 
 function renderIsland() {
+  if (PUBLIC_CONFIG.minimalMvp) return renderMinimalIsland();
   app.innerHTML = `
     <section class="view island">
       <div class="island-map-frame">
@@ -3698,6 +3721,7 @@ function renderStaticCafeOccupants() {
 }
 
 function renderStaticCafeRoom() {
+  if (PUBLIC_CONFIG.minimalMvp) return renderMinimalRoom();
   const roomMode = state.localRoom ? "本地岛民房间" : "在线陪伴房间";
   const awaitingImmersive = state.awaitingImmersiveFocus && state.currentSeatId && state.selectedSeat === state.currentSeatId - 1;
   app.innerHTML = `
@@ -3918,6 +3942,7 @@ async function occupySelectedSeat() {
       state.remainingSeconds = state.durationSeconds;
       state.elapsedSeconds = 0;
       state.sessionStartedAt = null;
+      state.cloudFocusClientId = null;
       state.isRunning = false;
       state.sessionPhase = "focus";
       state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
@@ -3938,8 +3963,15 @@ async function occupySelectedSeat() {
       state.musicTrack = defaults.musicTrack;
       state.soundVolumes = { ...defaults.soundVolumes };
     }
-    beginImmersiveAutoEnter();
-    renderRoom();
+    if (PUBLIC_CONFIG.minimalMvp) {
+      clearImmersiveAutoEnter();
+      state.view = "focus";
+      persistActiveSession(true);
+      renderFocus();
+    } else {
+      beginImmersiveAutoEnter();
+      renderRoom();
+    }
     return;
   } catch (error) {
     state.isTransitioning = false;
@@ -3957,6 +3989,7 @@ async function occupySelectedSeat() {
 }
 
 function renderFocus() {
+  if (PUBLIC_CONFIG.minimalMvp) return renderMinimalFocus();
   window.clearInterval(roomSyncTimer);
   roomSyncTimer = null;
   const scene = scenes[state.sceneId];
@@ -4128,6 +4161,7 @@ function soundButton(key, icon, label, forcedActive = null) {
 }
 
 function renderSummary() {
+  if (PUBLIC_CONFIG.minimalMvp) return renderMinimalSummary();
   const scene = scenes[state.sceneId];
   const result = state.sessionResult || buildSessionResult("ended_early");
   const minutes = Math.floor(result.elapsedSeconds / 60);
@@ -4226,7 +4260,7 @@ function formatTime() {
 }
 
 async function setTimerMode(mode) {
-  if ((mode === 0 || mode === 50) && !["subscription", "lifetime", "admin", "offline_grace"].includes(state.accessStatus?.entitlementType)) {
+  if (!PUBLIC_CONFIG.minimalMvp && (mode === 0 || mode === 50) && !["subscription", "lifetime", "admin", "offline_grace"].includes(state.accessStatus?.entitlementType)) {
     const access = await getAccessStatus({ refresh: true }).catch(() => null);
     if (!access || !["subscription", "lifetime", "admin", "offline_grace"].includes(access.entitlementType)) {
       openPaywall("paid_timer_mode_required");
@@ -4255,6 +4289,8 @@ async function toggleTimer() {
     stopTicker();
     suspendAudio();
     persistActiveSession(true);
+    if (state.cloudFocusClientId) { queueFocusUpdate(state.cloudFocusClientId, { status: "paused", actualSeconds: state.elapsedSeconds, pausedSeconds: 0 }); void flushPendingFocusUpdates(); }
+    sendHeartbeat();
   } else {
     if (!timerHadStarted && !await authorizeFocusStart()) return;
     state.isRunning = true;
@@ -4263,6 +4299,7 @@ async function toggleTimer() {
     startTicker();
     updateAudio();
     persistActiveSession(true);
+    if (timerHadStarted && state.cloudFocusClientId) { queueFocusUpdate(state.cloudFocusClientId, { status: "running", actualSeconds: state.elapsedSeconds, pausedSeconds: 0 }); void flushPendingFocusUpdates(); }
     sendHeartbeat();
   }
   if (!timerHadStarted && state.isRunning) state.sessionPanelOpen = false;
@@ -4312,7 +4349,10 @@ function syncRestTimerFromClock() {
   lastTick += delta * 1000;
   state.restRemainingSeconds = Math.max(0, state.restRemainingSeconds - delta);
   if (state.restRemainingSeconds === 0) {
-    startNextFocusSession();
+    if (PUBLIC_CONFIG.minimalMvp) {
+      stopTicker(); state.sessionPhase = "focus"; state.restStartedAt = null;
+      localStorage.removeItem(STORAGE_KEYS.activeSession); state.view = "summary"; render();
+    } else startNextFocusSession();
     return true;
   }
   return false;
@@ -4332,28 +4372,34 @@ function queueFocusUpdate(clientSessionId, payload) {
   try { pending = JSON.parse(localStorage.getItem("focusIslandPendingFocusUpdatesV1") || "[]"); }
   catch (_) { pending = []; }
   if (!Array.isArray(pending)) pending = [];
-  pending = pending.filter((item) => item.clientSessionId !== clientSessionId);
-  pending.push({ clientSessionId, ownerUserId: onlineUserId, payload });
+  const previous = pending.find(item => item.clientSessionId === clientSessionId);
+  const terminal = status => ["completed", "ended_early", "interrupted"].includes(status);
+  if (previous && terminal(previous.payload?.status) && !terminal(payload.status)) return;
+  pending = pending.filter(item => item.clientSessionId !== clientSessionId);
+  pending.push({ clientSessionId, ownerUserId: onlineUserId, revision: crypto.randomUUID(), payload });
   localStorage.setItem("focusIslandPendingFocusUpdatesV1", JSON.stringify(pending.slice(-20)));
 }
 
 async function flushPendingFocusUpdates() {
   if (pendingFocusUpdatePromise) return pendingFocusUpdatePromise;
   pendingFocusUpdatePromise = (async () => {
-    let pending;
-    try { pending = JSON.parse(localStorage.getItem("focusIslandPendingFocusUpdatesV1") || "[]"); }
-    catch (_) { return; }
-    if (!Array.isArray(pending)) return;
-    for (const item of pending) {
-      if (item.ownerUserId && item.ownerUserId !== onlineUserId) continue;
+    for (;;) {
+      let pending;
+      try { pending = JSON.parse(localStorage.getItem("focusIslandPendingFocusUpdatesV1") || "[]"); }
+      catch (_) { return; }
+      if (!Array.isArray(pending)) return;
+      const item = pending.find(entry => !entry.ownerUserId || entry.ownerUserId === onlineUserId);
+      if (!item) return;
       try {
         await api(`/api/focus/sessions/${encodeURIComponent(item.clientSessionId)}`, {
           method: "PATCH", body: JSON.stringify(item.payload), keepalive: true,
         });
-      } catch (_) { break; }
-      // Re-read so a concurrently completed session is not dropped.
+      } catch (_) { return; }
+      // Remove only the version sent. A terminal update queued while this request
+      // was in flight must survive and be drained before this promise resolves.
       const current = JSON.parse(localStorage.getItem("focusIslandPendingFocusUpdatesV1") || "[]");
-      localStorage.setItem("focusIslandPendingFocusUpdatesV1", JSON.stringify(current.filter((entry) => entry.clientSessionId !== item.clientSessionId)));
+      localStorage.setItem("focusIslandPendingFocusUpdatesV1", JSON.stringify(current.filter(entry =>
+        entry.clientSessionId !== item.clientSessionId || JSON.stringify(entry) !== JSON.stringify(item))));
     }
   })().finally(() => { pendingFocusUpdatePromise = null; });
   return pendingFocusUpdatePromise;
@@ -4392,7 +4438,7 @@ async function finishSessionOnce(forcedStatus = null) {
     await flushPendingFocusUpdates();
   }
   if (state.elapsedSeconds > 0) saveSessionResult(state.sessionResult);
-  if (status === "completed" && [25, 50].includes(state.timerMode)) {
+  if (!PUBLIC_CONFIG.minimalMvp && status === "completed" && [25, 50].includes(state.timerMode)) {
     notifyFocusComplete();
     beginRestStage(state.timerMode);
     return;
@@ -4415,7 +4461,7 @@ function beginRestStage(nextFocusMode) {
   state.isRunning = false;
   state.sessionPanelOpen = false;
   lastTick = Date.now();
-  document.title = "休息一下 · 专注岛";
+  document.title = PUBLIC_CONFIG.minimalMvp ? "Take a break · Focus Isle" : "休息一下 · 专注岛";
   persistActiveSession(true);
   renderFocus();
 }
@@ -4531,6 +4577,7 @@ function persistActiveSession(force = false) {
     sceneId: state.sceneId,
     roomId: state.roomId,
     localRoom: state.localRoom,
+    offlineFocus: Boolean(state.offlineFocus),
     selectedSeat: state.selectedSeat,
     timerMode: state.timerMode,
     durationSeconds: state.durationSeconds,
@@ -4564,6 +4611,7 @@ function restoreActiveSession() {
       sceneId: saved.sceneId,
       roomId: saved.roomId,
       localRoom: Boolean(saved.localRoom),
+      offlineFocus: Boolean(saved.offlineFocus),
       selectedSeat: saved.selectedSeat,
       currentSeatId: saved.selectedSeat + 1,
       timerMode: saved.timerMode,
@@ -4635,7 +4683,8 @@ function restoreActiveSession() {
           }
           state.sessionResult = buildSessionResult("completed");
           saveSessionResult(state.sessionResult);
-          state.sessionPhase = "rest";
+          state.sessionPhase = PUBLIC_CONFIG.minimalMvp ? "focus" : "rest";
+          if (PUBLIC_CONFIG.minimalMvp) { state.view = "summary"; localStorage.removeItem(STORAGE_KEYS.activeSession); void releaseSeat(); }
           state.nextFocusMode = [25, 50].includes(state.timerMode) ? state.timerMode : 25;
           state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
           state.restRemainingSeconds = Math.max(1, state.restDurationSeconds - Math.max(0, offlineSeconds - appliedOfflineSeconds));
@@ -6045,6 +6094,10 @@ document.addEventListener("submit", async (event) => {
 document.addEventListener("pointermove", () => scheduleHudFade(), { passive: true });
 document.addEventListener("keydown", () => scheduleHudFade());
 
+if (PUBLIC_CONFIG.minimalMvp) {
+  preferences.language = "en";
+  window.FocusI18n?.setLanguage("en");
+}
 applyPreferencesToState();
 restoreActiveSession();
 render();

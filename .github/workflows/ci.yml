@@ -33,6 +33,15 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Check public entry, static room and focus recovery in Chromium
         run: npm run test:e2e:chromium
+      - name: Preserve browser review evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-review-evidence
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 5
       - name: Secret and oversized-file guard
         run: node scripts/repository-guard.mjs
 

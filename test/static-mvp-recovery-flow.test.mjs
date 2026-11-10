@@ -22,7 +22,7 @@ function harness(functions, overrides = {}) {
       remainingSeconds: 1500, elapsedSeconds: 0, cloudFocusClientId: null, isRunning: false,
       sessionStartedAt: null, authPending: false, personalCenter: {}, focusRecovery: null },
     localStorage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
-    crypto: { randomUUID }, Date, encodeURIComponent,
+    PUBLIC_CONFIG: { minimalMvp: false }, crypto: { randomUUID }, Date, encodeURIComponent,
     onlineUserId: "user-a", focusAuthorizationPromise: null, pendingFocusUpdatePromise: null,
     onlineIdentityPromise: null, accessStatusFetchedAt: 0, lastTick: null,
     showToast() {}, clearImmersiveAutoEnter() {}, renderAccessOverlay() {}, persistActiveSession() {},
@@ -166,4 +166,13 @@ test("developer diagnostics rejects ordinary accounts before reading any room or
   });
   vm.runInContext(compiled, context);
   assert.equal((await context.GET()).status, 403);
+});
+
+test('an in-flight pause cannot swallow a later end, and terminal state wins over delayed resume',async()=>{
+ let release;const pause=new Promise(resolve=>{release=resolve;});const sent=[];
+ const c=harness(['queueFocusUpdate','flushPendingFocusUpdates'],{api:async(_p,o)=>{const body=JSON.parse(o.body);sent.push(body.status);if(body.status==='paused')await pause;return {};}});
+ c.queueFocusUpdate('racing-focus',{status:'paused',actualSeconds:20});const flushing=c.flushPendingFocusUpdates();
+ c.queueFocusUpdate('racing-focus',{status:'ended_early',actualSeconds:21});
+ c.queueFocusUpdate('racing-focus',{status:'running',actualSeconds:20});release();await flushing;
+ assert.deepEqual(sent,['paused','ended_early']);assert.deepEqual(JSON.parse(c.localStorage.getItem('focusIslandPendingFocusUpdatesV1')),[]);
 });
