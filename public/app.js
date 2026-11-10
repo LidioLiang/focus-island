@@ -488,7 +488,7 @@ function getOrCreateIdentity() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.guestIdentity) || "null");
     if (saved?.guestId && saved?.sessionId && Number.isInteger(saved?.avatarSkin)) return saved;
   } catch (_) { /* create a new local identity */ }
-  const englishIdentity = window.FocusI18n?.getLanguage() === "en" || (!window.FocusI18n && !/^zh\b/i.test(window.navigator.language || ""));
+  const englishIdentity = window.__FOCUS_ISLAND_CONFIG__?.minimalMvp || window.FocusI18n?.getLanguage() === "en" || (!window.FocusI18n && !/^zh\b/i.test(window.navigator.language || ""));
   const adjectives = englishIdentity
     ? ["Quiet", "Sunlit", "Unhurried", "Window-side", "Rainy", "Focused", "Gentle", "Calm"]
     : ["安静的", "晨光里的", "慢慢来的", "靠窗的", "雨声里的", "专心的", "温柔的", "从容的"];
@@ -510,6 +510,12 @@ function getOrCreateIdentity() {
 function localizedIdentityDisplayName(displayName) {
   const value = String(displayName || "");
   const generatedChineseName = /^(安静的|晨光里的|慢慢来的|靠窗的|雨声里的|专心的|温柔的|从容的)(海獭|知更鸟|小鹿|旅人|松鼠|云朵|灯塔|橡树)$/;
+  const generated = value.match(generatedChineseName);
+  if (window.__FOCUS_ISLAND_CONFIG__?.minimalMvp && generated) {
+    const adjectives = ["安静的", "晨光里的", "慢慢来的", "靠窗的", "雨声里的", "专心的", "温柔的", "从容的"];
+    const nouns = ["海獭", "知更鸟", "小鹿", "旅人", "松鼠", "云朵", "灯塔", "橡树"];
+    return `${["Quiet", "Sunlit", "Unhurried", "Window-side", "Rainy", "Focused", "Gentle", "Calm"][adjectives.indexOf(generated[1])]} ${["Otter", "Robin", "Deer", "Traveler", "Squirrel", "Cloud", "Lighthouse", "Oak"][nouns.indexOf(generated[2])]}`;
+  }
   if (window.FocusI18n?.getLanguage() === "en" && generatedChineseName.test(value)) {
     return window.FocusI18n.translate(value);
   }
