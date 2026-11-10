@@ -29,3 +29,16 @@ test('social availability is truthful and email sign-in has no legacy Chinese st
  await page.getByLabel('Email address').fill('demo@example.test');await page.getByLabel('Password',{exact:true}).fill('Test-fixture-only');await page.getByRole('button',{name:'Sign in with email'}).click();
  await expect(page.getByRole('status')).toContainText('You’re signed in');await expect(page.locator('.ac-identity')).toContainText('Member');expect(await page.locator('.account-center').innerText()).not.toMatch(/[\u4e00-\u9fff]/);
 });
+
+test('a failed registration preserves the guest transfer for a later email sign-in',async({page})=>{
+ await setup(page);let prepared=0;let consumed='';
+ const token='a-test-only-one-time-merge-token-123456789';
+ await page.route('**/api/auth/merge/prepare',r=>{prepared++;return r.fulfill({json:{mergeToken:token}});});
+ await page.route('**/api/auth/merge/complete',r=>{consumed=r.request().postDataJSON().mergeToken;return r.fulfill({json:{ok:true}});});
+ await page.route('**/api/auth/sign-up',r=>r.fulfill({status:400,json:{error:'email_already_registered'}}));
+ await page.getByRole('button',{name:'Sign-in & security',exact:true}).click();await page.getByRole('button',{name:'Create account',exact:true}).click();
+ await page.getByLabel('Email address').fill('demo@example.test');await page.getByLabel('Password',{exact:true}).fill('Test-password1!');await page.getByLabel('Confirm password',{exact:true}).fill('Test-password1!');
+ await page.locator('[data-center-form="sign-up"] button[type="submit"]').click();await expect(page.locator('.account-center').getByRole('alert')).toContainText('already uses that email');
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.getByLabel('Email address').fill('demo@example.test');await page.getByLabel('Password',{exact:true}).fill('Test-password1!');await page.getByRole('button',{name:'Sign in with email'}).click();
+ await expect(page.getByRole('status')).toContainText('You’re signed in');expect(prepared).toBe(1);expect(consumed).toBe(token);
+});

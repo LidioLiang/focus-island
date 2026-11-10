@@ -30,4 +30,8 @@ Staging generated migration version: 20261110092938. Production may generate a d
 New public bucket `profile-avatars`: public read, no authenticated INSERT/UPDATE policy. Verified server upload uses the service role after raster decoding. Profile changes go through current-user RPCs; direct profile-table access remains revoked.
 
 ## Validation
-Local lint, TypeScript, build, dependency license checks and 95 Node tests passed before release. Browser and pgTAP regression results are recorded in the release/CI checks. Tests use fixtures; real OAuth consent flows await provider activation.
+Local lint, TypeScript, build, dependency license checks and 98 Node tests passed before release. Browser and pgTAP regression results are recorded in the release/CI checks. Tests use fixtures; real OAuth consent flows await provider activation.
+
+Production additive migration generated version: 20261110094754 (same SQL as source/staging). Initial account release: commit 74a54bb, production deployment dpl_8h4rE1d2rkKJPWPTTZrCBhEbqC6G, READY; 19 Chromium tests passed and 2 payment tests skipped; pgTAP job passed.
+
+Follow-up fixes carry a guest profile into a newly registered account, copy uploaded photos into the new account’s folder, retain existing member profiles, preserve one-time history transfer after registration failures, and place keyboard focus inside the modal. Production unauthenticated API gates/provider settings passed; a fresh guest upload smoke correctly stopped at the required CAPTCHA. No CAPTCHA was bypassed and no live member profile was changed.

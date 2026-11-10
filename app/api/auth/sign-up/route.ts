@@ -25,10 +25,6 @@ export async function POST(request: Request) {
   const { data: { user: previousUser } } = await supabase.auth.getUser();
   try { if (await activeAccountSession(supabase, previousUser)) return json({ error: "active_session_exists" }, { status: 409 }); }
   catch { return json({ error: "focus_service_unavailable" }, { status: 503 }); }
-  const { data: current } = await supabase.auth.getUser();
-  if (current.user?.is_anonymous) {
-    await supabase.auth.signOut();
-  }
 
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
