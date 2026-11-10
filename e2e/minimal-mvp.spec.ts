@@ -29,7 +29,7 @@ test('guest can focus twice with no account, no fake companions, and only three 
  await page.getByRole('button',{name:'Start',exact:true}).click();await expect.poll(()=>starts.length).toBe(1);
  await page.locator('.time-readout').hover();await page.getByRole('button',{name:'Pause',exact:true}).click();
  await expect.poll(()=>patches.some(p=>p.status==='paused')).toBe(true);
- await page.locator('[data-minimal="end"]').click();await page.locator('[data-minimal="accept-confirm"]').click();
+ await page.locator('.time-readout').hover();await page.locator('[data-minimal="end"]').click();await page.locator('[data-minimal="accept-confirm"]').click();
  await expect(page.locator('[data-minimal="again"]')).toBeVisible();
  await page.locator('[data-minimal="back-island"]').click();await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();
  await page.getByRole('button',{name:'Start',exact:true}).click();await expect.poll(()=>starts.length).toBe(2);

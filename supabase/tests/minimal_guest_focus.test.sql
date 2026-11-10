@@ -1,10 +1,11 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(12);
+select plan(15);
 -- Random test identities live only in this rolled-back transaction.
 insert into auth.users(id,instance_id,aud,role,is_anonymous,created_at,updated_at,raw_app_meta_data,raw_user_meta_data)
 values ('33333333-3333-4333-8333-333333333333','00000000-0000-0000-0000-000000000000','authenticated','authenticated',true,now(),now(),'{}','{"role":"developer"}'),
 ('44444444-4444-4444-8444-444444444444','00000000-0000-0000-0000-000000000000','authenticated','authenticated',false,now(),now(),'{}','{}');
+insert into public.user_access_state(user_id,trial_status) values('44444444-4444-4444-8444-444444444444','consumed');
 set local role authenticated;
 select set_config('request.jwt.claim.sub','33333333-3333-4333-8333-333333333333',true);
 select is(public.get_my_access_status()->>'accountType','anonymous','guest retains anonymous identity');
@@ -20,5 +21,8 @@ select is((select count(*)::integer from public.focus_sessions),2,'guest can rea
 select set_config('request.jwt.claim.sub','44444444-4444-4444-8444-444444444444',true);
 select is((select count(*)::integer from public.focus_sessions),0,'another identity cannot read guest history');
 select throws_ok($$select public.update_my_focus_session('guest-session-two','interrupted',50,0)$$,'P0001','focus_session_not_found','another identity cannot end guest focus');
+select is(public.get_my_access_status()->>'canStartFocus','true','previously consumed permanent trial can still focus');
+select is(public.get_my_access_status()->>'trialStatus','consumed','legacy trial record remains intact');
+select is(public.start_my_focus_session('permanent-free-session','cafe','cafe-local',1,25)->'session'->>'is_trial','false','permanent account uses new free cafe rule');
 select * from finish();
 rollback;

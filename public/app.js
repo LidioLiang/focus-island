@@ -227,7 +227,7 @@ if (!localStorage.getItem(STORAGE_KEYS.libraryScenePublished)) {
 }
 
 const state = {
-  view: new URLSearchParams(window.location.search).has("welcome") ? "welcome" : "island",
+  view: PUBLIC_CONFIG.minimalMvp ? "island" : new URLSearchParams(window.location.search).has("welcome") ? "welcome" : "island",
   sceneId: null,
   roomId: null,
   localRoom: false,
