@@ -1,3 +1,4 @@
+import { mergeGuestAccount } from "@/lib/account-merge";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -19,8 +20,10 @@ export async function GET(request: Request) {
       const { data, error } = await supabase.auth.exchangeCodeForSession(code);
       if (error || !data.user) throw new Error("oauth_failed");
       if (token) {
-        const { error: mergeError } = await supabase.rpc("complete_account_merge", { p_token_hash: sha256(token) });
-        if (mergeError) destination.searchParams.set("account-error", "history_merge_failed");
+        try {
+          const merged = await mergeGuestAccount(supabase, data.user, sha256(token));
+          if (merged.profileTransferWarning) destination.searchParams.set("account-error", "profile_transfer_failed");
+        } catch { destination.searchParams.set("account-error", "history_merge_failed"); }
       }
       await readProfile(supabase, data.user);
       destination.searchParams.set("account", "profile");

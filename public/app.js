@@ -2239,6 +2239,11 @@ function openPersonalCenter({ tab = "overview" } = {}) {
   state.personalCenter.filters = { scene: "all", status: "all", mode: "all" };
   state.personalCenter.confirmAction = null;
   document.body.classList.add("personal-center-open");
+  if (PUBLIC_CONFIG.minimalMvp) {
+    accountCenter.returnFocus = document.activeElement;
+    minimalUi.panel = null; minimalRenderPanel();
+    document.querySelector(".minimal-root")?.setAttribute("inert", "");
+  }
   renderPersonalCenter();
   void getAccessStatus({ refresh: true }).then(() => {
     if (!state.personalCenter.open) return;
@@ -2253,6 +2258,11 @@ function closePersonalCenter() {
   state.personalCenter.confirmAction = null;
   document.querySelector(".personal-center-overlay")?.remove();
   document.body.classList.remove("personal-center-open");
+  if (PUBLIC_CONFIG.minimalMvp) {
+    document.querySelector(".minimal-root")?.removeAttribute("inert");
+    const target = accountCenter.returnFocus?.isConnected ? accountCenter.returnFocus : document.querySelector(".scene-tools button");
+    target?.focus({ preventScroll: true });
+  }
   scheduleHudFade();
 }
 
