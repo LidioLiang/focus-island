@@ -36,11 +36,14 @@ test("sign-in is optional and available only inside Settings", async ({ page }) 
   await expect(page.locator('[data-auth-form]')).toHaveCount(0);
   await page.locator('[data-panel="settings"]').click();
   await page.locator('[data-minimal="sign-in"]').click();
-  await expect(page.locator('[data-auth-form="sign-in"]')).toBeVisible();
+  await expect(page.locator('[data-center-form="sign-in"]')).toBeVisible();
 });
 
 test("successful sign-up skips email verification and resumes the first focus action", async ({ page }) => {
   let registered = false;
+  await page.route("**/api/auth/session", route => route.fulfill({json:{authenticated:registered,anonymous:false,userId:"test-user",developer:false}}));
+  await page.route("**/api/auth/providers", route => route.fulfill({json:{providers:{email:true,google:false,apple:false,github:false}}}));
+  await page.route("**/api/profile", route => route.fulfill({json:{profile:{displayName:"Quiet Oak",avatarSkin:0,avatarUrl:null,avatarSource:"builtin"},anonymous:false,email:"tester@example.test",providers:["email"],providerPhotos:[]}}));
   await page.route("**/api/access/status", async (route) => {
     await route.fulfill({
       status: 200,
@@ -74,15 +77,16 @@ test("successful sign-up skips email verification and resumes the first focus ac
   await page.goto("/");
   await page.locator('[data-panel="settings"]').click();
   await page.locator('[data-minimal="sign-in"]').click();
-  await page.locator('[data-action="toggle-auth-mode"]').click();
-  const form = page.locator('[data-auth-form="sign-up"]');
+  await page.locator('[data-center-action="email-mode"][data-mode="sign-up"]').click();
+  const form = page.locator('[data-center-form="sign-up"]');
   await form.locator('input[name="email"]').fill("tester@example.com");
   await form.locator('input[name="password"]').fill("ValidPass1!");
   await form.locator('input[name="confirmPassword"]').fill("ValidPass1!");
   await form.locator('button[type="submit"]').click();
 
+  await expect(page.getByRole("status")).toContainText("You’re signed in");
+  await page.getByRole("button",{name:"Close profile"}).click();
   await expect(page.locator('[data-place="cafe"]')).toBeVisible();
-  await expect(page.locator('[role="dialog"][aria-labelledby="auth-title"]')).toHaveCount(0);
 });
 
 test("privacy and terms pages remain publicly reachable", async ({ page }) => {

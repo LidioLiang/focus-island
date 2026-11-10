@@ -29,7 +29,7 @@ test('new timer shows exactly start, restart and end with native English and no 
 
 test('unconfirmed and expired remote portraits never claim live focus',()=>{
  const lease={sessionId:'someone',avatarSkin:1,focusStartedAt:Date.now(),activity:'Focusing',memberType:'human',expiresAt:Date.now()+60000};
- const c=vm.createContext({state:{localRoom:false,presenceUnavailable:true,isDeveloper:false,presenceFetchedAt:Date.now()},minimalUi:{editing:false},identity:{sessionId:'me'},staticSeatSlots:[{seat_id:1}],leaseForSeat:()=>lease,AVATAR_OPTIONS:[{id:1,image:'portrait.png'}],Date,escapeHtml:x=>x,minimalSeatPosition:()=>[20,30]});
+ const c=vm.createContext({state:{localRoom:false,presenceUnavailable:true,isDeveloper:false,presenceFetchedAt:Date.now()},minimalUi:{editing:false},identity:{sessionId:'me'},staticSeatSlots:[{seat_id:1}],leaseForSeat:()=>lease,AVATAR_OPTIONS:[{id:1,image:'portrait.png'}],Date,accountAvatar:()=> 'portrait.png',escapeHtml:x=>x,minimalSeatPosition:()=>[20,30]});
  vm.runInContext(fn('minimalAvatarMarkup'),c);assert.equal(c.minimalAvatarMarkup(),'');
  c.state.presenceUnavailable=false;assert.match(c.minimalAvatarMarkup(),/rippling/);
  lease.expiresAt=Date.now()-1;assert.equal(c.minimalAvatarMarkup(),'');
