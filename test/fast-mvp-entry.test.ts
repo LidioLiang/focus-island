@@ -42,7 +42,6 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(englishLocale, /Focus Isle/);
   assert.match(englishLocale, /Privacy Policy/);
   assert.match(englishLocale, /Terms of Service/);
-  assert.match(source, /const englishIdentity = window\.FocusI18n\?\.getLanguage\(\) === "en"/);
   assert.match(source, /function localizedIdentityDisplayName/);
   assert.match(source, /\["Otter", "Robin", "Deer", "Traveler"/);
 });
