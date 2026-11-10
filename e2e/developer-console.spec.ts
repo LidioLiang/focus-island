@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import packageJson from "../package.json";
+import packageJson from "../package.json" with { type: "json" };
 
 async function openDeveloper(page: Page, developer = true) {
   await page.addInitScript(() => localStorage.setItem("focusIslandPreferencesV1", JSON.stringify({ language: "en", reduceMotion: true })));
