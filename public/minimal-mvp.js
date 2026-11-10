@@ -223,7 +223,7 @@ async function minimalFinishAction(){
 document.addEventListener('click',async event=>{
   if(!window.__FOCUS_ISLAND_CONFIG__?.minimalMvp)return;
   const node=event.target.closest('[data-minimal],[data-minimal-mode],[data-minimal-scene],[data-layout-kind]');if(!node)return;
-  event.stopImmediatePropagation();if(Date.now()<minimalIgnoreClick)return;
+  event.stopImmediatePropagation();if(Date.now()<minimalIgnoreClick&&node.dataset.minimal==='select-marker')return;
   if(node.dataset.layoutKind){if(!state.isDeveloper)return;minimalUi.target=node.dataset.layoutKind;minimalUpdateLayoutFields();return;}
   if(node.dataset.minimalMode!==undefined){if(state.sessionStartedAt){showToast('End this session before changing its length.');return;}preferences.defaultTimerMode=Number(node.dataset.minimalMode);savePreferences();if(state.view==='island'){state.timerMode=preferences.defaultTimerMode;}else await setTimerMode(preferences.defaultTimerMode);minimalRenderPanel();return;}
   if(node.dataset.minimalScene){state.focusImageChoice=node.dataset.minimalScene;preferences.lastFocusView=state.focusImageChoice;savePreferences();const image=document.querySelector('[data-focus-scene-image]');if(image)image.src=selectedFocusImage();persistActiveSession(true);minimalRenderPanel();return;}

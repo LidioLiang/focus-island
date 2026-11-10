@@ -46,8 +46,9 @@ test('developer can move an upright avatar without moving its seat button and pe
  expect(value['1'].avatar[0]).toBe(28.7);expect(value['1'].button[0]).toBe(28.11);
  await page.reload();await page.locator('[data-panel="settings"]').click();await page.locator('[data-minimal="layout"]').click();
  await expect(page.locator('[data-layout-x]')).toHaveValue('28.7');
+ await expect(avatar).toBeVisible();await expect(avatar).toHaveCSS('border-radius','50%');
  const shape=await avatar.evaluate(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return {width:r.width,height:r.height,radius:s.borderRadius};});
- expect(shape.width).toBe(shape.height);expect(shape.radius).toBe('50%');
+ expect(shape.width).toBeGreaterThan(0);expect(shape.width).toBe(shape.height);
 });
 
 test('island settings work before a room and reduce motion disables marker animation',async({page})=>{
@@ -86,6 +87,7 @@ test('requested controls stay centered, ordered and on one row with actions belo
  await expect(page.locator('.map-pin .pin-center')).toHaveCount(6);
  await page.screenshot({path:testInfo.outputPath('mist-teardrop-map-pins.png')});
  await page.locator('[data-place="cafe"]').click();
+ await expect(page.locator('.static-seat-room')).toBeVisible();await expect(page.locator('.seat-button')).toHaveCount(6);
  for(const viewport of [{width:2048,height:1017},{width:390,height:844},{width:844,height:390}]){
   await page.setViewportSize(viewport);
   const geometry=await page.locator('.seat-button').evaluateAll(nodes=>nodes.map(button=>{
@@ -93,6 +95,8 @@ test('requested controls stay centered, ordered and on one row with actions belo
    return {dx:Math.abs(b.x+b.width/2-i.x-i.width/2),dy:Math.abs(b.y+b.height/2-i.y-i.height/2),round:Math.abs(b.width-b.height)};
   }));
   for(const g of geometry){expect(g.dx).toBeLessThan(.6);expect(g.dy).toBeLessThan(.6);expect(g.round).toBeLessThan(.6);}
+  await expect(page.locator('.scene-atmosphere')).toBeVisible();
+  await expect(page.locator('#app')).toHaveCSS('filter','none');await expect(page.locator('#app')).toHaveCSS('pointer-events','auto');
   const atmosphere=await page.locator('.scene-atmosphere').boundingBox();
   expect(atmosphere?.width).toBe(viewport.width);expect(atmosphere?.height).toBe(viewport.height);
   const art=await page.locator('.room-stage').boundingBox();

@@ -202,3 +202,5 @@ body.minimal-mvp .personal-center-sidebar{background:#e4eef5;color:#304c60}body.
 .minimal-root .minimal-layout-tools.is-collapsed { width: 240px; }
 .minimal-root .minimal-layout-tools.is-collapsed header { margin-bottom: 0; }
 .minimal-root .minimal-layout-tools.is-collapsed .minimal-layout-body { display: none; }
+/* The minimal UI supports portrait directly; retire the old rotate-to-use gate. */
+body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
