@@ -2,12 +2,13 @@
 const MINIMAL_LAYOUT_KEY = "focusIslandMinimalSeatLayoutV1";
 const minimalUi = { panel: null, layout: null, editing: false, target: "avatar", seat: 1, confirm: null, busy: false, timerMenu: false, identity: null };
 let minimalDrag = null;
+let minimalPanelDrag = null;
 let minimalIgnoreClick = 0;
 let minimalPresenceExpiryTimer = null;
 
 function minimalIcon(name) {
   const paths = {
-    back: '<path d="m14 6-6 6 6 6M8 12h13"/>',
+    back: '<path d="M19 12H5m7-7-7 7 7 7"/>',
     sound: '<path d="m11 5-6 4H2v6h3l6 4V5ZM15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/>',
     settings: '<path d="m10 3-.5 3-2 .9L5 6 3 9l2 2v2l-2 2 2 3 2.5-.9 2 .9.5 3h4l.5-3 2-.9 2.5.9 2-3-2-2v-2l2-2-2-3-2.5.9-2-.9L14 3Z"/><circle cx="12" cy="12" r="3"/>',
     scene: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="16" cy="9" r="1"/><path d="m4 17 5-6 4 4 3-2 5 5"/>',
@@ -19,7 +20,7 @@ function minimalIcon(name) {
     mountain: '<path d="m2 20 8-15 5 9 3-5 4 11ZM7 11l3 2 3-2"/>',
     play: '<path d="m8 5 11 7-11 7Z"/>', pause: '<path d="M8 5v14M16 5v14"/>',
     restart: '<path d="M4 10a8 8 0 1 1 1 8M4 4v6h6"/>', end: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
-    plus: '<path d="M5 12h14M12 5v14"/>', close: '<path d="m6 6 12 12M18 6 6 18"/>',
+    plus: '<path d="M5 12h14M12 5v14"/>', minus: '<path d="M5 12h14"/>', close: '<path d="m6 6 12 12M18 6 6 18"/>',
     check: '<path d="m4 12 5 5L20 6"/>', move: '<path d="M12 2v20M2 12h20m-6-6-4-4-4 4m8 12-4 4-4-4M6 8l-4 4 4 4m12-8 4 4-4 4"/>',
     rain: '<path d="M7 15a5 5 0 1 1 2-9 5 5 0 0 1 9 1 4 4 0 0 1 0 8M8 18l-1 3m6-3-1 3m6-3-1 3"/>',
     music: '<path d="M9 17V5l11-2v12M9 6l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/>',
@@ -46,8 +47,19 @@ function minimalTool(panel, name, avatar = false) {
 }
 
 function minimalHeader(view) {
-  const left = view === "island" ? '<span class="wordmark">Focus Isle</span>' : `<button type="button" class="back-button" data-minimal="${view === "focus" ? "back-room" : "back-island"}" aria-label="${view === "focus" ? "Back to room" : "Back to island"}">${minimalIcon("back")}<span>${view === "focus" ? "Back to room" : "Island"}</span></button>${view === "room" ? '<span class="room-title">Four Seasons Café</span>' : ""}`;
-  return `<header class="scene-header chrome"><div class="scene-left">${left}</div><nav class="scene-tools" aria-label="View controls">${view !== "island" ? minimalTool("sound", "Sound") : ""}${minimalTool("settings", "Settings")}${view === "focus" ? minimalTool("avatar", "Your avatar", true) + minimalTool("scene", "Scene") : ""}</nav></header>`;
+  const left = view === "island" ? '<span class="wordmark">Focus Isle</span>' : `<button type="button" class="back-button" data-minimal="${view === "focus" ? "back-room" : "back-island"}" aria-label="${view === "focus" ? "Back to room" : "Back to island"}">${minimalIcon("back")}</button>${view === "room" ? '<span class="room-title">Four Seasons Café</span>' : ""}`;
+  const tools = view === "focus"
+    ? minimalTool("scene", "Scene") + minimalTool("sound", "Sound") + minimalTool("settings", "Settings") + minimalTool("avatar", "Your avatar", true)
+    : (view !== "island" ? minimalTool("sound", "Sound") : "") + minimalTool("settings", "Settings");
+  return `<header class="scene-header chrome"><div class="scene-left">${left}</div><nav class="scene-tools" aria-label="View controls">${tools}</nav></header>`;
+}
+
+function minimalBackdrop(image) {
+  return `<div class="scene-atmosphere" aria-hidden="true"><img src="${image}" alt="" draggable="false"></div>`;
+}
+
+function minimalMapPin(icon) {
+  return `<span class="pin-face"><svg class="pin-shape" viewBox="0 0 48 64" aria-hidden="true"><path class="pin-outline" d="M24 63C19 56 1 38 1 24a23 23 0 0 1 46 0c0 14-18 32-23 39Z"/><circle class="pin-ring" cx="24" cy="24" r="15"/><circle class="pin-center" cx="24" cy="24" r="11"/></svg><span class="pin-glyph">${minimalIcon(icon)}</span></span>`;
 }
 
 function minimalShell(view, content) {
@@ -61,7 +73,7 @@ function minimalShell(view, content) {
 
 function renderMinimalIsland() {
   const pins = [["cafe","coffee","Four Seasons Café",28,49,true],["library","book","Library",48,26,false],["forest","forest","Forest",69,44,false],["lakeside","lake","Lakeside",53,61,false],["seaside","sea","Seaside",79,77,false],["snow","mountain","Snowy Mountains",84,20,false]];
-  minimalShell("island", `<div class="scene-art" style="background-image:url('${islandImage}')"></div><div class="scene-veil"></div><div class="scene-markers">${pins.map(([id,icon,name,x,y,open]) => `<button type="button" class="map-pin ${open ? "" : "future"}" data-minimal="place" data-place="${id}" data-place-name="${name}" data-open="${open}" style="left:${x}%;top:${y}%" aria-label="${name}, ${open ? "Open now" : "Coming soon"}"><span class="pin-face">${minimalIcon(icon)}</span></button>`).join("")}</div>${localStorage.getItem("focusIslandLastPlaceV1") === "cafe" ? '<button class="minimal-return" type="button" data-minimal="return-place">Return to your quiet corner</button>' : ""}<footer class="minimal-legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>`);
+  minimalShell("island", `${minimalBackdrop(islandImage)}<div class="scene-art" style="background-image:url('${islandImage}')"></div><div class="scene-veil"></div><div class="scene-markers">${pins.map(([id,icon,name,x,y,open]) => `<button type="button" class="map-pin ${open ? "" : "future"}" data-minimal="place" data-place="${id}" data-place-name="${name}" data-open="${open}" style="left:${x}%;top:${y}%" aria-label="${name}, ${open ? "Open now" : "Coming soon"}">${minimalMapPin(icon)}</button>`).join("")}</div>${localStorage.getItem("focusIslandLastPlaceV1") === "cafe" ? '<button class="minimal-return" type="button" data-minimal="return-place">Return to your quiet corner</button>' : ""}<footer class="minimal-legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>`);
 }
 
 function minimalAvatarMarkup() {
@@ -103,8 +115,9 @@ function refreshMinimalSeats() {
 
 function renderMinimalRoom() {
   if (!minimalPresenceExpiryTimer) minimalPresenceExpiryTimer = window.setInterval(() => { if(state.view === "room") refreshMinimalSeats(); }, 2000);
-  minimalShell("room", `<div class="room-stage"><img class="scene-image" src="${scenes.cafe.image}" alt="Sunlit six-seat café"><div class="seat-layer"><div class="static-occupants">${minimalAvatarMarkup()}</div><div class="seat-markers">${minimalButtonMarkup()}</div></div></div>${state.localRoom ? '<span class="minimal-room-mode">Solo room</span>' : '<span class="minimal-room-mode minimal-presence-status" role="status" hidden></span>'}${state.currentSeatId ? '<button type="button" class="minimal-return" data-minimal="focus-view">Return to focus</button>' : '<div class="room-hint">Choose a seat. Make yourself comfortable.</div>'}${minimalUi.editing && state.isDeveloper ? minimalLayoutTools() : ""}`);
+  minimalShell("room", `${minimalBackdrop(scenes.cafe.image)}<div class="room-stage"><img class="scene-image" src="${scenes.cafe.image}" alt="Sunlit six-seat café"><div class="seat-layer"><div class="static-occupants">${minimalAvatarMarkup()}</div><div class="seat-markers">${minimalButtonMarkup()}</div></div></div>${state.localRoom ? '<span class="minimal-room-mode">Solo room</span>' : '<span class="minimal-room-mode minimal-presence-status" role="status" hidden></span>'}${state.currentSeatId ? '<button type="button" class="minimal-return" data-minimal="focus-view">Return to focus</button>' : '<div class="room-hint">Choose a seat. Make yourself comfortable.</div>'}${minimalUi.editing && state.isDeveloper ? minimalLayoutTools() : ""}`);
   minimalUpdateLayoutFields();
+  minimalPositionLayoutPanel();
   requestAnimationFrame(() => startCafePresence());
 }
 
@@ -138,7 +151,7 @@ function minimalRenderPanel() {
   if(minimalUi.panel === "sound"){
     body=minimalPanelHeading("Sound")+[["ambient","rain","Café ambience"],["white","noise","White noise"],["music","music","Soft music"]].map(([key,icon,label])=>`<div class="minimal-sound-group"><label class="sound-row"><span class="sound-name">${minimalIcon(icon)}${label}</span><input class="switch" type="checkbox" data-minimal-sound="${key}" aria-label="${label}" ${state.sounds[key] ? "checked" : ""}></label><label class="volume-row"><span class="sr-only">${label} volume</span><input type="range" min="0" max="100" value="${state.soundVolumes[key]}" data-minimal-volume="${key}" aria-label="${label} volume"><output>${state.soundVolumes[key]}%</output></label></div>`).join("")+`<label class="minimal-select-label">Music<select data-minimal-music aria-label="Music track">${Object.entries(FOCUS_MUSIC_TRACKS).map(([key,track])=>`<option value="${key}" ${key===state.musicTrack?"selected":""}>${escapeHtml({'rainy-notes':'Rainy Notes','warm-reverie':'Warm Reverie','moonlit-walk':'Moonlit Walk','island-breeze':'Island Breeze'}[key] || track.name)}</option>`).join("")}</select></label><button type="button" class="minimal-panel-link" data-minimal="mute">Mute all</button>`;
   }else if(minimalUi.panel === "settings"){
-    body=minimalPanelHeading("Settings")+`<div class="setting-row"><span>Focus length</span><div class="segmented">${[25,50,0].map(mode=>`<button type="button" data-minimal-mode="${mode}" aria-pressed="${state.timerMode===mode}">${mode || "Open"}${mode?" min":""}</button>`).join("")}</div></div><label class="setting-row"><span>Reduce motion</span><input class="switch" type="checkbox" data-minimal-motion ${preferences.reduceMotion?"checked":""}></label><button type="button" class="minimal-panel-link" data-minimal="account">Account & data</button>${state.isDeveloper?'<button type="button" class="minimal-panel-link" data-minimal="developer">Developer tools</button><button type="button" class="minimal-panel-link" data-minimal="layout">Adjust seat layout</button>':'<button type="button" class="minimal-panel-link" data-minimal="sign-in">Sign in (optional)</button>'}<small class="minimal-version">Focus Isle ${escapeHtml(PUBLIC_CONFIG.appVersion)}</small>`;
+    body=minimalPanelHeading("Settings")+`<div class="setting-row focus-length-setting"><span>Focus length</span><div class="segmented focus-mode-options">${[25,50,0].map(mode=>`<button type="button" data-minimal-mode="${mode}" aria-pressed="${state.timerMode===mode}">${mode || "Open"}${mode?" min":""}</button>`).join("")}</div></div><label class="setting-row"><span>Reduce motion</span><input class="switch" type="checkbox" data-minimal-motion ${preferences.reduceMotion?"checked":""}></label><button type="button" class="minimal-panel-link" data-minimal="account">Account & data</button>${state.isDeveloper?'<button type="button" class="minimal-panel-link" data-minimal="developer">Developer tools</button><button type="button" class="minimal-panel-link" data-minimal="layout">Adjust seat layout</button>':'<button type="button" class="minimal-panel-link" data-minimal="sign-in">Sign in (optional)</button>'}<small class="minimal-version">Focus Isle ${escapeHtml(PUBLIC_CONFIG.appVersion)}</small>`;
   }else if(minimalUi.panel === "avatar"){
     const avatar=AVATAR_OPTIONS.find(a=>a.id===Number(identity.avatarSkin))||AVATAR_OPTIONS[0];
     body=minimalPanelHeading("Your avatar")+`<div class="profile-sample"><img src="${avatar.image}" alt="Your illustrated avatar"><span>You</span></div><label class="minimal-select-label">Display name<input class="name-input" data-minimal-name maxlength="24" value="${escapeHtml(localizedIdentityDisplayName(identity.displayName))}"></label><button class="minimal-panel-link" type="button" data-minimal="save-name">Save name</button>`;
@@ -162,7 +175,17 @@ function minimalRenderConfirm(){
   layer.querySelector('button')?.focus();
 }
 
-function minimalLayoutTools(){return `<section class="minimal-layout-tools" aria-label="Developer seat layout"><header><strong>Developer layout</strong><button type="button" data-minimal="layout" aria-label="Close layout tools">${minimalIcon('close')}</button></header><div class="minimal-layout-row"><label>Seat<select data-layout-select aria-label="Layout seat">${staticSeatSlots.map(s=>`<option value="${s.seat_id}" ${s.seat_id===minimalUi.seat?'selected':''}>${s.seat_id}</option>`).join('')}</select></label><div class="segmented"><button type="button" data-layout-kind="avatar" aria-pressed="${minimalUi.target==='avatar'}">Avatar</button><button type="button" data-layout-kind="button" aria-pressed="${minimalUi.target==='button'}">Seat button</button></div><label>X<input type="number" data-layout-x step=".1" min="0" max="100" aria-label="Horizontal position"></label><label>Y<input type="number" data-layout-y step=".1" min="0" max="100" aria-label="Vertical position"></label></div><div class="minimal-layout-row"><button type="button" data-minimal="save-layout">Save layout</button><button type="button" data-minimal="export-layout">Export layout</button><button type="button" data-minimal="reset-layout">Reset layout</button></div><small>Drag each marker or use arrow keys. Save applies on this browser; export for a release.</small></section>`;}
+function minimalLayoutTools(){return `<section class="minimal-layout-tools ${minimalUi.layoutCollapsed ? "is-collapsed" : ""}" aria-label="Developer seat layout"><header data-layout-panel-handle tabindex="0" aria-label="Move layout panel"><strong>${minimalIcon('move')}Developer layout</strong><div><button type="button" data-minimal="collapse-layout" aria-label="${minimalUi.layoutCollapsed ? 'Expand' : 'Collapse'} layout tools" aria-expanded="${!minimalUi.layoutCollapsed}">${minimalIcon(minimalUi.layoutCollapsed ? 'plus' : 'minus')}</button><button type="button" data-minimal="layout" aria-label="Close layout tools">${minimalIcon('close')}</button></div></header><div class="minimal-layout-body"><div class="minimal-layout-row"><label>Seat<select data-layout-select aria-label="Layout seat">${staticSeatSlots.map(s=>`<option value="${s.seat_id}" ${s.seat_id===minimalUi.seat?'selected':''}>${s.seat_id}</option>`).join('')}</select></label><div class="segmented"><button type="button" data-layout-kind="avatar" aria-pressed="${minimalUi.target==='avatar'}">Avatar</button><button type="button" data-layout-kind="button" aria-pressed="${minimalUi.target==='button'}">Seat button</button></div><label>X<input type="number" data-layout-x step=".1" min="0" max="100" aria-label="Horizontal position"></label><label>Y<input type="number" data-layout-y step=".1" min="0" max="100" aria-label="Vertical position"></label></div><div class="minimal-layout-row"><button type="button" data-minimal="save-layout">Save layout</button><button type="button" data-minimal="export-layout">Export layout</button><button type="button" data-minimal="reset-layout">Reset layout</button></div><small>Drag this panel to move it. Drag markers or use arrow keys. Save applies on this browser.</small></div></section>`;}
+
+function minimalPositionLayoutPanel(position = minimalUi.panelPosition) {
+  const panel = document.querySelector('.minimal-layout-tools');
+  if (!panel) return;
+  const world = panel.closest('.world').getBoundingClientRect();
+  const x = Math.max(8, Math.min(world.width - panel.offsetWidth - 8, position?.x ?? 16));
+  const y = Math.max(8, Math.min(world.height - panel.offsetHeight - 8, position?.y ?? 84));
+  panel.style.left = `${x}px`; panel.style.top = `${y}px`;
+  minimalUi.panelPosition = { x, y };
+}
 
 function minimalUpdateLayoutFields(){
   if(!minimalUi.editing||!state.isDeveloper)return;
@@ -200,7 +223,7 @@ async function minimalFinishAction(){
 document.addEventListener('click',async event=>{
   if(!window.__FOCUS_ISLAND_CONFIG__?.minimalMvp)return;
   const node=event.target.closest('[data-minimal],[data-minimal-mode],[data-minimal-scene],[data-layout-kind]');if(!node)return;
-  event.stopImmediatePropagation();if(Date.now()<minimalIgnoreClick)return;
+  event.stopImmediatePropagation();if(Date.now()<minimalIgnoreClick&&node.dataset.minimal==='select-marker')return;
   if(node.dataset.layoutKind){if(!state.isDeveloper)return;minimalUi.target=node.dataset.layoutKind;minimalUpdateLayoutFields();return;}
   if(node.dataset.minimalMode!==undefined){if(state.sessionStartedAt){showToast('End this session before changing its length.');return;}preferences.defaultTimerMode=Number(node.dataset.minimalMode);savePreferences();if(state.view==='island'){state.timerMode=preferences.defaultTimerMode;}else await setTimerMode(preferences.defaultTimerMode);minimalRenderPanel();return;}
   if(node.dataset.minimalScene){state.focusImageChoice=node.dataset.minimalScene;preferences.lastFocusView=state.focusImageChoice;savePreferences();const image=document.querySelector('[data-focus-scene-image]');if(image)image.src=selectedFocusImage();persistActiveSession(true);minimalRenderPanel();return;}
@@ -226,6 +249,7 @@ document.addEventListener('click',async event=>{
   if(action==='sign-in'){if(isActiveFocusSession()){showToast('End your session before switching accounts.');return;}minimalUi.panel=null;state.sessionPanelOpen=false;state.authMode='sign-in';openAuthGate();return;}
   if(action==='developer'){if(!state.isDeveloper)return;minimalUi.panel=null;state.sessionPanelOpen=false;openPersonalCenter({tab:'developer'});return;}
   if(action==='layout'){if(!state.isDeveloper)return;minimalUi.editing=!minimalUi.editing;minimalUi.panel=null;state.sessionPanelOpen=false;if(minimalUi.editing&&state.sceneId!=='cafe'){state.sceneId='cafe';await enterCafeRoom();if(state.view!=='room'||!state.roomId){minimalUi.editing=false;return;}}state.view='room';render();return;}
+  if(action==='collapse-layout'){if(!state.isDeveloper)return;minimalUi.layoutCollapsed=!minimalUi.layoutCollapsed;const panel=document.querySelector('.minimal-layout-tools');panel.classList.toggle('is-collapsed',minimalUi.layoutCollapsed);node.setAttribute('aria-expanded',String(!minimalUi.layoutCollapsed));node.setAttribute('aria-label',(minimalUi.layoutCollapsed?'Expand':'Collapse')+' layout tools');node.innerHTML=minimalIcon(minimalUi.layoutCollapsed?'plus':'minus');minimalPositionLayoutPanel();return;}
   if(action==='select-marker'){if(!state.isDeveloper)return;minimalUi.seat=Number(node.dataset.layoutSeat);minimalUi.target=node.dataset.layoutTarget;minimalUpdateLayoutFields();return;}
   if(action==='save-layout'){if(!state.isDeveloper)return;const layout=Object.fromEntries(staticSeatSlots.map(s=>[s.seat_id,{avatar:[...minimalSeatPosition(s,'avatar')],button:[...minimalSeatPosition(s,'button')]}]));localStorage.setItem(MINIMAL_LAYOUT_KEY,JSON.stringify(layout));showToast('Layout saved on this browser.');return;}
   if(action==='reset-layout'){if(!state.isDeveloper)return;minimalUi.layout={};localStorage.removeItem(MINIMAL_LAYOUT_KEY);refreshMinimalSeats();return;}
@@ -242,12 +266,18 @@ document.addEventListener('focusout',e=>{if(e.target.closest('[data-place]')){co
 document.addEventListener('pointerdown',e=>{
   if(!window.__FOCUS_ISLAND_CONFIG__?.minimalMvp)return;
   if(state.view==='focus')scheduleHudFade();
+  const handle=e.target.closest('[data-layout-panel-handle]');
+  if(handle && state.isDeveloper && minimalUi.editing && !e.target.closest('button')) {
+    const panel=handle.closest('.minimal-layout-tools'),r=panel.getBoundingClientRect();
+    minimalPanelDrag={node:handle,id:e.pointerId,offsetX:e.clientX-r.left,offsetY:e.clientY-r.top};
+    handle.setPointerCapture?.(e.pointerId);e.preventDefault();e.stopImmediatePropagation();return;
+  }
   const n=e.target.closest('[data-layout-target]');
   if(n&&state.isDeveloper&&minimalUi.editing){e.stopImmediatePropagation();const stage=n.closest('.seat-layer');const r=stage.getBoundingClientRect();minimalUi.seat=Number(n.dataset.layoutSeat);minimalUi.target=n.dataset.layoutTarget;const slot=staticSeatSlots.find(s=>s.seat_id===minimalUi.seat),p=minimalSeatPosition(slot,minimalUi.target);minimalDrag={node:n,id:e.pointerId,x:e.clientX,y:e.clientY,offsetX:e.clientX-r.left-p[0]*r.width/100,offsetY:e.clientY-r.top-p[1]*r.height/100,moved:false};n.setPointerCapture?.(e.pointerId);minimalUpdateLayoutFields();e.preventDefault();return;}
   if(minimalUi.panel&&!e.target.closest('.floating-panel,[data-minimal="panel"]'))minimalSetPanel(null);
 },true);
-document.addEventListener('pointermove',e=>{if(!minimalDrag||e.pointerId!==minimalDrag.id)return;const r=minimalDrag.node.closest('.seat-layer').getBoundingClientRect();minimalDrag.moved ||= Math.hypot(e.clientX-minimalDrag.x,e.clientY-minimalDrag.y)>3;minimalMoveMarker((e.clientX-r.left-minimalDrag.offsetX)/r.width*100,(e.clientY-r.top-minimalDrag.offsetY)/r.height*100);});
-function minimalEndDrag(e){if(!minimalDrag||e.pointerId!==minimalDrag.id)return;if(minimalDrag.moved)minimalIgnoreClick=Date.now()+300;minimalDrag.node.releasePointerCapture?.(e.pointerId);minimalDrag=null;}
+document.addEventListener('pointermove',e=>{if(minimalPanelDrag && e.pointerId===minimalPanelDrag.id){const r=minimalPanelDrag.node.closest('.world').getBoundingClientRect();minimalPositionLayoutPanel({x:e.clientX-r.left-minimalPanelDrag.offsetX,y:e.clientY-r.top-minimalPanelDrag.offsetY});return;}if(!minimalDrag||e.pointerId!==minimalDrag.id)return;const r=minimalDrag.node.closest('.seat-layer').getBoundingClientRect();minimalDrag.moved ||= Math.hypot(e.clientX-minimalDrag.x,e.clientY-minimalDrag.y)>3;minimalMoveMarker((e.clientX-r.left-minimalDrag.offsetX)/r.width*100,(e.clientY-r.top-minimalDrag.offsetY)/r.height*100);});
+function minimalEndDrag(e){if(minimalPanelDrag && e.pointerId===minimalPanelDrag.id){minimalPanelDrag.node.releasePointerCapture?.(e.pointerId);minimalPanelDrag=null;return;}if(!minimalDrag||e.pointerId!==minimalDrag.id)return;if(minimalDrag.moved)minimalIgnoreClick=Date.now()+300;minimalDrag.node.releasePointerCapture?.(e.pointerId);minimalDrag=null;}
 document.addEventListener('pointerup',minimalEndDrag);document.addEventListener('pointercancel',minimalEndDrag);
 document.addEventListener('change',e=>{
   if(!window.__FOCUS_ISLAND_CONFIG__?.minimalMvp)return;const n=e.target;
@@ -262,6 +292,7 @@ document.addEventListener('keydown',e=>{
   if(!window.__FOCUS_ISLAND_CONFIG__?.minimalMvp)return;
   if(e.key==='Escape'){if(minimalUi.confirm){minimalUi.confirm=null;minimalRenderConfirm();}else minimalSetPanel(null);return;}
   if(minimalUi.confirm&&e.key==='Tab'){const bs=document.querySelectorAll('.minimal-root .confirm-actions button:not(:disabled)');if(!bs.length)return;if(e.shiftKey&&document.activeElement===bs[0]){e.preventDefault();bs[bs.length-1].focus();}else if(!e.shiftKey&&document.activeElement===bs[bs.length-1]){e.preventDefault();bs[0].focus();}return;}
+  if(e.target.matches('[data-layout-panel-handle]') && state.isDeveloper && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();const p=minimalUi.panelPosition||{x:16,y:84},step=e.shiftKey?20:5;minimalPositionLayoutPanel({x:p.x+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0),y:p.y+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0)});return;}
   const n=e.target.closest('[data-layout-target]');if(n&&state.isDeveloper&&minimalUi.editing&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();minimalUi.seat=Number(n.dataset.layoutSeat);minimalUi.target=n.dataset.layoutTarget;const p=minimalSeatPosition(staticSeatSlots.find(s=>s.seat_id===minimalUi.seat),minimalUi.target),step=e.shiftKey?1:.2;minimalMoveMarker(p[0]+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0),p[1]+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0));}
 });
 
@@ -272,3 +303,5 @@ document.addEventListener('submit',event=>{
   }
 },true);
 window.addEventListener('offline',()=>{if(window.__FOCUS_ISLAND_CONFIG__?.minimalMvp&&!state.localRoom){state.presenceUnavailable=true;refreshMinimalSeats();}});
+
+window.addEventListener("resize",()=>{if(window.__FOCUS_ISLAND_CONFIG__?.minimalMvp && document.querySelector(".minimal-layout-tools"))minimalPositionLayoutPanel();});
