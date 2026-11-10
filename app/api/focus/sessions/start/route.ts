@@ -1,3 +1,4 @@
+import { focusScene, roomSceneId } from "@/lib/scenes";
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { ACCESS_COOKIE_NAME, verifyAccessSnapshot } from "@/lib/access";
@@ -15,7 +16,7 @@ const schema = z.object({
 function statusFor(message: string) {
   if (message.includes("payment_required") || message.includes("trial_requires_25")) return 402;
   if (message.includes("registration_required")) return 403;
-  if (message.includes("active_session_exists")) return 409;
+  if (["active_session_exists","seat_session_required","session_conflict"].some(code=>message.includes(code))) return 409;
   return 400;
 }
 
@@ -23,6 +24,8 @@ export async function POST(request: Request) {
   if (rateLimited(request, "focus-start", 15)) return json({ error: "rate_limited" }, { status: 429 });
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return json({ error: "invalid_focus_session" }, { status: 400 });
+  const input = parsed.data;
+  if (!focusScene(input.sceneId)?.enabled || (input.roomId && input.roomId !== `${input.sceneId}-local` && roomSceneId(input.roomId) !== input.sceneId) || (input.seatId !== null && input.seatId > 6)) return json({ error: "invalid_focus_session" }, { status: 400 });
   const auth = await authenticatedSupabase();
   if (!auth) return json({ error: "authentication_required" }, { status: 401 });
   const { data, error } = await auth.supabase.rpc("start_my_focus_session", {
@@ -33,9 +36,9 @@ export async function POST(request: Request) {
     p_timer_mode: parsed.data.timerMode,
   });
   if (error) {
-    const known = ["payment_required", "trial_requires_25", "registration_required", "active_session_exists"];
+    const known = ["payment_required", "trial_requires_25", "registration_required", "active_session_exists", "invalid_focus_session", "seat_session_required", "session_conflict"];
     const code = known.find((item) => error.message.includes(item)) || "focus_start_failed";
-    if (code === "focus_start_failed" && !auth.user.is_anonymous) {
+    if (code === "focus_start_failed" && !auth.user.is_anonymous && (error.code?.startsWith("08") || error.code?.startsWith("53"))) {
       const cookieStore = await cookies();
       const snapshot = verifyAccessSnapshot(cookieStore.get(ACCESS_COOKIE_NAME)?.value, auth.user.id);
       if (snapshot) {

@@ -1,3 +1,4 @@
+import { focusScene } from "@/lib/scenes";
 import { authenticatedSupabase, json, parseIdentity, rpcError } from "@/lib/presence";
 import { rateLimited } from "@/lib/security";
 
@@ -6,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request, context: { params: Promise<{ sceneId: string }> }) {
   if (rateLimited(request, "allocate", 30)) return json({ error: "rate_limited" }, { status: 429 });
   const { sceneId } = await context.params;
-  if (sceneId !== "cafe") return json({ error: "scene_not_available" }, { status: 404 });
+  if (!focusScene(sceneId)?.enabled) return json({ error: "scene_not_available" }, { status: 404 });
   const identity = parseIdentity(await request.json().catch(() => null));
   if (!identity) return json({ error: "invalid_identity" }, { status: 400 });
   const auth = await authenticatedSupabase();

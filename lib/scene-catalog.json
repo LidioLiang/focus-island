@@ -1,0 +1,237 @@
+{
+  "cafe": {
+    "id": "cafe",
+    "label": "Four Seasons Café",
+    "enabled": true,
+    "roomImage": "/assets/20261028-cafe-room-static-seat-master.webp",
+    "designSize": [
+      1672,
+      941
+    ],
+    "onlineRooms": [
+      "cafe-01",
+      "cafe-02",
+      "cafe-03"
+    ],
+    "seats": [
+      {
+        "seat_id": 1,
+        "avatar_anchor": [
+          28.5,
+          33
+        ],
+        "hit_area": [
+          28.11,
+          52.0723
+        ],
+        "desk_zone_id": "bar"
+      },
+      {
+        "seat_id": 2,
+        "avatar_anchor": [
+          39.3,
+          30
+        ],
+        "hit_area": [
+          39.1746,
+          47.5027
+        ],
+        "desk_zone_id": "bar"
+      },
+      {
+        "seat_id": 3,
+        "avatar_anchor": [
+          68.5,
+          35
+        ],
+        "hit_area": [
+          59.7,
+          50.6908
+        ],
+        "desk_zone_id": "window"
+      },
+      {
+        "seat_id": 4,
+        "avatar_anchor": [
+          84,
+          43
+        ],
+        "hit_area": [
+          83.433,
+          56.8544
+        ],
+        "desk_zone_id": "window"
+      },
+      {
+        "seat_id": 5,
+        "avatar_anchor": [
+          16,
+          53
+        ],
+        "hit_area": [
+          15.5502,
+          75.983
+        ],
+        "desk_zone_id": "lounge"
+      },
+      {
+        "seat_id": 6,
+        "avatar_anchor": [
+          67,
+          63
+        ],
+        "hit_area": [
+          66.0885,
+          83.9532
+        ],
+        "desk_zone_id": "lounge"
+      }
+    ],
+    "focusViews": [
+      {
+        "id": "window",
+        "label": "Rain at the window",
+        "image": "/assets/20261013-cafe-window-real-focus-view.webp"
+      },
+      {
+        "id": "bar",
+        "label": "Sunlit desk",
+        "image": "/assets/20261013-cafe-bar-real-focus-view.webp"
+      },
+      {
+        "id": "lounge",
+        "label": "Quiet corner",
+        "image": "/assets/20261013-cafe-sofa-real-focus-view.webp"
+      },
+      {
+        "id": "mist",
+        "label": "Misty morning",
+        "image": "/assets/20261110-cafe-misty-morning-focus-view.webp"
+      },
+      {
+        "id": "snow",
+        "label": "First snow at dusk",
+        "image": "/assets/20261110-cafe-first-snow-focus-view.webp"
+      },
+      {
+        "id": "clearing",
+        "label": "After the rain",
+        "image": "/assets/20261028-cafe-rain-clearing-focus-view.webp",
+        "hidden": true
+      }
+    ],
+    "ambientLabel": "Café ambience",
+    "ambientGain": 0.09,
+    "filter": 600
+  },
+  "library": {
+    "id": "library",
+    "label": "Academy Library",
+    "enabled": true,
+    "roomImage": "/assets/20261110-library-room-six-seats.webp",
+    "designSize": [
+      1672,
+      941
+    ],
+    "onlineRooms": [
+      "library-01",
+      "library-02",
+      "library-03"
+    ],
+    "seats": [
+      {
+        "seat_id": 1,
+        "avatar_anchor": [
+          14.3,
+          45
+        ],
+        "hit_area": [
+          14.3,
+          53
+        ],
+        "desk_zone_id": "window"
+      },
+      {
+        "seat_id": 2,
+        "avatar_anchor": [
+          35.8,
+          44.5
+        ],
+        "hit_area": [
+          35.8,
+          53
+        ],
+        "desk_zone_id": "window"
+      },
+      {
+        "seat_id": 3,
+        "avatar_anchor": [
+          36.5,
+          63
+        ],
+        "hit_area": [
+          36.5,
+          74
+        ],
+        "desk_zone_id": "reading"
+      },
+      {
+        "seat_id": 4,
+        "avatar_anchor": [
+          52.6,
+          63
+        ],
+        "hit_area": [
+          52.6,
+          74
+        ],
+        "desk_zone_id": "reading"
+      },
+      {
+        "seat_id": 5,
+        "avatar_anchor": [
+          79,
+          51
+        ],
+        "hit_area": [
+          79,
+          61
+        ],
+        "desk_zone_id": "alcove"
+      },
+      {
+        "seat_id": 6,
+        "avatar_anchor": [
+          91.5,
+          56
+        ],
+        "hit_area": [
+          91.5,
+          67
+        ],
+        "desk_zone_id": "alcove"
+      }
+    ],
+    "focusViews": [
+      {
+        "id": "window",
+        "label": "Window Desk",
+        "image": "/assets/20261110-library-window-focus.webp"
+      },
+      {
+        "id": "reading",
+        "label": "Reading Table",
+        "image": "/assets/20261110-library-reading-focus.webp"
+      },
+      {
+        "id": "alcove",
+        "label": "Quiet Alcove",
+        "image": "/assets/20261110-library-alcove-focus.webp"
+      }
+    ],
+    "ambientLabel": "Library ambience",
+    "ambientAsset": "/assets/audio/20261110-library-room-tone.wav",
+    "ambientGain": 0.16,
+    "filter": 340
+  }
+}

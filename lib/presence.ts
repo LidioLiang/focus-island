@@ -1,9 +1,10 @@
+import { FOCUS_ROOM_IDS } from "@/lib/scenes";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const CAFE_SYSTEM_ROOM_IDS = ["cafe-01", "cafe-02", "cafe-03"] as const;
-export const ROOM_IDS = new Set<string>([...CAFE_SYSTEM_ROOM_IDS]);
+export const ROOM_IDS = new Set<string>(FOCUS_ROOM_IDS);
 export const SEAT_COUNT = 6;
 export const RESERVED_TTL_MS = 15_000;
 export const OCCUPIED_TTL_MS = 45_000;
@@ -44,9 +45,9 @@ export async function authenticatedSupabase() {
 
 export function rpcError(error: { message?: string; code?: string } | null) {
   const message = error?.message || "database_error";
-  const known = ["seat_taken", "reservation_expired", "session_expired", "room_not_found", "system_rooms_full", "invalid_request"];
+  const known = ["seat_taken", "reservation_expired", "session_expired", "room_not_found", "system_rooms_full", "session_conflict", "invalid_request"];
   const code = known.find((item) => message.includes(item)) || "database_error";
-  const status = code === "seat_taken" || code.includes("expired") || code === "system_rooms_full"
+  const status = code === "session_conflict" || code === "seat_taken" || code.includes("expired") || code === "system_rooms_full"
     ? 409
     : code === "room_not_found"
       ? 404

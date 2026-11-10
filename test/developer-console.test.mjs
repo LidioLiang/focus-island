@@ -11,7 +11,7 @@ function context(names, overrides = {}) {
     state: { isDeveloper: true, personalCenter: { open: true }, developerDiagnostics: null },
     window: { FocusI18n: { getLanguage: () => "en" } }, preferences: { language: "en" },
     PUBLIC_CONFIG: { appVersion: "1.1.2", release: { developerToolsVersion: "2.0", environment: "preview", commit: "abc1234" } },
-    escapeHtml: (s) => String(s).replaceAll("<", "&lt;"), renderPersonalCenter() {}, showToast() {},
+    sharedFocusScene:()=>false, escapeHtml: (s) => String(s).replaceAll("<", "&lt;"), renderPersonalCenter() {}, showToast() {},
     ...overrides,
   });
   vm.runInContext(names.map((name) => {
@@ -97,7 +97,7 @@ test("authorized diagnostics strips other users' identities and preserves partia
         { seat_id: 3, state: "reserved", user_id: "me" },
       ] } },
     } }),
-    isDeveloper: () => true, CAFE_SYSTEM_ROOM_IDS: ["cafe-01", "cafe-02", "cafe-03"],
+    isDeveloper: () => true, FOCUS_ROOM_IDS: ["cafe-01", "cafe-02", "cafe-03","library-01","library-02","library-03"], roomSceneId:id=>id.split("-")[0],
     RELEASE_INFO: { version: "1.1.2" }, json: (body, init) => ({ body, init }),
   });
   vm.runInContext(compiled, ctx);

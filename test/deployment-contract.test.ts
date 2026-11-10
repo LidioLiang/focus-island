@@ -31,7 +31,7 @@ test("seat mutations are serialized and owned by auth.uid", () => {
 test("realtime replaces two-second polling but retains snapshot calibration", () => {
   assert.match(appSource, /focus-island:subscribe-room/);
   assert.match(appSource, /focus-island:room-change/);
-  assert.match(appSource, /setInterval\(\(\) => syncCafeState\(\), 60000\)/);
+  assert.match(appSource, /setInterval\(\(\) => syncCafeState\(\), 25000\)/);
   assert.doesNotMatch(appSource, /setInterval\(\(\) => syncCafeState\(\), 2000\)/);
 });
 

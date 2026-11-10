@@ -1,0 +1,34 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(20);
+insert into auth.users(id,instance_id,aud,role,is_anonymous,created_at,updated_at,raw_app_meta_data,raw_user_meta_data) values
+('55555555-5555-4555-8555-555555555555','00000000-0000-0000-0000-000000000000','authenticated','authenticated',true,now(),now(),'{}','{}'),
+('66666666-6666-4666-8666-666666666666','00000000-0000-0000-0000-000000000000','authenticated','authenticated',true,now(),now(),'{}','{}');
+select is((select count(*)::int from public.room_instances where scene_id='library' and capacity=6 and enabled),3,'library has three six-seat rooms');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','55555555-5555-4555-8555-555555555555',true);
+select is(public.allocate_room('library','aaaaaaaa-aaaa-4aaa-8aaa-555555555555','Reader',0)->>'roomId','library-01','guest allocates only inside library');
+select lives_ok($$select public.reserve_seat('library-01',3,'aaaaaaaa-aaaa-4aaa-8aaa-555555555555','Reader',0,'Seated')$$,'reserve library seat');
+select lives_ok($$select public.occupy_seat('aaaaaaaa-aaaa-4aaa-8aaa-555555555555','library-01',3)$$,'occupy library seat');
+select is(public.start_my_focus_session('library-focus-one','library','library-01',3,25)->'session'->>'scene_id','library','history records library scene');
+select throws_ok($$select public.start_my_focus_session('library-focus-one','cafe','cafe-local',3,25)$$,'P0001','session_conflict','idempotency key cannot change scenes');
+select throws_ok($$select public.start_my_focus_session('other-focus-one','cafe','cafe-local',3,50)$$,'P0001','active_session_exists','one active focus across scenes');
+select is(public.allocate_room('cafe','aaaaaaaa-aaaa-4aaa-8aaa-555555555555','Reader',0)->>'roomId','cafe-01','allocation never returns old scene');
+select lives_ok($$select public.update_my_focus_session('library-focus-one','ended_early',20,0)$$,'end library focus');
+select lives_ok($$select public.release_session('aaaaaaaa-aaaa-4aaa-8aaa-555555555555')$$,'release old library ownership');
+select lives_ok($$select public.reserve_seat('cafe-01',1,'bbbbbbbb-bbbb-4bbb-8bbb-555555555555','Reader',0,'Seated')$$,'new cafe ownership');
+select throws_ok($$select public.resume_seat_session('aaaaaaaa-aaaa-4aaa-8aaa-555555555555','library-01',3,'Reader',0,'Focusing',true,now())$$,'P0001','session_conflict','late recovery cannot steal newer scene');
+select lives_ok($$select public.release_session('bbbbbbbb-bbbb-4bbb-8bbb-555555555555')$$,'release cafe');
+select is(public.resume_seat_session('cccccccc-cccc-4ccc-8ccc-555555555555','library-02',6,'Reader',0,'Focusing',true,now())->>'roomId','library-02','expired recovery stays inside requested scene');
+select set_config('request.jwt.claim.sub','66666666-6666-4666-8666-666666666666',true);
+select throws_ok($$select public.reserve_seat('library-02',6,'dddddddd-dddd-4ddd-8ddd-666666666666','Reader Two',1,'Seated')$$,'P0001','seat_taken','second user cannot take occupied library seat');
+select throws_ok($$select public.start_my_focus_session('stolen-seat-focus','library','library-02',6,25)$$,'P0001','seat_session_required','online start requires owned occupied seat');
+select lives_ok($$select public.release_session('cccccccc-cccc-4ccc-8ccc-555555555555')$$,'cross-owner release harmless');
+reset role;
+select is((select count(*)::int from public.seat_leases where room_id='library-02' and seat_id=6),1,'owner survives other user release');
+set local role authenticated;
+select set_config('request.jwt.claim.sub','66666666-6666-4666-8666-666666666666',true);
+select throws_ok($$select public.start_my_focus_session('wrong-scene-room','library','cafe-01',1,25)$$,'P0001','invalid_focus_session','wrong scene room rejected');
+select is(public.start_my_focus_session('library-solo-open','library','library-local',6,0)->'session'->>'timer_mode','0','library solo open timing works');
+select * from finish();
+rollback;

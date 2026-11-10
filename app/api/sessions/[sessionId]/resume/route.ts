@@ -1,9 +1,10 @@
+import { FOCUS_ROOM_IDS } from "@/lib/scenes";
 import { z } from "zod";
 import { authenticatedSupabase, json, rpcError } from "@/lib/presence";
 import { rateLimited } from "@/lib/security";
 
 const schema = z.object({
-  preferredRoomId: z.enum(["cafe-01", "cafe-02", "cafe-03"]),
+  preferredRoomId: z.string().refine(value => FOCUS_ROOM_IDS.includes(value)),
   preferredSeatId: z.number().int().min(1).max(6),
   displayName: z.string().trim().min(1).max(24),
   avatarSkin: z.number().int().min(0).max(3),
