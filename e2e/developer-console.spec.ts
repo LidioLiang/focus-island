@@ -19,7 +19,7 @@ test("developer console shows live rooms in English and confirms the exact lefto
   await page.route("**/api/developer/diagnostics", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
     version: packageJson.version, checkedAt: new Date().toISOString(),
     activeSessions: ended ? [] : [{ client_session_id: "old-test-session", status: "running", timer_mode: 25, actual_seconds: 120 }],
-    rooms: ["cafe-01", "cafe-02", "cafe-03"].map((roomId) => ({ roomId, capacity: 6, occupied: 1, available: true,
+    rooms: ["cafe-01", "cafe-02", "cafe-03", "library-01", "library-02", "library-03"].map((roomId) => ({ roomId, capacity: 6, occupied: 1, available: true,
       seats: Array.from({ length: 6 }, (_, i) => ({ seatId: i + 1, state: i === 2 ? "occupied" : "available", mine: i === 2 })),
     })),
   }) }));
@@ -30,10 +30,10 @@ test("developer console shows live rooms in English and confirms the exact lefto
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
   await openDeveloper(page);
-  const consolePanel = page.locator('[data-developer-tools-version="2.1"]');
+  const consolePanel = page.locator('[data-developer-tools-version="2.2"]');
   await expect(consolePanel).toBeVisible();
-  await expect(consolePanel.locator("[data-developer-room]")).toHaveCount(3);
-  await expect(consolePanel.locator(".developer-seat")).toHaveCount(18);
+  await expect(consolePanel.locator("[data-developer-room]")).toHaveCount(6);
+  await expect(consolePanel.locator(".developer-seat")).toHaveCount(36);
   await expect(consolePanel).toContainText(packageJson.version);
   expect(await consolePanel.innerText()).not.toMatch(/[\u4e00-\u9fff]/);
   await page.locator('[data-confirm-profile="developer-end-focus"]').click();
