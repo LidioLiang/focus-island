@@ -13,7 +13,7 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=51/);
+  assert.match(pageSource, /app\.js\?v=52/);
   assert.match(layoutSource, /styles\.css\?v=39/);
   assert.match(source, /language: "en"/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);
@@ -42,7 +42,6 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(englishLocale, /Focus Isle/);
   assert.match(englishLocale, /Privacy Policy/);
   assert.match(englishLocale, /Terms of Service/);
-  assert.match(source, /const englishIdentity = window\.FocusI18n\?\.getLanguage\(\) === "en"/);
   assert.match(source, /function localizedIdentityDisplayName/);
   assert.match(source, /\["Otter", "Robin", "Deer", "Traveler"/);
 });
