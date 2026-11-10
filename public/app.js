@@ -302,6 +302,9 @@ const state = {
   focusRecovery: null,
   developerDiagnostics: null,
   developerDiagnosticsPending: false,
+  developerDiagnosticsError: "",
+  developerEndSession: null,
+  developerEndingSession: false,
   sounds: { ...preferences.sounds },
   musicTrack: preferences.musicTrack,
   soundVolumes: { ...preferences.soundVolumes },
@@ -2201,17 +2204,23 @@ function hasActiveSeatSession() {
   return Boolean(state.currentSeatId || state.switchingFromSeatId || isActiveFocusSession());
 }
 
-function openPersonalCenter() {
+function openPersonalCenter({ tab = "overview" } = {}) {
   if (state.isRunning || state.sessionPhase === "rest") syncTimerFromClock();
   persistActiveSession(true);
   state.personalCenter.open = true;
-  state.personalCenter.tab = "overview";
+  state.personalCenter.tab = tab === "developer" && state.isDeveloper ? "developer" : "overview";
   state.personalCenter.monthKey = shanghaiDateKey(Date.now()).slice(0, 7);
   state.personalCenter.selectedDate = shanghaiDateKey(Date.now());
   state.personalCenter.filters = { scene: "all", status: "all", mode: "all" };
   state.personalCenter.confirmAction = null;
   document.body.classList.add("personal-center-open");
   renderPersonalCenter();
+  void getAccessStatus({ refresh: true }).then(() => {
+    if (!state.personalCenter.open) return;
+    if (state.personalCenter.tab === "developer" && !state.isDeveloper) state.personalCenter.tab = "overview";
+    renderPersonalCenter();
+  }).catch(() => {});
+  if (state.personalCenter.tab === "developer") void refreshDeveloperDiagnostics();
 }
 
 function closePersonalCenter() {
@@ -2239,7 +2248,7 @@ function renderPersonalCenter() {
     ["history", "▣", "专注记录"],
     ["preferences", "♪", "偏好设置"],
     ["account", "◇", "账户与数据"],
-    ...(state.isDeveloper ? [["developer", "⌘", "开发者工具"]] : []),
+    ...(state.isDeveloper ? [["developer", "⌘", developerToolsCopy().nav]] : []),
   ];
   const overlay = document.createElement("section");
   overlay.className = "personal-center-overlay";
@@ -2258,7 +2267,7 @@ function renderPersonalCenter() {
         <nav aria-label="个人中心">
           ${tabs.map(([id, icon, label]) => `<button type="button" class="personal-nav-button ${state.personalCenter.tab === id ? "is-active" : ""}" data-profile-tab="${id}" aria-current="${state.personalCenter.tab === id ? "page" : "false"}"><span aria-hidden="true">${icon}</span>${label}</button>`).join("")}
         </nav>
-        <p class="personal-center-local-note">Focus Isle v1.1 · 账号与记录云端同步</p>
+        <p class="personal-center-local-note" data-no-auto-i18n>Focus Isle v${escapeHtml(PUBLIC_CONFIG.appVersion || "—")} · ${developerToolsCopy().cloudNote}</p>
       </aside>
       <main class="personal-center-main">
         <header class="personal-center-header">
@@ -2496,48 +2505,116 @@ function renderPersonalAccount() {
     </div>`;
 }
 
+function developerToolsCopy() {
+  const zh = (window.FocusI18n?.getLanguage() || preferences.language) === "zh-CN";
+  return zh ? {
+    nav: "开发者工具", title: "静态 MVP 开发者控制台", subtitle: "检查当前版本、在线房间和自己的测试会话。",
+    cloudNote: "账号与记录云端同步", version: "产品版本", tools: "工具版本", build: "构建", environment: "运行环境",
+    rooms: "在线房间", roomsHelp: "状态来自服务器快照；岛民不计入真人占座。", refresh: "刷新诊断", loading: "正在读取…",
+    never: "尚未读取服务器状态", checked: "上次读取", failed: "读取失败，请重试。下方保留上次快照。", unknown: "未知",
+    room: "房间", seat: "座位", available: "空位", occupied: "已占用", reserved: "预留中", moving: "换座中", mine: "我的座位",
+    local: "本地岛民房间", online: "在线房间", notInRoom: "尚未入房", idle: "未开始", paused: "已暂停", running: "专注中", rest: "休息中",
+    current: "本机状态", status: "计时状态", connection: "连接方式", cloudSession: "云端活动会话", noSession: "本账号没有未结束的云端专注。",
+    sessionHelp: "可在海岛查询和结束自己的遗留测试会话；继续计时前需要先选择座位。", free: "自由计时", minutes: "分钟", recorded: "已记录", seconds: "秒",
+    enter: "进入咖啡馆", recover: "继续或重新开始", end: "结束此测试会话", raw: "查看原始诊断数据", sessionUnavailable: "暂时无法读取本账号会话。",
+    staticTools: "静态房间工具", calibration: "校准六个座位编号", calibrationHelp: "只调整热点编号的位置，不改变人物与家具。", calibrate: "开始校准",
+    enterFirst: "先进入咖啡馆并打开房间视角。", reset: "恢复静态视图", resetHelp: "退出旧调试状态并恢复默认编号，保留当前计时与记录。",
+    scope: "当前范围", scopeHelp: "固定六座咖啡馆、真人占座和沉浸专注。旧家具编辑器、3D 调试和未开放场景不在此控制台中。",
+    mismatch: "页面和服务器版本不一致，请刷新页面后重试。", confirmEnd: "结束这轮测试专注？", confirmBody: "已记录的时长会保留。如果同一会话仍在另一设备运行，也会被结束。", cancel: "取消", ended: "测试会话已结束", noPending: "没有可结束的测试会话。",
+  } : {
+    nav: "Developer tools", title: "Static MVP developer console", subtitle: "Inspect the current release, shared rooms and your own test session.",
+    cloudNote: "Account & cloud history", version: "App version", tools: "Tools version", build: "Build", environment: "Environment",
+    rooms: "Shared rooms", roomsHelp: "Server snapshots only. Islander companions are excluded from human seat occupancy.", refresh: "Refresh diagnostics", loading: "Loading…",
+    never: "Server status has not been loaded", checked: "Last checked", failed: "Could not refresh. The last snapshot is shown below.", unknown: "Unknown",
+    room: "Room", seat: "Seat", available: "Available", occupied: "Occupied", reserved: "Reserved", moving: "Moving seats", mine: "My seat",
+    local: "Local islander room", online: "Shared online room", notInRoom: "Not in a room", idle: "Not started", paused: "Paused", running: "Focusing", rest: "On a break",
+    current: "This device", status: "Timer status", connection: "Connection", cloudSession: "Active cloud session", noSession: "This account has no unfinished cloud focus session.",
+    sessionHelp: "Inspect and end your own leftover test session from the island. Choose a seat before resuming a timer.", free: "Open-ended", minutes: "min", recorded: "Recorded", seconds: "sec",
+    enter: "Enter café", recover: "Resume or start again", end: "End this test session", raw: "Show diagnostic JSON", sessionUnavailable: "Your cloud session could not be loaded.",
+    staticTools: "Static room tools", calibration: "Calibrate six seat labels", calibrationHelp: "Adjust label hotspots without moving characters or furniture.", calibrate: "Start calibration",
+    enterFirst: "Enter the café and open the room view first.", reset: "Restore static view", resetHelp: "Leave legacy debug states and reset seat labels, keeping your timer and records.",
+    scope: "Current scope", scopeHelp: "One six-seat café, shared seat occupancy and immersive focus. Legacy furniture editors, 3D debugging and unopened scenes are outside this console.",
+    mismatch: "The page and server versions differ. Refresh the page before continuing.", confirmEnd: "End this test session?", confirmBody: "Recorded time will be kept. This also ends the same session if it is still running on another device.", cancel: "Cancel", ended: "Test session ended", noPending: "There is no test session to end.",
+  };
+}
+
+function developerDate(value) {
+  const date = new Date(value || "");
+  return Number.isFinite(date.getTime()) ? date.toLocaleString() : "—";
+}
+
 function renderDeveloperTools() {
+  const c = developerToolsCopy();
   const inCafeRoom = state.view === "room" && state.sceneId === "cafe";
   const diagnostics = state.developerDiagnostics;
+  const release = PUBLIC_CONFIG.release || {};
+  const mismatch = diagnostics?.version && diagnostics.version !== PUBLIC_CONFIG.appVersion;
   const rows = [
-    ["版本", PUBLIC_CONFIG.appVersion || "1.1.1"], ["房间渲染", "静态 MVP"],
-    ["房间", state.roomId || "—"], ["连接", state.localRoom ? "本地岛民" : state.roomId ? "在线" : "未入房"],
-    ["座位", state.currentSeatId || "—"], ["计时状态", state.sessionPhase === "rest" ? "休息" : state.isRunning ? "专注中" : "已暂停 / 未开始"],
-    ["本地专注会话", state.cloudFocusClientId || "—"],
+    [c.room, state.roomId || c.notInRoom], [c.connection, state.localRoom ? c.local : state.roomId ? c.online : c.notInRoom],
+    [c.seat, state.currentSeatId || "—"], [c.status, state.sessionPhase === "rest" ? c.rest : state.isRunning ? c.running : state.sessionStartedAt ? c.paused : c.idle],
   ];
-  return `<div class="profile-developer-layout">
-    <section class="profile-settings-card profile-developer-card">
-      <div class="profile-settings-heading"><span>DEVELOPER · STATIC MVP</span><h2>静态 MVP 开发者工具</h2></div>
-      <p>仅服务端开发者账号可用。诊断当前房间、座位和专注会话；不会修改生产配置。</p>
-      <dl class="developer-status-grid" data-no-auto-i18n>${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>
-      <div class="profile-data-action"><div><strong>在线诊断</strong><small>${state.developerDiagnosticsPending ? "正在读取…" : "读取三间真人房与本账号云端活动会话"}</small></div><button type="button" data-action="developer-refresh-diagnostics" ${state.developerDiagnosticsPending ? "disabled" : ""}>刷新诊断</button></div>
-      ${diagnostics ? `<pre class="developer-diagnostics" data-no-auto-i18n>${escapeHtml(JSON.stringify(diagnostics, null, 2))}</pre>` : ""}
-      <div class="profile-data-action"><div><strong>上次专注恢复</strong><small>继续云端会话，或确认结束后重新开始</small></div><button type="button" data-action="developer-recover-focus" ${state.currentSeatId ? "" : "disabled"}>检查并恢复</button></div>
-      <div class="profile-data-action"><div><strong>恢复当前静态版本</strong><small>退出旧版编辑器并恢复默认座位编号，保留账号、记录和专注计时</small></div><button type="button" data-action="developer-reset-static">恢复静态视图</button></div>
-      <div class="profile-data-action"><div><strong>静态座位编号校准</strong><small>${inCafeRoom ? "拖动 1–6 号座位编号" : "请先进入咖啡厅房间"}</small></div><button type="button" data-action="open-static-seat-calibration" ${inCafeRoom ? "" : "disabled"}>开始校准</button></div>
-    </section>
-    <section class="profile-settings-card">
-      <div class="profile-settings-heading"><span>权限说明</span><h2>开发者账号与普通会员隔离</h2></div>
-      <p class="profile-storage-note">客户端不会根据邮箱或密码开启开发模式。退出该开发者账号后，所有开发入口立即隐藏；服务端角色同时授予测试专注权限。</p>
-    </section>
+  const sessions = Array.isArray(diagnostics?.activeSessions) ? diagnostics.activeSessions : [];
+  const roomCards = (diagnostics?.rooms || []).map((room) => `<article class="developer-room-card" data-developer-room="${escapeHtml(room.roomId)}">
+    <header><strong>${escapeHtml(room.roomId)}</strong><span>${room.available ? `${room.occupied} / ${room.capacity}` : c.unknown}</span></header>
+    <div class="developer-seat-grid">${Array.from({ length: Number(room.capacity) || 6 }, (_, index) => {
+      const seat = room.seats?.find((item) => Number(item.seatId) === index + 1);
+      const status = seat?.state || "unknown";
+      const label = seat?.mine ? c.mine : c[status] || c.unknown;
+      return `<span class="developer-seat is-${["available", "occupied", "reserved", "moving"].includes(status) ? status : "unknown"} ${seat?.mine ? "is-mine" : ""}" aria-label="${c.seat} ${index + 1}: ${escapeHtml(label)}"><b>${index + 1}</b><small>${escapeHtml(label)}</small></span>`;
+    }).join("")}</div>
+  </article>`).join("");
+  return `<div class="developer-console" data-no-auto-i18n data-developer-tools-version="${escapeHtml(release.developerToolsVersion || "2.0")}">
+    <header class="developer-console-heading"><div><span class="developer-eyebrow">DEVELOPER CONSOLE · ${escapeHtml(release.developerToolsVersion || "2.0")}</span><h2>${c.title}</h2><p>${c.subtitle}</p></div><button type="button" data-action="developer-refresh-diagnostics" ${state.developerDiagnosticsPending ? "disabled" : ""}>${state.developerDiagnosticsPending ? c.loading : c.refresh}</button></header>
+    <div class="developer-release-grid">${[[c.version, PUBLIC_CONFIG.appVersion || "—"], [c.tools, release.developerToolsVersion || "2.0"], [c.environment, release.environment || "—"], [c.build, release.commit || "—"]].map(([label, value]) => `<div><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>
+    ${mismatch ? `<p class="developer-message is-error" role="alert">${c.mismatch}</p>` : ""}
+    ${state.developerDiagnosticsError ? `<p class="developer-message is-error" role="alert">${c.failed}</p>` : ""}
+    <section class="profile-settings-card"><div class="profile-settings-heading"><span>ROOMS</span><h2>${c.rooms}</h2></div><p>${c.roomsHelp}</p><p class="developer-checked">${diagnostics?.checkedAt ? `${c.checked}: ${developerDate(diagnostics.checkedAt)}` : c.never}</p><div class="developer-rooms">${roomCards}</div></section>
+    <div class="developer-details-grid"><section class="profile-settings-card"><div class="profile-settings-heading"><span>LOCAL</span><h2>${c.current}</h2></div><dl class="developer-status-grid">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>${!state.currentSeatId ? `<button type="button" class="developer-secondary" data-action="developer-enter-cafe">${c.enter}</button>` : ""}</section>
+    <section class="profile-settings-card"><div class="profile-settings-heading"><span>MY SESSION</span><h2>${c.cloudSession}</h2></div><p>${c.sessionHelp}</p>
+      ${!diagnostics ? `<p>${c.never}</p>` : diagnostics.activeSessions === null ? `<p role="status">${c.sessionUnavailable}</p>` : !sessions.length ? `<p class="developer-empty" data-developer-no-session>${c.noSession}</p>` : sessions.map((session) => `<article class="developer-session-card"><strong>${c[session.status] || c.unknown} · ${session.timer_mode ? `${session.timer_mode} ${c.minutes}` : c.free}</strong><time>${developerDate(session.started_at)}</time><span>${c.recorded}: ${Number(session.actual_seconds) || 0} ${c.seconds}</span><code>${escapeHtml(session.client_session_id?.slice(0, 8) || "—")}</code></article>`).join("")}
+      ${sessions.length ? `<div class="developer-session-actions"><button type="button" data-action="developer-recover-focus" ${state.currentSeatId && !mismatch && !state.developerEndingSession ? "" : "disabled"}>${c.recover}</button><button type="button" class="is-danger" data-confirm-profile="developer-end-focus" ${mismatch || state.developerEndingSession ? "disabled" : ""}>${c.end}</button></div>` : ""}
+    </section></div>
+    <section class="profile-settings-card"><div class="profile-settings-heading"><span>STATIC MVP</span><h2>${c.staticTools}</h2></div><div class="profile-data-action"><div><strong>${c.calibration}</strong><small>${inCafeRoom ? c.calibrationHelp : c.enterFirst}</small></div><button type="button" data-action="open-static-seat-calibration" ${inCafeRoom ? "" : "disabled"}>${c.calibrate}</button></div><div class="profile-data-action"><div><strong>${c.reset}</strong><small>${c.resetHelp}</small></div><button type="button" data-action="developer-reset-static">${c.reset}</button></div><p class="profile-storage-note"><strong>${c.scope}</strong> · ${c.scopeHelp}</p></section>
+    ${diagnostics ? `<details class="developer-raw"><summary>${c.raw}</summary><pre class="developer-diagnostics">${escapeHtml(JSON.stringify(diagnostics, null, 2))}</pre></details>` : ""}
   </div>`;
 }
 
 async function refreshDeveloperDiagnostics() {
   if (!state.isDeveloper || state.developerDiagnosticsPending) return;
   state.developerDiagnosticsPending = true;
-  renderPersonalCenter();
+  state.developerDiagnosticsError = "";
+  if (state.personalCenter.open) renderPersonalCenter();
   try { state.developerDiagnostics = await api("/api/developer/diagnostics"); }
-  catch (error) { state.developerDiagnostics = { error: error.message }; }
+  catch (error) {
+    state.developerDiagnosticsError = error.message;
+    if (error.status === 401 || error.status === 403) {
+      state.isDeveloper = false;
+      state.personalCenter.tab = "overview";
+    }
+  }
   finally {
     state.developerDiagnosticsPending = false;
     if (state.personalCenter.open) renderPersonalCenter();
   }
 }
 
+function confirmDeveloperSessionEnd() {
+  if (!state.isDeveloper || state.developerEndingSession || state.developerDiagnostics?.version !== PUBLIC_CONFIG.appVersion) return;
+  const session = state.developerDiagnostics?.activeSessions?.[0];
+  if (!session?.client_session_id) return;
+  state.developerEndSession = { ...session };
+  state.personalCenter.confirmAction = "developer-end-focus";
+  renderPersonalCenter();
+}
+
 function renderPersonalCenterConfirm() {
   const action = state.personalCenter.confirmAction;
   if (!action) return "";
+  if (action === "developer-end-focus") {
+    if (!state.isDeveloper || !state.developerEndSession) return "";
+    const c = developerToolsCopy();
+    return `<div class="profile-confirm-backdrop" role="presentation" data-no-auto-i18n><div class="profile-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="profile-confirm-title"><h2 id="profile-confirm-title">${c.confirmEnd}</h2><p>${c.confirmBody}</p><code>${escapeHtml(state.developerEndSession.client_session_id.slice(0, 8))}</code><div><button type="button" data-action="cancel-profile-confirm">${c.cancel}</button><button type="button" class="is-danger" data-action="execute-profile-confirm">${c.end}</button></div></div></div>`;
+  }
   const content = {
     "reset-preferences": ["恢复默认偏好？", "默认计时、声音、界面和提醒将恢复初始状态。", "恢复默认"],
     "clear-history": ["清空全部专注记录？", "此操作无法撤销，但不会影响身份、偏好或当前会话。", "清空记录"],
@@ -2550,6 +2627,33 @@ function renderPersonalCenterConfirm() {
 async function executeProfileDataAction() {
   const action = state.personalCenter.confirmAction;
   state.personalCenter.confirmAction = null;
+  if (action === "developer-end-focus") {
+    if (!state.isDeveloper || state.developerEndingSession) return;
+    const session = state.developerEndSession;
+    state.developerEndSession = null;
+    if (!session) return;
+    state.developerEndingSession = true;
+    renderPersonalCenter();
+    try {
+      if (state.cloudFocusClientId === session.client_session_id && isActiveFocusSession()) {
+        closePersonalCenter();
+        await finishSession();
+      } else {
+        await api(`/api/focus/sessions/${encodeURIComponent(session.client_session_id)}`, {
+          method: "PATCH", body: JSON.stringify({ status: "interrupted", actualSeconds: Number(session.actual_seconds) || 0, pausedSeconds: 0 }),
+        });
+      }
+      await refreshDeveloperDiagnostics();
+      showToast(developerToolsCopy().ended);
+    } catch (error) {
+      state.developerDiagnosticsError = error.message;
+      if (state.personalCenter.open) renderPersonalCenter();
+    } finally {
+      state.developerEndingSession = false;
+      if (state.personalCenter.open) renderPersonalCenter();
+    }
+    return;
+  }
   if (action === "reset-preferences") {
     preferences = defaultPreferences();
     applyPreferencesToState();
@@ -3492,6 +3596,11 @@ function cafeRoomPreviewCard(room, selectedRoomId, capacity) {
 }
 
 function roomViewForScene() {
+  return "room";
+}
+
+// Retained for isolated R&D; the shipped scene flow never calls this helper.
+function internalRoomViewForScene() {
   return state.sceneId === "cafe" && state.isDeveloper && resolveCafeRoomRenderer() === CAFE_ROOM_RENDERER_GODOT_3D
     ? "godot-room"
     : "room";
@@ -3622,7 +3731,7 @@ function renderStaticCafeRoom() {
 
 function renderRoom() {
   const scene = scenes[state.sceneId];
-  if (scene.id === "cafe" && !state.cafeDebugMode.enabled) {
+  if (scene.id === "cafe") {
     renderStaticCafeRoom();
     return;
   }
@@ -5094,9 +5203,11 @@ document.addEventListener("click", async (event) => {
 
   const profileTabButton = event.target.closest("[data-profile-tab]");
   if (profileTabButton) {
+    if (profileTabButton.dataset.profileTab === "developer" && !state.isDeveloper) return;
     state.personalCenter.tab = profileTabButton.dataset.profileTab;
     state.personalCenter.confirmAction = null;
     renderPersonalCenter();
+    if (state.personalCenter.tab === "developer") void refreshDeveloperDiagnostics();
     return;
   }
 
@@ -5217,6 +5328,10 @@ document.addEventListener("click", async (event) => {
 
   const profileConfirmButton = event.target.closest("[data-confirm-profile]");
   if (profileConfirmButton) {
+    if (profileConfirmButton.dataset.confirmProfile === "developer-end-focus") {
+      confirmDeveloperSessionEnd();
+      return;
+    }
     state.personalCenter.confirmAction = profileConfirmButton.dataset.confirmProfile;
     renderPersonalCenter();
     return;
@@ -5246,6 +5361,16 @@ document.addEventListener("click", async (event) => {
     return;
   }
   if (action === "developer-refresh-diagnostics") { void refreshDeveloperDiagnostics(); return; }
+  if (action === "developer-enter-cafe") {
+    if (state.currentSeatId) return;
+    closePersonalCenter();
+    state.sceneId = "cafe";
+    state.roomId = null;
+    state.roomPreviewId = null;
+    state.selectedSeat = null;
+    await enterCafeRoom();
+    return;
+  }
   if (action === "developer-recover-focus") { closePersonalCenter(); void openFocusRecovery(); return; }
   if (action === "developer-reset-static") {
     state.cafeDebugMode.enabled = false;
@@ -5324,6 +5449,7 @@ document.addEventListener("click", async (event) => {
     return;
   }
   if (action === "cancel-profile-confirm") {
+    state.developerEndSession = null;
     state.personalCenter.confirmAction = null;
     renderPersonalCenter();
     return;
@@ -5458,15 +5584,16 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "toggle-cafe-debug-mode") {
     if (!state.isDeveloper) return;
-    state.cafeDebugMode.enabled = !state.cafeDebugMode.enabled;
-    state.cafeSpriteTuning.enabled = state.cafeDebugMode.enabled;
-    if (state.cafeDebugMode.enabled) clearImmersiveAutoEnter();
-    renderRoom();
+    state.cafeDebugMode.enabled = false;
+    state.cafeSpriteTuning.enabled = false;
+    openPersonalCenter({ tab: "developer" });
+    return;
   }
   if (action === "toggle-library-debug-mode") {
     if (!state.isDeveloper) return;
-    state.libraryDebugMode.enabled = !state.libraryDebugMode.enabled;
-    renderRoom();
+    state.libraryDebugMode.enabled = false;
+    openPersonalCenter({ tab: "developer" });
+    return;
   }
   if (action === "publish-cafe-scene-layout") {
     publishCafeSceneLayout();

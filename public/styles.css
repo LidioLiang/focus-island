@@ -6010,6 +6010,59 @@ body.motion-effects-off .view * { animation: none !important; transition-duratio
   backdrop-filter: blur(18px);
 }
 
+.developer-console { display: grid; gap: 20px; color: #284d42; }
+.developer-console-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.developer-eyebrow { color: #8b7548; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+.developer-console-heading h2 { margin: 8px 0; font-size: clamp(22px, 2.2vw, 30px); }
+.developer-console p { color: #6c7e74; font-size: 13px; line-height: 1.65; }
+.developer-console-heading p { margin: 0; }
+.developer-console button { border: 1px solid #bfcec1; border-radius: 12px; padding: 10px 14px; color: #315e4d; background: #f8faf4; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.developer-console button:hover:not(:disabled) { background: #eaf1e5; border-color: #7c9a83; }
+.developer-console button:disabled { opacity: .45; cursor: not-allowed; }
+.developer-console button.is-danger { color: #a0523e; border-color: #d9b6a7; }
+.developer-release-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.developer-release-grid > div { display: grid; gap: 7px; padding: 16px; border-radius: 14px; background: #eaf0e5; min-width: 0; }
+.developer-release-grid span { color: #718574; font-size: 11px; }
+.developer-release-grid strong { font-size: 16px; overflow-wrap: anywhere; }
+.developer-rooms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.developer-room-card { padding: 15px; border: 1px solid #d8e0d3; border-radius: 15px; background: #fffdf7; min-width: 0; }
+.developer-room-card header { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 14px; font-size: 13px; }
+.developer-room-card header span { color: #74846f; font-size: 12px; white-space: nowrap; }
+.developer-seat-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.developer-seat { display: grid; justify-items: center; gap: 5px; padding: 10px 3px; border-radius: 10px; background: #edf3e8; color: #56714e; }
+.developer-seat b { font-size: 14px; }
+.developer-seat small { font-size: 9px; text-align: center; overflow-wrap: anywhere; }
+.developer-seat.is-occupied { background: #dfd8c8; color: #6e614c; }
+.developer-seat.is-reserved, .developer-seat.is-moving { background: #f5e7c6; color: #9b7633; }
+.developer-seat.is-unknown { background: #eeede7; color: #95988f; }
+.developer-seat.is-mine { outline: 2px solid #577d5a; outline-offset: -2px; }
+.developer-details-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.developer-console .profile-settings-card { margin: 0; min-width: 0; }
+.developer-status-grid { display: grid; gap: 12px; margin: 20px 0; }
+.developer-status-grid > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.developer-status-grid dt { color: #7b877a; }
+.developer-status-grid dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-weight: 600; }
+.developer-session-card { display: grid; gap: 8px; padding: 14px; margin: 14px 0; background: #eff2e7; border-radius: 12px; font-size: 12px; }
+.developer-session-card time, .developer-session-card span, .developer-session-card code { color: #788472; }
+.developer-session-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.developer-empty { padding: 16px; border: 1px dashed #c6d3bd; border-radius: 12px; }
+.developer-message { margin: 0; padding: 12px 16px; border-radius: 12px; }
+.developer-message.is-error { background: #f9e9df; color: #9a573e; }
+.developer-checked { font-variant-numeric: tabular-nums; }
+.developer-raw { border: 1px solid #d9e0d3; border-radius: 14px; padding: 16px; font-size: 12px; }
+.developer-raw summary { cursor: pointer; font-weight: 700; }
+.developer-raw pre { margin: 16px 0 0; max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 1100px) {
+  .developer-rooms { grid-template-columns: 1fr; }
+  .developer-seat-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .developer-details-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .developer-console-heading { flex-direction: column; }
+  .developer-release-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .developer-console .profile-data-action { flex-direction: column; align-items: flex-start; gap: 12px; }
+}
+
 .access-dialog {
   position: relative;
   width: min(460px, 100%);
