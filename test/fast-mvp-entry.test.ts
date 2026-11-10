@@ -13,7 +13,7 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=50/);
+  assert.match(pageSource, /app\.js\?v=51/);
   assert.match(layoutSource, /styles\.css\?v=39/);
   assert.match(source, /language: "en"/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);
@@ -23,7 +23,7 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(i18nRuntime, /translateDocument\(\);\s*observeDocument\(\);/);
   assert.match(layoutSource, /i18n\.js\?v=12" strategy="afterInteractive"/);
   assert.match(layoutSource, /landing-final\.css\?v=2/);
-  assert.match(layoutSource, /locales\/en\.js\?v=12/);
+  assert.match(layoutSource, /locales\/en\.js\?v=13/);
   assert.match(i18nRuntime, /englishPhrases/);
   assert.match(i18nRuntime, /\$1 focus sessions/);
   assert.match(i18nRuntime, /\$1 records/);
