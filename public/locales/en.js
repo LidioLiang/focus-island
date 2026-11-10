@@ -1,5 +1,7 @@
 window.__FOCUS_ISLAND_LOCALES__ = window.__FOCUS_ISLAND_LOCALES__ || {};
 window.__FOCUS_ISLAND_LOCALES__.en = {
+  "薄雾清晨": "Misty morning",
+  "初雪傍晚": "First snow at dusk",
   "\u4e13\u6ce8\u5c9b \u00b7 Focus Isle": "Focus Isle",
   "\u50cf\u8fdb\u5165\u6e38\u620f\u4e00\u6837\uff0c\u627e\u4e00\u4e2a\u5b89\u9759\u7684\u4f4d\u7f6e\u5f00\u59cb\u4e13\u6ce8\u3002": "Find a quiet place and ease into focus, like entering a game.",
   "\u8bf7\u5c06\u8bbe\u5907\u6a2a\u8fc7\u6765\uff0c\u5c9b\u4e0a\u7684\u623f\u95f4\u4f1a\u66f4\u8212\u5c55\u3002": "Rotate your device for a more spacious island view.",

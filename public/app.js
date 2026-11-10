@@ -4041,6 +4041,8 @@ function selectedFocusImage(scene = scenes[state.sceneId]) {
     bar: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.webp`,
     clearing: `${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.webp`,
     lounge: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.webp`,
+    mist: `${ASSET_BASE}20261110-cafe-misty-morning-focus-view.webp`,
+    snow: `${ASSET_BASE}20261110-cafe-first-snow-focus-view.webp`,
   };
   return focusImages[state.focusImageChoice] || focusImages.window;
 }
@@ -4080,6 +4082,8 @@ function renderSessionHud(context = "focus") {
               ${focusViewButton("bar", "吧台一角", `${ASSET_BASE}20261013-cafe-bar-real-focus-view.webp`)}
               ${focusViewButton("clearing", "雨后初晴", `${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.webp`)}
               ${focusViewButton("lounge", "安静角落", `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.webp`)}
+              ${focusViewButton("mist", "薄雾清晨", `${ASSET_BASE}20261110-cafe-misty-morning-focus-view.webp`)}
+              ${focusViewButton("snow", "初雪傍晚", `${ASSET_BASE}20261110-cafe-first-snow-focus-view.webp`)}
             </div>
           </div>
         </section>` : ""}
