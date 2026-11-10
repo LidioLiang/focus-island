@@ -3,6 +3,7 @@ const MINIMAL_LAYOUT_KEY = "focusIslandMinimalSeatLayoutV1";
 const minimalUi = { panel: null, layout: null, editing: false, target: "avatar", seat: 1, confirm: null, busy: false, timerMenu: false, identity: null };
 let minimalDrag = null;
 let minimalIgnoreClick = 0;
+let minimalPresenceExpiryTimer = null;
 
 function minimalIcon(name) {
   const paths = {
@@ -101,6 +102,7 @@ function refreshMinimalSeats() {
 }
 
 function renderMinimalRoom() {
+  if (!minimalPresenceExpiryTimer) minimalPresenceExpiryTimer = window.setInterval(() => { if(state.view === "room") refreshMinimalSeats(); }, 2000);
   minimalShell("room", `<div class="room-stage"><img class="scene-image" src="${scenes.cafe.image}" alt="Sunlit six-seat café"><div class="seat-layer"><div class="static-occupants">${minimalAvatarMarkup()}</div><div class="seat-markers">${minimalButtonMarkup()}</div></div></div>${state.localRoom ? '<span class="minimal-room-mode">Solo room</span>' : '<span class="minimal-room-mode minimal-presence-status" role="status" hidden></span>'}${state.currentSeatId ? '<button type="button" class="minimal-return" data-minimal="focus-view">Return to focus</button>' : '<div class="room-hint">Choose a seat. Make yourself comfortable.</div>'}${minimalUi.editing && state.isDeveloper ? minimalLayoutTools() : ""}`);
   minimalUpdateLayoutFields();
   requestAnimationFrame(() => startCafePresence());

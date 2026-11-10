@@ -13,7 +13,7 @@ async function mockRooms(page:Page,developer=false){
  await page.route('**/api/sessions/*/heartbeat',r=>r.fulfill({json:{ok:true}}));
  await page.route('**/api/sessions/*/release',r=>{seat=0;return r.fulfill({json:{ok:true}});});
  await page.route('**/api/focus/sessions/start',r=>{starts.push(r.request().postDataJSON().clientSessionId);return r.fulfill({json:{session:{status:'running'}}});});
- await page.route('**/api/focus/sessions/*',r=>{patches.push(r.request().postDataJSON());return r.fulfill({json:{}});});
+ await page.route('**/api/focus/sessions/*',r=>{if(r.request().method()!=='PATCH')return r.fallback();patches.push(r.request().postDataJSON());return r.fulfill({json:{}});});
  return {starts,patches};
 }
 
@@ -57,4 +57,25 @@ test('island settings work before a room and reduce motion disables marker anima
  await page.locator('[data-minimal="close-panel"]').click();await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();
  await expect(page.locator('[data-session-clock]')).toHaveText('50:00');
  await page.locator('[data-panel="sound"]').click();await page.getByLabel('White noise',{exact:true}).check();await expect(page.getByLabel('White noise',{exact:true})).toBeChecked();
+});
+
+
+test('all three scenes fit narrow and desktop screens with four focus tools',async({page},testInfo)=>{
+ await mockRooms(page);await page.goto('/');
+ await page.screenshot({path:testInfo.outputPath('island-desktop.png')});
+ for(const width of [390,1280,1920]){
+  await page.setViewportSize({width,height:820});
+  await expect(page.locator('[data-place]')).toHaveCount(6);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
+ await page.setViewportSize({width:1280,height:820});await page.locator('[data-place="cafe"]').click();
+ await page.screenshot({path:testInfo.outputPath('room-desktop.png')});
+ await page.locator('button.seat.available').first().click();
+ await expect(page.locator('.scene-tools .tool-button')).toHaveCount(4);
+ await page.screenshot({path:testInfo.outputPath('focus-desktop.png')});
+ await page.locator('[data-panel="sound"]').click();
+ await page.screenshot({path:testInfo.outputPath('sound-desktop.png')});
+ await page.setViewportSize({width:390,height:820});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath('focus-mobile.png')});
 });

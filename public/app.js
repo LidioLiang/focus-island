@@ -758,8 +758,8 @@ function renderAccessOverlay() {
     shell.innerHTML = `<section class="access-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
       <p class="access-eyebrow">${signUp ? "CREATE ACCOUNT" : "WELCOME BACK"}</p>
-      <h2 id="auth-title">${state.pendingLifetimeInvite ? (signUp ? "注册领取终身体验" : "登录领取终身体验") : signUp ? "注册后免费专注一次" : "登录专注岛"}</h2>
-      <p>${state.pendingLifetimeInvite ? "你已通过限量邀请链接进入。注册成功后自动领取，名额以最终领取成功为准。" : signUp ? "填写邮箱并设置密码，注册成功后会自动继续刚才的专注操作。" : "登录后恢复云端记录与已购买权益。"}</p>
+      <h2 id="auth-title">${state.pendingLifetimeInvite ? (signUp ? "注册领取终身体验" : "登录领取终身体验") : signUp ? "Create an optional account" : "Welcome back"}</h2>
+      <p>${state.pendingLifetimeInvite ? "你已通过限量邀请链接进入。注册成功后自动领取，名额以最终领取成功为准。" : signUp ? "Keep your account details together. Café focus stays free with or without an account." : "Sign in to manage your account and existing purchases."}</p>
       <form data-auth-form="${signUp ? "sign-up" : "sign-in"}">
         <label>邮箱<input name="email" type="email" autocomplete="email" value="${escapeHtml(state.authEmail)}" required /></label>
         <label>密码<input name="password" type="password" autocomplete="${signUp ? "new-password" : "current-password"}" ${signUp ? "minlength=\"10\"" : ""} required /></label>
