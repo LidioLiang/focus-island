@@ -129,7 +129,7 @@ function minimalTimerMarkup() {
 
 function renderMinimalFocus() {
   window.clearInterval(roomSyncTimer);roomSyncTimer=null;
-  minimalShell("focus", `<img class="minimal-focus-image" data-focus-scene-image src="${selectedFocusImage()}" alt="A quiet café desk beside a rain-lit window">${minimalTimerMarkup()}`);
+  minimalShell("focus", `<img class="minimal-focus-image" data-focus-scene-image src="${selectedFocusImage()}" alt="A quiet café focus setting">${minimalTimerMarkup()}`);
   persistActiveSession();
   if(state.isRunning || state.sessionPhase === "rest")startTicker();
   if(state.currentSeatId){window.clearInterval(heartbeatTimer);heartbeatTimer=window.setInterval(sendHeartbeat,15000);sendHeartbeat();}
@@ -156,7 +156,7 @@ function minimalRenderPanel() {
     const avatar=AVATAR_OPTIONS.find(a=>a.id===Number(identity.avatarSkin))||AVATAR_OPTIONS[0];
     body=minimalPanelHeading("Your avatar")+`<div class="profile-sample"><img src="${avatar.image}" alt="Your illustrated avatar"><span>You</span></div><label class="minimal-select-label">Display name<input class="name-input" data-minimal-name maxlength="24" value="${escapeHtml(localizedIdentityDisplayName(identity.displayName))}"></label><button class="minimal-panel-link" type="button" data-minimal="save-name">Save name</button>`;
   }else{
-    body=minimalPanelHeading("Scene")+[["window","Rain at the window"],["bar","Sunlit desk"],["lounge","Quiet corner"]].map(([key,label])=>`<button type="button" class="scene-choice" data-minimal-scene="${key}" aria-pressed="${state.focusImageChoice===key}"><img src="${selectedMinimalSceneImage(key)}" alt=""><span>${label}</span>${state.focusImageChoice===key?minimalIcon("check"):""}</button>`).join("");
+    body=minimalPanelHeading("Scene")+[["window","Rain at the window"],["bar","Sunlit desk"],["lounge","Quiet corner"],["mist",window.FocusI18n?.t("薄雾清晨") || "薄雾清晨"],["snow",window.FocusI18n?.t("初雪傍晚") || "初雪傍晚"]].map(([key,label])=>`<button type="button" class="scene-choice" data-minimal-scene="${key}" aria-pressed="${state.focusImageChoice===key}"><img src="${selectedMinimalSceneImage(key)}" alt=""><span>${label}</span>${state.focusImageChoice===key?minimalIcon("check"):""}</button>`).join("");
   }
   box.innerHTML=body;
   const active=document.querySelector(`[data-minimal="panel"][data-panel="${minimalUi.panel}"]`);
