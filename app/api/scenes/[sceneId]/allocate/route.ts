@@ -26,5 +26,5 @@ export async function POST(request: Request, context: { params: Promise<{ sceneI
     p_avatar_skin: identity.avatarSkin,
   });
   if (error) return rpcError(error);
-  return json(data, { headers: { "Cache-Control": "no-store" } });
+  return json({ ...data, access }, { headers: { "Cache-Control": "no-store" } });
 }

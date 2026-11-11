@@ -79,6 +79,37 @@ function minimalShell(view, content) {
   if (view === "focus") scheduleHudFade();
 }
 
+// Keep request feedback outside replaceable controls, and announce it immediately.
+function setMinimalPending(message) {
+  let status = document.querySelector('.minimal-pending');
+  if (!status && message) {
+    status = document.createElement('div');
+    status.className = 'minimal-pending';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    document.querySelector('.minimal-root .world')?.append(status);
+  }
+  if (status) { status.textContent = message || ''; status.hidden = !message; }
+  document.querySelectorAll('[data-place], [data-minimal="return-place"]').forEach(button => {
+    button.disabled = Boolean(message && state.isAllocatingRoom);
+    button.setAttribute('aria-busy', String(button.disabled));
+  });
+}
+
+function acceptMinimalSeatConfirmation(confirmation, seatId) {
+  // Discard snapshots requested before this transaction committed.
+  roomSyncRevision += 1;
+  roomSyncInFlight = false;
+  state.presenceUnavailable = false;
+  state.roomPresence = {
+    serverNow: Date.now(),
+    leases: [...state.roomPresence.leases.filter(lease => lease.sessionId !== identity.sessionId), {
+      ...identityBody(), ...confirmation, roomId: currentRoomApiId(), seatId,
+      sessionId: identity.sessionId, memberType: 'human', state: 'occupied',
+    }],
+  };
+}
+
 function renderMinimalIsland() {
   const pins = [["cafe","coffee","Four Seasons Café",28,49,true],["library","book","Academy Library",48,26,Boolean(PUBLIC_CONFIG.sceneCatalog?.library?.enabled)],["forest","forest","Forest",69,44,Boolean(PUBLIC_CONFIG.sceneCatalog?.forest?.enabled)],["lakeside","lake","Lakeside",53,61,false],["seaside","sea","Seaside",79,77,false],["snow","mountain","Snowy Mountains",84,20,false]];
   minimalShell("island", `${minimalBackdrop(islandImage)}<div class="scene-art" style="background-image:url('${islandImage}')"></div><div class="scene-veil"></div><div class="scene-markers">${pins.map(([id,icon,name,x,y,open]) => `<button type="button" class="map-pin ${open ? "" : "future"}" data-minimal="place" data-place="${id}" data-place-name="${name}" data-open="${open}" style="left:${x}%;top:${y}%" aria-label="${name}, ${open ? "Open now" : "Coming soon"}">${minimalMapPin(icon)}</button>`).join("")}</div>${Boolean(PUBLIC_CONFIG.sceneCatalog?.[localStorage.getItem("focusIslandLastPlaceV1")]?.enabled) ? '<button class="minimal-return" type="button" data-minimal="return-place">Return to your quiet corner</button>' : ""}<footer class="minimal-legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>`);
@@ -124,6 +155,10 @@ function refreshMinimalSeats() {
 function renderMinimalRoom() {
   if (!minimalPresenceExpiryTimer) minimalPresenceExpiryTimer = window.setInterval(() => { if(state.view === "room") refreshMinimalSeats(); }, 2000);
   minimalShell("room", `${minimalBackdrop(scenes[state.sceneId].image)}<div class="room-stage" style="--scene-width:${focusSceneDefinition()?.designSize[0] || 1672};--scene-height:${focusSceneDefinition()?.designSize[1] || 941}"><img class="scene-image" src="${scenes[state.sceneId].image}" alt="${escapeHtml(sceneLabel())}, six-seat room"><div class="seat-layer"><div class="static-occupants">${minimalAvatarMarkup()}</div><div class="seat-markers">${minimalButtonMarkup()}</div></div></div>${state.localRoom ? '<span class="minimal-room-mode">Solo room</span>' : '<span class="minimal-room-mode minimal-presence-status" role="status" hidden></span>'}${state.currentSeatId ? '<button type="button" class="minimal-return" data-minimal="focus-view">Return to focus</button>' : '<div class="room-hint">Choose a seat. Make yourself comfortable.</div>'}${minimalUi.editing && state.isDeveloper ? minimalLayoutTools() : ""}`);
+  // Seed render keys so the first presence response does not detach a pressed button.
+  for (const [selector, markup] of [[".static-occupants", minimalAvatarMarkup()], [".seat-markers", minimalButtonMarkup()]]) {
+    document.querySelector(selector).dataset.renderKey = markup;
+  }
   minimalUpdateLayoutFields();
   minimalPositionLayoutPanel();
   requestAnimationFrame(() => startCafePresence());
@@ -232,6 +267,7 @@ document.addEventListener('click',async event=>{
   if(!window.__FOCUS_ISLAND_CONFIG__?.minimalMvp)return;
   const node=event.target.closest('[data-minimal],[data-minimal-mode],[data-minimal-scene],[data-layout-kind]');if(!node)return;
   event.stopImmediatePropagation();if(Date.now()<minimalIgnoreClick&&node.dataset.minimal==='select-marker')return;
+  if(state.isStartingFocus && !['panel','close-panel','timer-menu'].includes(node.dataset.minimal)){showToast('Your focus session is starting. One moment…');return;}
   if(node.dataset.layoutKind){if(!state.isDeveloper)return;minimalUi.target=node.dataset.layoutKind;minimalUpdateLayoutFields();return;}
   if(node.dataset.minimalMode!==undefined){if(state.sessionStartedAt){showToast('End this session before changing its length.');return;}preferences.defaultTimerMode=Number(node.dataset.minimalMode);savePreferences();if(state.view==='island'){state.timerMode=preferences.defaultTimerMode;}else await setTimerMode(preferences.defaultTimerMode);minimalRenderPanel();return;}
   if(node.dataset.minimalScene){state.focusImageChoice=node.dataset.minimalScene;rememberSceneFocusView();savePreferences();const image=document.querySelector('[data-focus-scene-image]');if(image)image.src=selectedFocusImage();persistActiveSession(true);minimalRenderPanel();return;}
@@ -240,7 +276,7 @@ document.addEventListener('click',async event=>{
     if(action==='place'&&node.dataset.open!=='true'){minimalShowPlace(node);return;}
     await enterMinimalScene(action==='return-place' ? localStorage.getItem('focusIslandLastPlaceV1') || 'cafe' : node.dataset.place);return;
   }
-  if(action==='panel'){if(node.dataset.panel==='avatar'){minimalUi.panel=null;state.sessionPanelOpen=false;openPersonalCenter({tab:'account'});return;}minimalSetPanel(node.dataset.panel);if(node.dataset.panel==='settings'&&!minimalUi.identity){try{const session=await api('/api/auth/session');minimalUi.identity=session;state.isDeveloper=session.developer===true;minimalRenderPanel();}catch(_){/* Optional identity lookup never blocks local preferences. */}}return;}
+  if(action==='panel'){if(node.dataset.panel==='avatar'){minimalUi.panel=null;state.sessionPanelOpen=false;openPersonalCenter({tab:'account'});return;}minimalSetPanel(node.dataset.panel);if(node.dataset.panel==='settings'&&!minimalUi.identity){try{const session=await api('/api/auth/session');minimalUi.identity=session;const changed=state.isDeveloper!==(session.developer===true);state.isDeveloper=session.developer===true;if(changed&&minimalUi.panel==='settings')minimalRenderPanel();}catch(_){/* Optional identity lookup never blocks local preferences. */}}return;}
   if(action==='close-panel'){minimalSetPanel(null);return;}
   if(action==='back-room'){state.view='room';render();return;}
   if(action==='back-island'){if(state.isTransitioning){showToast('Your seat is being prepared. One moment…');return;}if(isActiveFocusSession()){minimalUi.confirm='leave';minimalRenderConfirm();}else{await releaseSeat();resetTimerState();state.view='island';state.sceneId=null;render();}return;}
