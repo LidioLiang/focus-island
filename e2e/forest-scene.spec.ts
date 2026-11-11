@@ -63,13 +63,14 @@ test('forest has five functional views and non-overlapping mobile seats; switchi
  const {starts}=await mocks(page);await page.goto('/');await page.locator('[data-place="forest"]').click();
  for(const viewport of [{width:1280,height:720},{width:390,height:844},{width:320,height:568},{width:844,height:300},{width:844,height:390}]){
   await page.setViewportSize(viewport);await expect(page.locator('button.seat.available')).toHaveCount(6);const boxes=await page.locator('button.seat.available').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}));
-  expect(boxes).toHaveLength(6);for(const b of boxes){expect(b.w).toBeGreaterThanOrEqual(44);expect(b.x).toBeGreaterThanOrEqual(0);expect(b.x+b.w).toBeLessThanOrEqual(viewport.width);}
+  expect(boxes).toHaveLength(6);for(const b of boxes){expect(b.w).toBeGreaterThanOrEqual(44);expect(b.x).toBeGreaterThanOrEqual(0);expect(b.x+b.w).toBeLessThanOrEqual(viewport.width);expect(b.y).toBeGreaterThanOrEqual(0);expect(b.y+b.h).toBeLessThanOrEqual(viewport.height);}
   for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];expect(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y).toBe(true);}
   await page.screenshot({path:info.outputPath(`forest-room-${viewport.width}.png`)});
  }
  await page.setViewportSize({width:1440,height:900});await page.getByRole('button',{name:'Choose seat 1',exact:true}).click();await page.getByRole('button',{name:'Start',exact:true}).click();
+ await expect.poll(()=>starts.length).toBe(1);const leaseBefore=await page.evaluate(()=>JSON.parse(localStorage.getItem('focusIslandGuestIdentityV2')||'null').sessionId);const clockSeconds=async()=>{const t=(await page.locator('[data-session-clock]').innerText()).split(':').map(Number);return t[0]*60+t[1];};const before=await clockSeconds();
  await page.locator('[data-panel="scene"]').click();for(const key of ['root','deep','fern','sun','mist']){await page.locator(`[data-minimal-scene="${key}"]`).click();await expect(page.locator('[data-focus-scene-image]')).toHaveAttribute('src',new RegExp(`forest-${key}-focus`));await expect.poll(()=>page.locator('[data-focus-scene-image]').evaluate((n:HTMLImageElement)=>n.complete&&n.naturalWidth>0)).toBe(true);}
- await page.locator('[data-minimal="close-panel"]').click();await page.locator('[data-minimal="back-room"]').click();await expect(page.locator('.avatar-marker.is-mine')).toHaveCount(1);await page.locator('[data-minimal="focus-view"]').click();expect(starts).toHaveLength(1);await expect(page.locator('[data-focus-scene-image]')).toHaveAttribute('src',/forest-mist-focus/);await page.screenshot({path:info.outputPath('forest-misty-focus.png')});
+ await page.locator('[data-minimal="close-panel"]').click();await page.locator('[data-minimal="back-room"]').click();await expect(page.locator('.avatar-marker.is-mine')).toHaveCount(1);await page.locator('[data-minimal="focus-view"]').click();expect(starts).toHaveLength(1);expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('focusIslandGuestIdentityV2')||'null').sessionId)).toBe(leaseBefore);await expect.poll(clockSeconds).toBeLessThan(before);expect(before-await clockSeconds()).toBeLessThan(30);await expect(page.locator('[data-focus-scene-image]')).toHaveAttribute('src',/forest-mist-focus/);await page.screenshot({path:info.outputPath('forest-misty-focus.png')});
 });
 
 test('forest desktop layout save never overlaps mobile seats; compact edits survive closing and reload',async({page})=>{
@@ -87,6 +88,7 @@ test('six forest member avatars remain separate on short and narrow canvases',as
  await page.goto('/');await page.locator('[data-place="forest"]').click();await expect(page.locator('.avatar-marker')).toHaveCount(6);
  for(const viewport of [{width:390,height:844},{width:844,height:300},{width:620,height:900}]){
   await page.setViewportSize(viewport);const boxes=await page.locator('.avatar-marker').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}));
+  for(const b of boxes){expect(b.x).toBeGreaterThanOrEqual(0);expect(b.y).toBeGreaterThanOrEqual(0);expect(b.x+b.w).toBeLessThanOrEqual(viewport.width);expect(b.y+b.h).toBeLessThanOrEqual(viewport.height);}
   for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];expect(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y).toBe(true);}
   await page.screenshot({path:info.outputPath(`forest-members-${viewport.width}-${viewport.height}.png`)});
  }
