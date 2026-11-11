@@ -2,16 +2,25 @@
 function focusSceneDefinition(sceneId = state.sceneId || 'cafe') {
   return PUBLIC_CONFIG.sceneCatalog?.[sceneId] || null;
 }
-function sharedFocusScene() { return state.sceneId === 'cafe' || Boolean(PUBLIC_CONFIG.minimalMvp && state.sceneId === 'library'); }
+function sharedFocusScene() { return state.sceneId === 'cafe' || Boolean(PUBLIC_CONFIG.minimalMvp && focusSceneDefinition()?.enabled); }
 function sceneSeatSlots() { return focusSceneDefinition()?.seats || staticSeatSlots; }
 function sceneLabel(sceneId = state.sceneId) { return PUBLIC_CONFIG.sceneCatalog?.[sceneId]?.label || (sceneId === 'library' ? 'Academy Library' : 'Four Seasons Café'); }
-function sceneLayoutStorageKey() { return state.sceneId === 'library' ? MINIMAL_LAYOUT_KEY + ':library' : MINIMAL_LAYOUT_KEY; }
+function sceneUsesCompactLayout() {
+  if (state.sceneId !== 'forest' || typeof window === 'undefined') return false;
+  const size = focusSceneDefinition()?.designSize || [1672,941];
+  const width = Math.min(window.innerWidth, (window.innerHeight || Infinity) * size[0] / size[1]);
+  return width < 700;
+}
+function sceneLayoutStorageKey() {
+  const key = state.sceneId && state.sceneId !== 'cafe' ? MINIMAL_LAYOUT_KEY + ':' + state.sceneId : MINIMAL_LAYOUT_KEY;
+  return sceneUsesCompactLayout() ? key + ':compact' : key;
+}
 function sceneDefaultFocusView(seatId) {
   const definition = focusSceneDefinition();
   const saved = preferences.sceneViews?.[state.sceneId] || (state.sceneId === 'cafe' && preferences.rememberLastFocusView ? preferences.lastFocusView : null);
   if (preferences.rememberLastFocusView && definition?.focusViews.some(v=>v.id===saved)) return saved;
   const zone = definition?.seats.find(s=>s.seat_id===seatId)?.desk_zone_id;
-  return definition?.focusViews.some(v=>v.id===zone) ? zone : 'window';
+  return definition?.focusViews.some(v=>v.id===zone) ? zone : definition?.focusViews[0]?.id || 'window';
 }
 function rememberSceneFocusView() {
   preferences.sceneViews = {...preferences.sceneViews,[state.sceneId]:state.focusImageChoice};
@@ -28,7 +37,7 @@ function applySceneAudioPreferences(sceneId) {
   const saved=preferences.rememberLastSound ? preferences.sceneAudio?.[sceneId] : null;
   const defaults=defaultPreferences();
   state.sounds={...defaults.sounds,...saved?.sounds};
-  state.soundVolumes={ambient:clampVolume(saved?.soundVolumes?.ambient,sceneId==='library'?25:defaults.soundVolumes.ambient),white:clampVolume(saved?.soundVolumes?.white,30),music:clampVolume(saved?.soundVolumes?.music,24)};
+  state.soundVolumes={ambient:clampVolume(saved?.soundVolumes?.ambient,focusSceneDefinition(sceneId)?.ambientVolume ?? (sceneId==='library'?25:defaults.soundVolumes.ambient)),white:clampVolume(saved?.soundVolumes?.white,30),music:clampVolume(saved?.soundVolumes?.music,24)};
   state.musicTrack=FOCUS_MUSIC_TRACKS[saved?.musicTrack]?saved.musicTrack:defaults.musicTrack;
   if(muted)state.sounds={ambient:false,white:false,music:false};
 }
@@ -56,7 +65,7 @@ async function enterMinimalScene(sceneId) {
   await enterCafeRoom();
   if(state.view==='room' && state.sceneId===sceneId)localStorage.setItem('focusIslandLastPlaceV1',sceneId);
 }
-let sceneAmbience = {context:null,source:null,gain:null,url:null,loading:null,buffers:new Map()};
+let sceneAmbience = {context:null,source:null,gain:null,url:null,loading:new Map(),buffers:new Map()};
 function silenceSceneAmbience() {
   if(!sceneAmbience.gain || !sceneAmbience.context || sceneAmbience.context.state==='closed')return;
   const t=sceneAmbience.context.currentTime;sceneAmbience.gain.gain.cancelScheduledValues(t);sceneAmbience.gain.gain.setValueAtTime(0,t);
@@ -71,8 +80,11 @@ async function syncSceneAmbience() {
     sceneAmbience.source=null;sceneAmbience.context=context;sceneAmbience.url=url;sceneAmbience.gain=context.createGain();sceneAmbience.gain.gain.value=0;sceneAmbience.gain.connect(context.destination);
   }
   if(!sceneAmbience.buffers.has(url)){
-    if(!sceneAmbience.loading)sceneAmbience.loading=(async()=>{const response=await fetch(url,{cache:'force-cache'});if(!response.ok)throw new Error('ambience_unavailable');const buffer=await context.decodeAudioData(await response.arrayBuffer());sceneAmbience.buffers.set(url,buffer);})().catch(()=>{}).finally(()=>{sceneAmbience.loading=null;});
-    await sceneAmbience.loading;
+    if(!sceneAmbience.loading.has(url)) {
+      const pending=(async()=>{const response=await fetch(url,{cache:'force-cache'});if(!response.ok)throw new Error('ambience_unavailable');const buffer=await context.decodeAudioData(await response.arrayBuffer());sceneAmbience.buffers.set(url,buffer);})().catch(()=>{}).finally(()=>{sceneAmbience.loading.delete(url);});
+      sceneAmbience.loading.set(url,pending);
+    }
+    await sceneAmbience.loading.get(url);
   }
   // A late decode must not start audio after pause, mute or a scene change.
   if(context!==audioContext || context.state==='closed' || !state.isRunning || !state.sounds.ambient || focusSceneDefinition()?.ambientAsset!==url || !sceneAmbience.buffers.has(url))return;

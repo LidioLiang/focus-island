@@ -138,26 +138,12 @@ const scenes = {
     ],
   },
   forest: {
-    id: "forest",
-    name: "苔溪森林",
-    shortName: "森林溪流",
-    islandLabel: "森林区",
-    icon: "forest",
-    online: 39,
-    image: `${ASSET_BASE}20261011-forest-creek-focus-room.png`,
-    description: "溪流绕过苔石，风穿过树叶。把屏幕变成林间的一张桌子，让呼吸先慢下来。",
-    sounds: ["溪流", "林间风", "远处鸟鸣"],
-    filter: 820,
-    rooms: [
-      { id: "forest-creek", name: "溪桥木台", mood: "水声清晰，适合平复情绪后工作", occupied: 14 },
-      { id: "forest-canopy", name: "树冠小屋", mood: "遮蔽感更强，适合独处式专注", occupied: 13 },
-      { id: "forest-falls", name: "远瀑石阶", mood: "更有自然能量，适合创作", occupied: 12 },
-    ],
-    seats: [
-      [17, 28, true], [30, 37, false], [48, 27, true], [80, 27, true],
-      [78, 44, false], [24, 66, true], [57, 62, false], [86, 71, true],
-      [67, 78, false], [15, 78, true],
-    ],
+    id: "forest", name: "微光秘林", shortName: "森林", islandLabel: "森林区", icon: "forest",
+    online: 0, image: `${ASSET_BASE}20261111-forest-room-six-seats.webp`,
+    description: "巨树环抱，林间微光。找一个安静的位置开始专注。",
+    sounds: ["林间风", "树叶轻响"], filter: 820,
+    rooms: ["forest-01","forest-02","forest-03"].map(id=>({id,name:"微光秘林",occupied:0})),
+    seats: [[24.7,75,false],[32.2,75,false],[45.2,75,false],[53.9,75,false],[67.6,75,false],[75.8,75,false]],
   },
 };
 
@@ -2602,8 +2588,8 @@ function developerToolsCopy() {
     sessionHelp: "可在海岛查询和结束自己的遗留测试会话；继续计时前需要先选择座位。", free: "自由计时", minutes: "分钟", recorded: "已记录", seconds: "秒",
     enter: "进入咖啡馆", recover: "继续或重新开始", end: "结束此测试会话", raw: "查看原始诊断数据", sessionUnavailable: "暂时无法读取本账号会话。",
     staticTools: "静态房间工具", calibration: "校准六个座位编号", calibrationHelp: "只调整热点编号的位置，不改变人物与家具。", calibrate: "开始校准",
-    enterFirst: "先进入咖啡馆并打开房间视角。", reset: "恢复静态视图", resetHelp: "退出旧调试状态并恢复默认编号，保留当前计时与记录。",
-    scope: "当前范围", scopeHelp: "固定六座咖啡馆、真人占座和沉浸专注。旧家具编辑器、3D 调试和未开放场景不在此控制台中。",
+    enterFirst: "先进入咖啡馆、图书馆或森林的房间视角。", reset: "恢复静态视图", resetHelp: "退出旧调试状态并恢复默认编号，保留当前计时与记录。",
+    scope: "当前范围", scopeHelp: "咖啡馆、图书馆与森林，每间六席、真人占座和沉浸专注。旧家具编辑器、3D 调试和未开放场景不在此控制台中。",
     mismatch: "页面和服务器版本不一致，请刷新页面后重试。", confirmEnd: "结束这轮测试专注？", confirmBody: "已记录的时长会保留。如果同一会话仍在另一设备运行，也会被结束。", cancel: "取消", ended: "测试会话已结束", noPending: "没有可结束的测试会话。",
   } : {
     nav: "Developer tools", title: "Static MVP developer console", subtitle: "Inspect the current release, shared rooms and your own test session.",
@@ -2616,8 +2602,8 @@ function developerToolsCopy() {
     sessionHelp: "Inspect and end your own leftover test session from the island. Choose a seat before resuming a timer.", free: "Open-ended", minutes: "min", recorded: "Recorded", seconds: "sec",
     enter: "Enter café", recover: "Resume or start again", end: "End this test session", raw: "Show diagnostic JSON", sessionUnavailable: "Your cloud session could not be loaded.",
     staticTools: "Static room tools", calibration: "Calibrate six seat labels", calibrationHelp: "Adjust label hotspots without moving characters or furniture.", calibrate: "Start calibration",
-    enterFirst: "Enter the café or library and open the room view first.", reset: "Restore static view", resetHelp: "Leave legacy debug states and reset seat labels, keeping your timer and records.",
-    scope: "Current scope", scopeHelp: "Café and Academy Library, six seats per room, shared occupancy and immersive focus. Legacy furniture editors, 3D debugging and unopened scenes are outside this console.",
+    enterFirst: "Enter the café, library or forest and open the room view first.", reset: "Restore static view", resetHelp: "Leave legacy debug states and reset seat labels, keeping your timer and records.",
+    scope: "Current scope", scopeHelp: "Café, Academy Library and Forest, six seats per room, shared occupancy and immersive focus. Legacy furniture editors, 3D debugging and unopened scenes are outside this console.",
     mismatch: "The page and server versions differ. Refresh the page before continuing.", confirmEnd: "End this test session?", confirmBody: "Recorded time will be kept. This also ends the same session if it is still running on another device.", cancel: "Cancel", ended: "Test session ended", noPending: "There is no test session to end.",
   };
 }
@@ -2653,7 +2639,7 @@ function renderDeveloperTools() {
     ${mismatch ? `<p class="developer-message is-error" role="alert">${c.mismatch}</p>` : ""}
     ${state.developerDiagnosticsError ? `<p class="developer-message is-error" role="alert">${c.failed}</p>` : ""}
     <section class="profile-settings-card"><div class="profile-settings-heading"><span>ROOMS</span><h2>${c.rooms}</h2></div><p>${c.roomsHelp}</p><p class="developer-checked">${diagnostics?.checkedAt ? `${c.checked}: ${developerDate(diagnostics.checkedAt)}` : c.never}</p><div class="developer-rooms">${roomCards}</div></section>
-    <div class="developer-details-grid"><section class="profile-settings-card"><div class="profile-settings-heading"><span>LOCAL</span><h2>${c.current}</h2></div><dl class="developer-status-grid">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>${!state.currentSeatId ? `<button type="button" class="developer-secondary" data-action="developer-enter-cafe">${c.enter}</button><button type="button" class="developer-secondary" data-minimal="developer-scene" data-scene-id="library">Enter Academy Library</button>` : ""}</section>
+    <div class="developer-details-grid"><section class="profile-settings-card"><div class="profile-settings-heading"><span>LOCAL</span><h2>${c.current}</h2></div><dl class="developer-status-grid">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>${!state.currentSeatId ? `<button type="button" class="developer-secondary" data-action="developer-enter-cafe">${c.enter}</button><button type="button" class="developer-secondary" data-minimal="developer-scene" data-scene-id="library">Enter Academy Library</button><button type="button" class="developer-secondary" data-minimal="developer-scene" data-scene-id="forest">Enter Forest</button>` : ""}</section>
     <section class="profile-settings-card"><div class="profile-settings-heading"><span>MY SESSION</span><h2>${c.cloudSession}</h2></div><p>${c.sessionHelp}</p>
       ${!diagnostics ? `<p>${c.never}</p>` : diagnostics.activeSessions === null ? `<p role="status">${c.sessionUnavailable}</p>` : !sessions.length ? `<p class="developer-empty" data-developer-no-session>${c.noSession}</p>` : sessions.map((session) => `<article class="developer-session-card"><strong>${c[session.status] || c.unknown} · ${session.timer_mode ? `${session.timer_mode} ${c.minutes}` : c.free}</strong><time>${developerDate(session.started_at)}</time><span>${c.recorded}: ${Number(session.actual_seconds) || 0} ${c.seconds}</span><code>${escapeHtml(session.client_session_id?.slice(0, 8) || "—")}</code></article>`).join("")}
       ${sessions.length ? `<div class="developer-session-actions"><button type="button" data-action="developer-recover-focus" ${state.currentSeatId && !mismatch && !state.developerEndingSession ? "" : "disabled"}>${c.recover}</button><button type="button" class="is-danger" data-confirm-profile="developer-end-focus" ${mismatch || state.developerEndingSession ? "disabled" : ""}>${c.end}</button></div>` : ""}
@@ -3937,7 +3923,7 @@ async function occupySelectedSeat() {
     renderRoom();
     return;
   }
-  if (scene.id !== "cafe" && !(PUBLIC_CONFIG.minimalMvp && scene.id === "library")) {
+  if (!sharedFocusScene()) {
     state.view = "focus";
     render();
     return;
@@ -5086,7 +5072,7 @@ function updateAudio() {
   initAudio();
   if (audioContext && noiseGain) {
     audioContext.resume();
-    noiseGain.gain.setTargetAtTime(state.sounds.ambient && !(PUBLIC_CONFIG.minimalMvp && state.sceneId === "library") ? CAFE_AMBIENT_GAIN * state.soundVolumes.ambient / 100 : 0, audioContext.currentTime, 0.5);
+    noiseGain.gain.setTargetAtTime(state.sounds.ambient && !(PUBLIC_CONFIG.minimalMvp && focusSceneDefinition()?.ambientAsset) ? CAFE_AMBIENT_GAIN * state.soundVolumes.ambient / 100 : 0, audioContext.currentTime, 0.5);
     whiteNoiseGain?.gain.setTargetAtTime(state.sounds.white ? 0.03 * state.soundVolumes.white / 100 : 0, audioContext.currentTime, 0.5);
     if (noiseFilter) noiseFilter.frequency.setTargetAtTime(scenes[state.sceneId].filter, audioContext.currentTime, 0.6);
   }
