@@ -21,7 +21,7 @@ test('guest can focus twice with no account, no fake companions, and only three 
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  const {starts,patches}=await mockRooms(page);
  await page.goto('/');await expect(page.locator('[data-place]')).toHaveCount(6);
- await page.locator('[data-place="forest"]').focus();await expect(page.getByRole('tooltip')).toContainText('Forest · Coming soon');
+ await page.locator('[data-place="forest"]').focus();await expect(page.getByRole('tooltip')).toContainText('Forest · Open now');
  await page.locator('[data-place="cafe"]').click();await expect(page.locator('button.seat.available')).toHaveCount(6);
  await expect(page.locator('.avatar-marker')).toHaveCount(0);
  await page.locator('button.seat.available').first().click();await expect(page.locator('[data-session-clock]')).toHaveText('25:00');

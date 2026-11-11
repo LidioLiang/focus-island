@@ -62,7 +62,7 @@ test('resuming an old forest session releases cafe and restores its actual room,
 test('forest has five functional views and non-overlapping mobile seats; switching views preserves the clock and lease',async({page},info)=>{
  const {starts}=await mocks(page);await page.goto('/');await page.locator('[data-place="forest"]').click();
  for(const viewport of [{width:1280,height:720},{width:390,height:844},{width:320,height:568},{width:844,height:300},{width:844,height:390}]){
-  await page.setViewportSize(viewport);const boxes=await page.locator('button.seat.available').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}));
+  await page.setViewportSize(viewport);await expect(page.locator('button.seat.available')).toHaveCount(6);const boxes=await page.locator('button.seat.available').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}));
   expect(boxes).toHaveLength(6);for(const b of boxes){expect(b.w).toBeGreaterThanOrEqual(44);expect(b.x).toBeGreaterThanOrEqual(0);expect(b.x+b.w).toBeLessThanOrEqual(viewport.width);}
   for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];expect(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y).toBe(true);}
   await page.screenshot({path:info.outputPath(`forest-room-${viewport.width}.png`)});
