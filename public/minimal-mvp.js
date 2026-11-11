@@ -110,8 +110,8 @@ function acceptMinimalSeatConfirmation(confirmation, seatId) {
   };
 }
 
-const MINIMAL_ISLAND_IMAGE = `${ASSET_BASE}20261111-island-expanded-square.webp`;
-const MINIMAL_ISLAND_PORTRAIT = `${ASSET_BASE}20261111-island-expanded-portrait.webp`;
+const MINIMAL_ISLAND_IMAGE = "/assets/20261111-island-expanded-square.webp";
+const MINIMAL_ISLAND_PORTRAIT = "/assets/20261111-island-expanded-portrait.webp";
 
 function renderMinimalIsland() {
   const pins = [["cafe","coffee","Four Seasons Café",31.4,51.5,true],["library","book","Academy Library",44.5,41.8,Boolean(PUBLIC_CONFIG.sceneCatalog?.library?.enabled)],["forest","forest","Forest",65.3,49.5,Boolean(PUBLIC_CONFIG.sceneCatalog?.forest?.enabled)],["lakeside","lake","Lakeside",49.7,55,false],["seaside","sea","Seaside",66.7,61.5,false],["snow","mountain","Snowy Mountains",64.4,37.7,false]];
