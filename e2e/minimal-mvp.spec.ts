@@ -210,3 +210,28 @@ test('slow start gives immediate feedback and ignores repeat clicks and navigati
  await start!.fulfill({json:{session:{status:'running'}}});
  await page.locator('.time-readout').hover();await expect(page.getByRole('button',{name:'Pause',exact:true})).toBeVisible();expect(starts).toBe(1);
 });
+
+test('island artwork fills portrait, desktop and ultrawide screens without blur or clipped entry controls',async({page},testInfo)=>{
+ await mockRooms(page);await page.goto('/');
+ for(const [width,height] of [[390,844],[360,800],[768,1024],[1280,800],[1920,1080],[3440,1440],[844,390]]){
+  await page.setViewportSize({width,height});
+  const art=page.locator('.island-panorama');
+  await expect(art).toBeVisible();await expect.poll(()=>art.evaluate((e:HTMLImageElement)=>e.complete&&e.naturalWidth>0)).toBe(true);
+  const image=await art.evaluate((e:HTMLImageElement)=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,filter:getComputedStyle(e).filter,src:e.currentSrc};});
+  expect(image.x).toBeLessThanOrEqual(1);expect(image.y).toBeLessThanOrEqual(1);
+  expect(image.right).toBeGreaterThanOrEqual(width-1);expect(image.bottom).toBeGreaterThanOrEqual(height-1);
+  expect(image.filter).toBe('none');expect(image.src).toContain(height>width?'expanded-portrait.webp':'expanded-square.webp');
+  await expect(page.locator('.scene-atmosphere')).toHaveCount(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const pins=await page.locator('[data-place]').evaluateAll(nodes=>nodes.map(node=>{
+   const r=node.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+   return {id:node.getAttribute('data-place'),x:r.x,y:r.y,right:r.right,bottom:r.bottom,hit:hit?.closest('[data-place]')===node};
+  }));
+  expect(pins).toHaveLength(6);
+  for(const pin of pins){expect(pin.x,`${pin.id} left at ${width}x${height}`).toBeGreaterThanOrEqual(0);expect(pin.y,`${pin.id} top`).toBeGreaterThanOrEqual(0);expect(pin.right).toBeLessThanOrEqual(width);expect(pin.bottom).toBeLessThanOrEqual(height);expect(pin.hit,`${pin.id} clickable at ${width}x${height}`).toBe(true);}
+  if([390,1920,3440].includes(width))await page.screenshot({path:testInfo.outputPath(`fullscreen-island-${width}x${height}.png`)});
+ }
+ await page.setViewportSize({width:390,height:844});
+ await page.locator('[data-place="cafe"]').click();await expect(page.locator('button.seat.available')).toHaveCount(6);
+ await page.getByRole('button',{name:'Back to island',exact:true}).click();await expect(page.locator('.island-panorama')).toBeVisible();
+});

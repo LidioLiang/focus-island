@@ -110,9 +110,13 @@ function acceptMinimalSeatConfirmation(confirmation, seatId) {
   };
 }
 
+const MINIMAL_ISLAND_IMAGE = `${ASSET_BASE}20261111-island-expanded-square.webp`;
+const MINIMAL_ISLAND_PORTRAIT = `${ASSET_BASE}20261111-island-expanded-portrait.webp`;
+
 function renderMinimalIsland() {
-  const pins = [["cafe","coffee","Four Seasons Café",28,49,true],["library","book","Academy Library",48,26,Boolean(PUBLIC_CONFIG.sceneCatalog?.library?.enabled)],["forest","forest","Forest",69,44,Boolean(PUBLIC_CONFIG.sceneCatalog?.forest?.enabled)],["lakeside","lake","Lakeside",53,61,false],["seaside","sea","Seaside",79,77,false],["snow","mountain","Snowy Mountains",84,20,false]];
-  minimalShell("island", `${minimalBackdrop(islandImage)}<div class="scene-art" style="background-image:url('${islandImage}')"></div><div class="scene-veil"></div><div class="scene-markers">${pins.map(([id,icon,name,x,y,open]) => `<button type="button" class="map-pin ${open ? "" : "future"}" data-minimal="place" data-place="${id}" data-place-name="${name}" data-open="${open}" style="left:${x}%;top:${y}%" aria-label="${name}, ${open ? "Open now" : "Coming soon"}">${minimalMapPin(icon)}</button>`).join("")}</div>${Boolean(PUBLIC_CONFIG.sceneCatalog?.[localStorage.getItem("focusIslandLastPlaceV1")]?.enabled) ? '<button class="minimal-return" type="button" data-minimal="return-place">Return to your quiet corner</button>' : ""}<footer class="minimal-legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>`);
+  const pins = [["cafe","coffee","Four Seasons Café",31.4,51.5,true],["library","book","Academy Library",44.5,41.8,Boolean(PUBLIC_CONFIG.sceneCatalog?.library?.enabled)],["forest","forest","Forest",65.3,49.5,Boolean(PUBLIC_CONFIG.sceneCatalog?.forest?.enabled)],["lakeside","lake","Lakeside",49.7,55,false],["seaside","sea","Seaside",66.7,61.5,false],["snow","mountain","Snowy Mountains",64.4,37.7,false]];
+  const portraitPins = {cafe:[32,52],library:[44.4,47],forest:[66,53.5],lakeside:[50.2,56.2],seaside:[66,61],snow:[64,44.5]};
+  minimalShell("island", `<div class="island-canvas"><picture><source media="(orientation: portrait)" srcset="${MINIMAL_ISLAND_PORTRAIT}"><img class="island-panorama" src="${MINIMAL_ISLAND_IMAGE}" alt="Focus Isle, surrounded by sky and sea" fetchpriority="high" draggable="false"></picture><div class="scene-markers">${pins.map(([id,icon,name,x,y,open]) => `<button type="button" class="map-pin ${open ? "" : "future"}" data-minimal="place" data-place="${id}" data-place-name="${name}" data-open="${open}" style="--pin-x:${x}%;--pin-y:${y}%;--portrait-x:${portraitPins[id][0]}%;--portrait-y:${portraitPins[id][1]}%" aria-label="${name}, ${open ? "Open now" : "Coming soon"}">${minimalMapPin(icon)}</button>`).join("")}</div></div><div class="scene-veil"></div>${Boolean(PUBLIC_CONFIG.sceneCatalog?.[localStorage.getItem("focusIslandLastPlaceV1")]?.enabled) ? '<button class="minimal-return" type="button" data-minimal="return-place">Return to your quiet corner</button>' : ""}<footer class="minimal-legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>`);
 }
 
 function minimalAvatarMarkup() {

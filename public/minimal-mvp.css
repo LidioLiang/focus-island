@@ -220,3 +220,37 @@ body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
 .minimal-pending[hidden] { display:none; }
 .map-pin:disabled { cursor:progress; opacity:.65; }
 .timer-actions button:disabled { cursor:progress; opacity:.6; }
+
+/* The island camera crops peripheral sky/sea; art and hotspots share one canvas. */
+.minimal-root[data-view=island] .island-canvas {
+ position:absolute; left:50%; top:50%;
+ width:max(100vw,100dvh,min(145vw,205dvh)); aspect-ratio:1;
+ transform:translate(-50%,-50%);
+}
+.minimal-root[data-view=island] .island-panorama {
+ display:block; width:100%; height:100%; object-fit:fill; filter:none;
+ user-select:none; pointer-events:none;
+}
+.minimal-root[data-view=island] .scene-markers {
+ inset:0; width:100%; height:100%; aspect-ratio:auto; transform:none;
+}
+.minimal-root[data-view=island] .scene-veil { z-index:1; }
+.minimal-root[data-view=island] .scene-header { padding-top:env(safe-area-inset-top,0px); }
+@media (prefers-reduced-motion:reduce) {
+ .minimal-root[data-view=island] .island-canvas { animation:none; }
+}
+
+.minimal-root[data-view=island] .island-canvas picture { display:block; width:100%; height:100%; }
+.minimal-root[data-view=island] .map-pin { left:var(--pin-x); top:var(--pin-y); }
+@media(orientation:portrait) {
+ .minimal-root[data-view=island] .island-canvas { width:max(100vw,calc(100dvh * 2 / 3)); aspect-ratio:2/3; }
+ .minimal-root[data-view=island] .map-pin { left:var(--portrait-x); top:var(--portrait-y); }
+}
+
+@media(orientation:portrait) {
+ .minimal-root[data-view=island] .map-pin { width:44px; height:58px; padding:0 2px 4px; }
+ .minimal-root[data-view=island] .pin-face,
+ .minimal-root[data-view=island] .map-pin .pin-shape { width:40px; height:54px; }
+ .minimal-root[data-view=island] .pin-glyph { top:20px; }
+ .minimal-root[data-view=island] .pin-glyph svg { width:16px; height:16px; }
+}
