@@ -1,4 +1,5 @@
-import { authenticatedSupabase, CAFE_SYSTEM_ROOM_IDS, json } from "@/lib/presence";
+import { FOCUS_ROOM_IDS, roomSceneId } from "@/lib/scenes";
+import { authenticatedSupabase, json } from "@/lib/presence";
 import { isDeveloper } from "@/lib/authorization";
 import { RELEASE_INFO } from "@/lib/release";
 
@@ -11,7 +12,7 @@ export async function GET() {
   const [active, ...rooms] = await Promise.all([
     auth.supabase.from("focus_sessions").select("client_session_id,status,timer_mode,started_at,actual_seconds")
       .eq("user_id", auth.user.id).in("status", ["running", "paused"]),
-    ...CAFE_SYSTEM_ROOM_IDS.map((roomId) => auth.supabase.rpc("get_room_state", { p_room_id: roomId })),
+    ...FOCUS_ROOM_IDS.map((roomId) => auth.supabase.rpc("get_room_state", { p_room_id: roomId })),
   ]);
   return json({
     version: RELEASE_INFO.version, release: RELEASE_INFO,
@@ -20,7 +21,7 @@ export async function GET() {
     rooms: rooms.map((room, index) => {
       const leases = ((room.data as { leases?: Array<{ seat_id: number; state: string; user_id: string }> } | null)?.leases || []);
       return {
-        roomId: CAFE_SYSTEM_ROOM_IDS[index], capacity: 6,
+        roomId: FOCUS_ROOM_IDS[index], sceneId: roomSceneId(FOCUS_ROOM_IDS[index]), capacity: 6,
         occupied: room.error ? null : leases.length, available: !room.error,
         seats: room.error ? null : Array.from({ length: 6 }, (_, seat) => {
           const lease = leases.find((item) => Number(item.seat_id) === seat + 1);

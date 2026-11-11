@@ -204,3 +204,6 @@ body.minimal-mvp .personal-center-sidebar{background:#e4eef5;color:#304c60}body.
 .minimal-root .minimal-layout-tools.is-collapsed .minimal-layout-body { display: none; }
 /* The minimal UI supports portrait directly; retire the old rotate-to-use gate. */
 body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
+
+/* Shared scene canvas: marker geometry is tied to the artwork, not the viewport. */
+.minimal-root .room-stage{width:min(100%,calc(100dvh * var(--scene-width,1672) / var(--scene-height,941)));aspect-ratio:var(--scene-width,1672)/var(--scene-height,941)}

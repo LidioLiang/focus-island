@@ -337,11 +337,14 @@ let immersiveAutoTimer = null;
 let hudIdleTimer = null;
 let godotRoomReadyTimer = null;
 let roomSyncInFlight = false;
+let roomSyncRevision = 0;
 let cafeSceneObjectDrag = null;
 let staticSeatMarkerDrag = null;
 let onlineIdentityPromise = null;
 let onlineUserId = null;
 let seatRecoveryPromise = null;
+let seatReleasePromise = null;
+let seatReleaseRevision = 0;
 let accessStatusPromise = null;
 let accessStatusFetchedAt = 0;
 let focusAuthorizationPromise = null;
@@ -395,7 +398,7 @@ function loadPreferences() {
         white: clampVolume(saved.soundVolumes?.white, defaults.soundVolumes.white),
         music: clampVolume(saved.soundVolumes?.music, defaults.soundVolumes.music),
       },
-      language: saved.language === "en" ? "en" : "zh-CN",
+      language: saved.language === "zh-CN" ? "zh-CN" : "en",
     };
   } catch (_) {
     return defaults;
@@ -409,6 +412,7 @@ function savePreferences() {
 }
 
 function saveSoundPreferencesFromState() {
+  if (PUBLIC_CONFIG.minimalMvp) rememberSceneAudio();
   preferences.sounds = { ...state.sounds };
   preferences.musicTrack = state.musicTrack;
   preferences.soundVolumes = { ...state.soundVolumes };
@@ -739,6 +743,9 @@ function renderAccessOverlay() {
     </section>`;
   } else if (state.accessOverlay === "focus-recovery") {
     const previous = state.focusRecovery;
+    if (PUBLIC_CONFIG.minimalMvp) {
+      shell.innerHTML=`<section class="access-dialog" data-no-auto-i18n role="dialog" aria-modal="true" aria-labelledby="focus-recovery-title"><button class="access-close" data-action="close-access-overlay" aria-label="Close" ${state.authPending?"disabled":""}>×</button><p class="access-eyebrow">RESUME FOCUS</p><h2 id="focus-recovery-title">Your previous session is still open</h2><p>Continue where you left off in ${escapeHtml(sceneLabel(previous?.scene_id))}, or end that session and start fresh. Ending it also stops it on another device.</p><button type="button" class="primary-button" data-action="continue-previous-focus" ${state.authPending?'disabled':''}>Resume previous session</button><button type="button" class="access-link" data-action="replace-previous-focus" ${state.authPending?'disabled':''}>End previous session and start fresh</button>${state.authError?`<p class="access-error" role="status">${escapeHtml(state.authError)}</p>`:''}</section>`;
+    } else {
     shell.innerHTML = `<section class="access-dialog" role="dialog" aria-modal="true" aria-labelledby="focus-recovery-title">
       <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
       <p class="access-eyebrow">RESUME FOCUS</p><h2 id="focus-recovery-title">上次专注尚未结束</h2>
@@ -748,6 +755,7 @@ function renderAccessOverlay() {
       <button type="button" class="access-link" data-action="replace-previous-focus" ${state.authPending ? "disabled" : ""}>结束上次并重新开始</button>
       ${state.authError ? `<p class="access-error">${escapeHtml(authErrorCopy(state.authError))}</p>` : ""}
     </section>`;
+    }
   } else if (state.accessOverlay === "paywall") {
     shell.innerHTML = `<section class="access-dialog paywall-dialog" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
       <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
@@ -871,6 +879,8 @@ async function openFocusRecovery() {
 async function resolvePreviousFocus(restart) {
   const previous = state.focusRecovery;
   if (!previous || state.authPending) return;
+  const originRevision=seatReleaseRevision, originIdentity=identity.sessionId;
+  const originScene=state.sceneId, originView=state.view;
   state.authPending = true;
   renderAccessOverlay();
   try {
@@ -878,6 +888,7 @@ async function resolvePreviousFocus(restart) {
       await api(`/api/focus/sessions/${encodeURIComponent(previous.client_session_id)}`, {
         method: "PATCH", body: JSON.stringify({ status: "interrupted", actualSeconds: Number(previous.actual_seconds) || 0, pausedSeconds: Number(previous.paused_seconds) || 0 }),
       });
+      if(PUBLIC_CONFIG.minimalMvp && (seatReleaseRevision!==originRevision || identity.sessionId!==originIdentity || state.sceneId!==originScene || state.view!==originView || state.focusRecovery!==previous))throw new Error("focus_place_unavailable");
       closeAccessOverlay();
       state.cloudFocusClientId = null;
       state.sessionStartedAt = null;
@@ -885,6 +896,7 @@ async function resolvePreviousFocus(restart) {
       state.remainingSeconds = state.durationSeconds;
       state.isRunning = false;
       persistActiveSession(true);
+      if(PUBLIC_CONFIG.minimalMvp && !state.currentSeatId){state.view="room";render();showToast("Choose a seat to begin your next session.");return;}
       if (!await startFocusFromSeat()) return;
     } else {
       // Revalidate the exact prior session; never create a second trial.
@@ -894,6 +906,10 @@ async function resolvePreviousFocus(restart) {
       }) });
       const session = result.session;
       if (!session || !["running", "paused"].includes(session.status)) throw new Error("focus_session_finished");
+      if (PUBLIC_CONFIG.minimalMvp) {
+        if(seatReleaseRevision!==originRevision || identity.sessionId!==originIdentity || state.sceneId!==originScene || state.view!==originView || state.focusRecovery!==previous)throw new Error("focus_place_unavailable");
+        await restoreCloudFocusPlace(session);
+      }
       closeAccessOverlay();
       state.cloudFocusClientId = session.client_session_id;
       state.timerMode = session.timer_mode;
@@ -911,16 +927,17 @@ async function resolvePreviousFocus(restart) {
     closePersonalCenter();
     state.view = "focus";
     render();
+    if(PUBLIC_CONFIG.minimalMvp && state.isRunning)updateAudio();
     if (state.isRunning && state.timerMode > 0 && state.remainingSeconds === 0) await finishSession("completed");
   } catch (error) {
-    state.authError = error.message;
+    state.authError = PUBLIC_CONFIG.minimalMvp ? error.message==='system_rooms_full' ? 'Your previous room is full. End that session to choose a new seat.' : error.message==='session_conflict' ? 'This session is active in another tab or device. End it here to start fresh.' : 'Your previous seat could not be restored. Try again, or end that session to start fresh.' : error.message;
     if (state.accessOverlay === "focus-recovery") renderAccessOverlay();
     else showToast("上次专注状态已变化，请重新开始");
   } finally { state.authPending = false; if (state.accessOverlay === "focus-recovery") renderAccessOverlay(); }
 }
 
 function currentRoomApiId() {
-  return state.roomId || (state.sceneId === "cafe" ? scenes.cafe.rooms[0].id : null);
+  return state.roomId || (PUBLIC_CONFIG.minimalMvp ? focusSceneDefinition()?.onlineRooms[0] : state.sceneId === "cafe" ? scenes.cafe.rooms[0].id : null);
 }
 
 function shuffledCopy(values) {
@@ -942,7 +959,7 @@ function createLocalNpcLeases({ excludeSeatIds = [] } = {}) {
   return seatIds.map((seatId, index) => {
     const focusedForMinutes = 4 + Math.floor(Math.random() * 38);
     return {
-      roomId: "cafe-local",
+      roomId: PUBLIC_CONFIG.minimalMvp ? `${state.sceneId}-local` : "cafe-local",
       seatId,
       sessionId: `npc-${seatId}-${now}-${index}`,
       displayName: nicknames[index],
@@ -983,7 +1000,8 @@ function cafeSeatOccupancyLeases() {
 async function enterCafeRoom() {
   if (state.isAllocatingRoom) return;
   state.isAllocatingRoom = true;
-  showToast("正在为你准备咖啡馆座位…");
+  const allocationScene = state.sceneId || "cafe";
+  showToast(PUBLIC_CONFIG.minimalMvp ? `Preparing ${sceneLabel(allocationScene)}…` : "正在为你准备咖啡馆座位…");
   let access = null;
   try {
     await ensureOnlineIdentity();
@@ -997,21 +1015,22 @@ async function enterCafeRoom() {
       return;
     }
     await ensureOnlineIdentity();
-    const allocation = await api("/api/scenes/cafe/allocate", {
+    const allocation = await api(`/api/scenes/${allocationScene}/allocate`, {
       method: "POST",
       body: JSON.stringify(identityBody()),
     });
+    if (state.sceneId !== allocationScene) return;
     state.roomId = allocation.roomId;
     state.localRoom = allocation.mode === "local";
     if (PUBLIC_CONFIG.minimalMvp) { state.offlineFocus = false; state.presenceUnavailable = false; }
   } catch (error) {
     if (PUBLIC_CONFIG.minimalMvp && (!error.status || error.status >= 500)) {
-      state.roomId = "cafe-local";
+      state.roomId = PUBLIC_CONFIG.minimalMvp ? `${state.sceneId}-local` : "cafe-local";
       state.localRoom = true;
       state.offlineFocus = true;
       showToast("Live rooms are unavailable. You can focus on your own.");
     } else if (access?.entitlementType === "offline_grace") {
-      state.roomId = "cafe-local";
+      state.roomId = PUBLIC_CONFIG.minimalMvp ? `${state.sceneId}-local` : "cafe-local";
       state.localRoom = true;
       showToast("在线服务暂不可用，已使用付费离线宽限进入本地岛民房间");
     } else {
@@ -1127,6 +1146,7 @@ async function enterImmersiveFocus() {
 }
 
 function stopRoomPresence() {
+  roomSyncRevision += 1;
   window.clearInterval(roomSyncTimer);
   window.clearInterval(heartbeatTimer);
   roomSyncTimer = null;
@@ -1946,7 +1966,8 @@ function syncCafeSeatActorLayers(leases = state.roomPresence.leases) {
 }
 
 async function syncCafeState({ refreshMarkers = true } = {}) {
-  if (roomSyncInFlight || state.sceneId !== "cafe") return;
+  if (roomSyncInFlight || !sharedFocusScene()) return;
+  const syncRoom = currentRoomApiId(), syncScene = state.sceneId, syncRevision = roomSyncRevision;
   if (state.localRoom) {
     state.roomPresence.serverNow = Date.now();
     if (refreshMarkers && state.view === "room") refreshCafeSeatMarkers();
@@ -1954,33 +1975,35 @@ async function syncCafeState({ refreshMarkers = true } = {}) {
   }
   roomSyncInFlight = true;
   try {
-    const presence = await api(`/api/rooms/${currentRoomApiId()}/state`);
+    const presence = await api(`/api/rooms/${syncRoom}/state`);
+    if (state.sceneId !== syncScene || currentRoomApiId() !== syncRoom || roomSyncRevision !== syncRevision) return;
     state.roomPresence = presence;
     state.presenceUnavailable = false;
     state.presenceFetchedAt = Date.now();
     reconcileLocalNpcRoster(presence.leases);
     const ownLease = presence.leases.find((lease) => lease.sessionId === identity.sessionId && lease.state === "occupied");
     if (ownLease) state.currentSeatId = Number(ownLease.seatId);
-    const room = scenes.cafe.rooms.find((item) => item.id === currentRoomApiId());
+    const room = scenes[state.sceneId].rooms.find((item) => item.id === currentRoomApiId());
     const visibleLeases = cafeVisibleLeases(presence.leases);
     if (room) room.occupied = visibleLeases.length;
-    scenes.cafe.online = scenes.cafe.rooms.reduce((total, item) => total + Number(item.occupied || 0), 0);
+    scenes[state.sceneId].online = scenes[state.sceneId].rooms.reduce((total, item) => total + Number(item.occupied || 0), 0);
     syncCafeSceneObjectLayers();
     syncCafeSeatActorLayers(presence.leases);
     if (refreshMarkers && state.view === "room") refreshCafeSeatMarkers();
   } catch (_) {
+    if (state.sceneId !== syncScene || currentRoomApiId() !== syncRoom || roomSyncRevision !== syncRevision) return;
     if (PUBLIC_CONFIG.minimalMvp) { state.presenceUnavailable = true; if (state.view === "room") refreshMinimalSeats(); }
     const syncLabel = document.querySelector(".room-sync-label");
     if (syncLabel) syncLabel.textContent = "正在重新连接…";
   } finally {
-    roomSyncInFlight = false;
+    if (roomSyncRevision === syncRevision) roomSyncInFlight = false;
   }
 }
 
 function refreshCafeSeatMarkers() {
   if (PUBLIC_CONFIG.minimalMvp) return refreshMinimalSeats();
   const markerLayer = document.querySelector(".seat-markers");
-  if (!markerLayer || state.sceneId !== "cafe") return;
+  if (!markerLayer || !sharedFocusScene()) return;
   const renderedSeatEntries = cafeVisibleSeatEntries();
   const staticRoom = Boolean(document.querySelector(".static-seat-room"));
   const markerMarkup = staticRoom
@@ -2025,7 +2048,7 @@ function updateCafeSeatSelection() {
 }
 
 async function startCafePresence() {
-  if (state.sceneId !== "cafe" || state.view !== "room") return;
+  if (!sharedFocusScene() || state.view !== "room") return;
   stopRoomPresence();
   const layer = document.querySelector(".seat-layer");
   if (!layer) return;
@@ -2038,14 +2061,16 @@ async function startCafePresence() {
     }, 15000);
     return;
   }
+  const startingRevision=roomSyncRevision, startingScene=state.sceneId, startingRoom=currentRoomApiId();
   await syncCafeState();
+  if(roomSyncRevision!==startingRevision || state.sceneId!==startingScene || currentRoomApiId()!==startingRoom || state.view!=="room") return;
   window.dispatchEvent(new CustomEvent("focus-island:subscribe-room", { detail: { roomId: currentRoomApiId() } }));
-  roomSyncTimer = window.setInterval(() => syncCafeState(), 60000);
+  roomSyncTimer = window.setInterval(() => syncCafeState(), 25000);
   heartbeatTimer = window.setInterval(sendHeartbeat, 15000);
 }
 
 async function sendHeartbeat() {
-  if (!state.currentSeatId || state.sceneId !== "cafe") return;
+  if (!state.currentSeatId || !sharedFocusScene()) return;
   if (state.localRoom) return;
   try {
     await api(`/api/sessions/${identity.sessionId}/heartbeat`, {
@@ -2066,9 +2091,11 @@ function currentSeatActivity() {
 }
 
 async function recoverCafeSeat(source = "resume") {
+  if (seatReleasePromise) return false;
   if (seatRecoveryPromise) return seatRecoveryPromise;
-  if (document.hidden || state.sceneId !== "cafe" || state.localRoom || !state.currentSeatId) return false;
+  if (document.hidden || !sharedFocusScene() || state.localRoom || !state.currentSeatId) return false;
   if (!["focus", "room"].includes(state.view)) return false;
+  const recoveryScene = state.sceneId, recoverySession = identity.sessionId, recoveryRevision = seatReleaseRevision;
   const preferredRoomId = currentRoomApiId();
   const preferredSeatId = Number(state.currentSeatId);
   if (!preferredRoomId || !Number.isInteger(preferredSeatId)) return false;
@@ -2087,6 +2114,7 @@ async function recoverCafeSeat(source = "resume") {
           focusStartedAt: state.sessionStartedAt,
         }),
       });
+      if (state.sceneId !== recoveryScene || identity.sessionId !== recoverySession || seatReleaseRevision !== recoveryRevision) return false;
       const previousRoomId = state.roomId;
       state.roomId = result.roomId;
       state.currentSeatId = Number(result.seatId);
@@ -2099,6 +2127,7 @@ async function recoverCafeSeat(source = "resume") {
       await syncCafeState({ refreshMarkers: state.view === "room" });
       return true;
     } catch (error) {
+      if (state.sceneId !== recoveryScene || identity.sessionId !== recoverySession || seatReleaseRevision !== recoveryRevision) return false;
       if (error.status === 409 && error.message === "system_rooms_full") {
         state.currentSeatId = null;
         showToast("当前系统房间暂无空位，你的专注计时仍会保留");
@@ -2115,10 +2144,18 @@ async function recoverCafeSeat(source = "resume") {
   return seatRecoveryPromise;
 }
 
-async function releaseSeat({ beacon = false, force = false } = {}) {
+async function releaseSeat(options = {}) {
+  if (seatReleasePromise) return seatReleasePromise;
+  seatReleaseRevision += 1;
+  stopRoomPresence();
+  seatReleasePromise = releaseSeatOnce(options).finally(() => { seatReleasePromise=null; });
+  return seatReleasePromise;
+}
+
+async function releaseSeatOnce({ beacon = false, force = false } = {}) {
   clearImmersiveAutoEnter();
-  if (!force && !state.currentSeatId && !state.switchingFromSeatId) return;
-  if (state.localRoom) {
+  if (!force && !state.currentSeatId && !state.switchingFromSeatId && !seatRecoveryPromise) return;
+  if (state.localRoom && !seatRecoveryPromise) {
     if (!state.localNpcRoster.length) state.localNpcRoster = createLocalNpcLeases();
     state.roomPresence.leases = [...state.localNpcRoster];
     state.roomPresence.serverNow = Date.now();
@@ -2126,7 +2163,12 @@ async function releaseSeat({ beacon = false, force = false } = {}) {
     state.switchingFromSeatId = null;
     return;
   }
-  const url = `/api/sessions/${identity.sessionId}/release`;
+  const releasingSession=identity.sessionId;
+  const url = `/api/sessions/${releasingSession}/release`;
+  // Drain recovery before deleting its lease, so a late RPC cannot recreate it.
+  // Beacon still sends immediately on unload, with a second release after recovery.
+  if (seatRecoveryPromise && !beacon) await seatRecoveryPromise;
+  if (beacon && seatRecoveryPromise) void seatRecoveryPromise.finally(()=>fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}",keepalive:true}).catch(()=>{}));
   if (beacon && navigator.sendBeacon) {
     navigator.sendBeacon(url, new Blob(["{}"], { type: "application/json" }));
   } else {
@@ -2228,7 +2270,7 @@ function focusStatusLabel(status) {
 }
 
 function isActiveFocusSession() {
-  return Boolean(state.currentSeatId && state.sceneId && (state.sessionStartedAt || state.sessionPhase === "rest"));
+  return Boolean(["focus","room"].includes(state.view) && state.sceneId && (state.sessionStartedAt || state.sessionPhase === "rest"));
 }
 
 function hasActiveSeatSession() {
@@ -2574,8 +2616,8 @@ function developerToolsCopy() {
     sessionHelp: "Inspect and end your own leftover test session from the island. Choose a seat before resuming a timer.", free: "Open-ended", minutes: "min", recorded: "Recorded", seconds: "sec",
     enter: "Enter café", recover: "Resume or start again", end: "End this test session", raw: "Show diagnostic JSON", sessionUnavailable: "Your cloud session could not be loaded.",
     staticTools: "Static room tools", calibration: "Calibrate six seat labels", calibrationHelp: "Adjust label hotspots without moving characters or furniture.", calibrate: "Start calibration",
-    enterFirst: "Enter the café and open the room view first.", reset: "Restore static view", resetHelp: "Leave legacy debug states and reset seat labels, keeping your timer and records.",
-    scope: "Current scope", scopeHelp: "One six-seat café, shared seat occupancy and immersive focus. Legacy furniture editors, 3D debugging and unopened scenes are outside this console.",
+    enterFirst: "Enter the café or library and open the room view first.", reset: "Restore static view", resetHelp: "Leave legacy debug states and reset seat labels, keeping your timer and records.",
+    scope: "Current scope", scopeHelp: "Café and Academy Library, six seats per room, shared occupancy and immersive focus. Legacy furniture editors, 3D debugging and unopened scenes are outside this console.",
     mismatch: "The page and server versions differ. Refresh the page before continuing.", confirmEnd: "End this test session?", confirmBody: "Recorded time will be kept. This also ends the same session if it is still running on another device.", cancel: "Cancel", ended: "Test session ended", noPending: "There is no test session to end.",
   };
 }
@@ -2587,7 +2629,7 @@ function developerDate(value) {
 
 function renderDeveloperTools() {
   const c = developerToolsCopy();
-  const inCafeRoom = state.view === "room" && state.sceneId === "cafe";
+  const inCafeRoom = state.view === "room" && sharedFocusScene();
   const diagnostics = state.developerDiagnostics;
   const release = PUBLIC_CONFIG.release || {};
   const mismatch = diagnostics?.version && diagnostics.version !== PUBLIC_CONFIG.appVersion;
@@ -2611,7 +2653,7 @@ function renderDeveloperTools() {
     ${mismatch ? `<p class="developer-message is-error" role="alert">${c.mismatch}</p>` : ""}
     ${state.developerDiagnosticsError ? `<p class="developer-message is-error" role="alert">${c.failed}</p>` : ""}
     <section class="profile-settings-card"><div class="profile-settings-heading"><span>ROOMS</span><h2>${c.rooms}</h2></div><p>${c.roomsHelp}</p><p class="developer-checked">${diagnostics?.checkedAt ? `${c.checked}: ${developerDate(diagnostics.checkedAt)}` : c.never}</p><div class="developer-rooms">${roomCards}</div></section>
-    <div class="developer-details-grid"><section class="profile-settings-card"><div class="profile-settings-heading"><span>LOCAL</span><h2>${c.current}</h2></div><dl class="developer-status-grid">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>${!state.currentSeatId ? `<button type="button" class="developer-secondary" data-action="developer-enter-cafe">${c.enter}</button>` : ""}</section>
+    <div class="developer-details-grid"><section class="profile-settings-card"><div class="profile-settings-heading"><span>LOCAL</span><h2>${c.current}</h2></div><dl class="developer-status-grid">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>${!state.currentSeatId ? `<button type="button" class="developer-secondary" data-action="developer-enter-cafe">${c.enter}</button><button type="button" class="developer-secondary" data-minimal="developer-scene" data-scene-id="library">Enter Academy Library</button>` : ""}</section>
     <section class="profile-settings-card"><div class="profile-settings-heading"><span>MY SESSION</span><h2>${c.cloudSession}</h2></div><p>${c.sessionHelp}</p>
       ${!diagnostics ? `<p>${c.never}</p>` : diagnostics.activeSessions === null ? `<p role="status">${c.sessionUnavailable}</p>` : !sessions.length ? `<p class="developer-empty" data-developer-no-session>${c.noSession}</p>` : sessions.map((session) => `<article class="developer-session-card"><strong>${c[session.status] || c.unknown} · ${session.timer_mode ? `${session.timer_mode} ${c.minutes}` : c.free}</strong><time>${developerDate(session.started_at)}</time><span>${c.recorded}: ${Number(session.actual_seconds) || 0} ${c.seconds}</span><code>${escapeHtml(session.client_session_id?.slice(0, 8) || "—")}</code></article>`).join("")}
       ${sessions.length ? `<div class="developer-session-actions"><button type="button" data-action="developer-recover-focus" ${state.currentSeatId && !mismatch && !state.developerEndingSession ? "" : "disabled"}>${c.recover}</button><button type="button" class="is-danger" data-confirm-profile="developer-end-focus" ${mismatch || state.developerEndingSession ? "disabled" : ""}>${c.end}</button></div>` : ""}
@@ -3774,6 +3816,7 @@ function renderStaticCafeRoom() {
 }
 
 function renderRoom() {
+  if (PUBLIC_CONFIG.minimalMvp && sharedFocusScene()) return renderMinimalRoom();
   const scene = scenes[state.sceneId];
   if (scene.id === "cafe") {
     renderStaticCafeRoom();
@@ -3888,13 +3931,13 @@ function renderSeat(seat, index, sceneId, options = {}) {
 async function occupySelectedSeat() {
   if (state.isTransitioning || state.selectedSeat === null) return;
   const scene = scenes[state.sceneId];
-  if (scene.id === "library") {
+  if (scene.id === "library" && !PUBLIC_CONFIG.minimalMvp) {
     state.libraryCurrentSeatId = state.selectedSeat + 1;
     startFocusFromSeat();
     renderRoom();
     return;
   }
-  if (scene.id !== "cafe") {
+  if (scene.id !== "cafe" && !(PUBLIC_CONFIG.minimalMvp && scene.id === "library")) {
     state.view = "focus";
     render();
     return;
@@ -3921,7 +3964,7 @@ async function occupySelectedSeat() {
       const otherLeases = state.roomPresence.leases.filter((lease) => lease.sessionId !== identity.sessionId);
       state.roomPresence = {
         leases: [...otherLeases, {
-          roomId: "cafe-local",
+          roomId: PUBLIC_CONFIG.minimalMvp ? `${state.sceneId}-local` : "cafe-local",
           seatId: targetSeatId,
           sessionId: identity.sessionId,
           guestId: identity.guestId,
@@ -3976,7 +4019,7 @@ async function occupySelectedSeat() {
     }
     state.isTransitioning = false;
     state.sessionPanelOpen = false;
-    state.focusImageChoice = preferences.rememberLastFocusView ? preferences.lastFocusView : "window";
+    state.focusImageChoice = PUBLIC_CONFIG.minimalMvp ? sceneDefaultFocusView(targetSeatId) : preferences.rememberLastFocusView ? preferences.lastFocusView : "window";
     if (!preferences.rememberLastSound) {
       const defaults = defaultPreferences();
       state.sounds = { ...defaults.sounds };
@@ -4051,6 +4094,10 @@ function scheduleHudFade() {
 }
 
 function selectedFocusImage(scene = scenes[state.sceneId]) {
+  if (PUBLIC_CONFIG.minimalMvp) {
+    const views = focusSceneDefinition(scene.id)?.focusViews;
+    if (views?.length) return (views.find(view => view.id === state.focusImageChoice) || views[0]).image;
+  }
   if (scene.id !== "cafe") return scene.image;
   const focusImages = {
     window: `${ASSET_BASE}20261013-cafe-window-real-focus-view.webp`,
@@ -4629,7 +4676,11 @@ function restoreActiveSession() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.activeSession) || "null");
     const scene = saved ? scenes[saved.sceneId] : null;
-    if (!saved || !scene || saved.selectedSeat === null || saved.selectedSeat >= scene.seats.length) return;
+    if (!saved || !scene || !Number.isInteger(saved.selectedSeat) || saved.selectedSeat < 0 || saved.selectedSeat >= scene.seats.length) return;
+    if (PUBLIC_CONFIG.minimalMvp) {
+      const definition=focusSceneDefinition(saved.sceneId);
+      if(!definition?.enabled || (saved.localRoom ? saved.roomId!==`${saved.sceneId}-local` : !definition.onlineRooms.includes(saved.roomId))) return;
+    }
     Object.assign(state, {
       view: "focus",
       sceneId: saved.sceneId,
@@ -4662,7 +4713,7 @@ function restoreActiveSession() {
       state.localNpcRoster = createLocalNpcLeases({ excludeSeatIds: [saved.selectedSeat + 1] });
       state.roomPresence = {
         leases: [...state.localNpcRoster, {
-          roomId: "cafe-local",
+          roomId: PUBLIC_CONFIG.minimalMvp ? `${state.sceneId}-local` : "cafe-local",
           seatId: saved.selectedSeat + 1,
           sessionId: identity.sessionId,
           guestId: identity.guestId,
@@ -5035,11 +5086,12 @@ function updateAudio() {
   initAudio();
   if (audioContext && noiseGain) {
     audioContext.resume();
-    noiseGain.gain.setTargetAtTime(state.sounds.ambient ? CAFE_AMBIENT_GAIN * state.soundVolumes.ambient / 100 : 0, audioContext.currentTime, 0.5);
+    noiseGain.gain.setTargetAtTime(state.sounds.ambient && !(PUBLIC_CONFIG.minimalMvp && state.sceneId === "library") ? CAFE_AMBIENT_GAIN * state.soundVolumes.ambient / 100 : 0, audioContext.currentTime, 0.5);
     whiteNoiseGain?.gain.setTargetAtTime(state.sounds.white ? 0.03 * state.soundVolumes.white / 100 : 0, audioContext.currentTime, 0.5);
     if (noiseFilter) noiseFilter.frequency.setTargetAtTime(scenes[state.sceneId].filter, audioContext.currentTime, 0.6);
   }
   updateMusicAudio();
+  if (PUBLIC_CONFIG.minimalMvp) void syncSceneAmbience();
 }
 
 function updateMusicAudio() {
@@ -5060,6 +5112,7 @@ function updateMusicAudio() {
 }
 
 function muteAllAudioImmediately() {
+  if (PUBLIC_CONFIG.minimalMvp) silenceSceneAmbience();
   if (audioContext) {
     const now = audioContext.currentTime;
     [noiseGain, whiteNoiseGain].filter(Boolean).forEach((gainNode) => {
@@ -5071,6 +5124,7 @@ function muteAllAudioImmediately() {
 }
 
 function suspendAudio() {
+  if (PUBLIC_CONFIG.minimalMvp && typeof silenceSceneAmbience === "function") silenceSceneAmbience();
   if (audioContext && noiseGain) {
     noiseGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.25);
     whiteNoiseGain?.gain.setTargetAtTime(0, audioContext.currentTime, 0.25);
@@ -5184,7 +5238,7 @@ document.addEventListener("click", async (event) => {
   if (seatButton) {
     if (state.staticSeatCalibration.enabled && seatButton.matches("[data-static-seat-marker]")) return;
     state.selectedSeat = Number(seatButton.dataset.seat);
-    if (state.sceneId === "cafe") occupySelectedSeat();
+    if (sharedFocusScene()) occupySelectedSeat();
     else renderRoom();
     return;
   }
@@ -5435,6 +5489,7 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "developer-refresh-diagnostics") { void refreshDeveloperDiagnostics(); return; }
   if (action === "developer-enter-cafe") {
+    if (PUBLIC_CONFIG.minimalMvp) { if(!state.isDeveloper)return;closePersonalCenter();await enterMinimalScene("cafe");return; }
     if (state.currentSeatId) return;
     closePersonalCenter();
     state.sceneId = "cafe";
@@ -5512,8 +5567,9 @@ document.addEventListener("click", async (event) => {
     return;
   }
   if (action === "open-static-seat-calibration") {
-    if (!state.isDeveloper || state.view !== "room" || state.sceneId !== "cafe") return;
+    if (!state.isDeveloper || state.view !== "room" || !sharedFocusScene()) return;
     closePersonalCenter();
+    if (PUBLIC_CONFIG.minimalMvp) { minimalUi.editing=true; renderMinimalRoom(); return; }
     state.cafeDebugMode.enabled = false;
     state.cafeSpriteTuning.enabled = false;
     state.staticSeatCalibration.enabled = true;
@@ -5550,7 +5606,7 @@ document.addEventListener("click", async (event) => {
       importLocalHistory();
     }).catch((error) => openAuthGate(error.message || "access_service_unavailable", "enter-island"));
   }
-  if (action === "close-access-overlay") closeAccessOverlay();
+  if (action === "close-access-overlay") { if(state.accessOverlay === "focus-recovery" && state.authPending)return;closeAccessOverlay(); }
   if (action === "toggle-auth-mode") {
     state.authMode = state.authMode === "sign-up" ? "sign-in" : "sign-up";
     state.authError = "";
@@ -6122,6 +6178,7 @@ if (PUBLIC_CONFIG.minimalMvp) {
   preferences.language = "en";
   window.FocusI18n?.setLanguage("en");
 }
+initializeSharedScenes();
 applyPreferencesToState();
 restoreActiveSession();
 render();

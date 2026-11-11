@@ -25,6 +25,7 @@ function harness(functions, overrides = {}) {
     PUBLIC_CONFIG: { minimalMvp: false }, crypto: { randomUUID }, Date, encodeURIComponent,
     onlineUserId: "user-a", focusAuthorizationPromise: null, pendingFocusUpdatePromise: null,
     onlineIdentityPromise: null, accessStatusFetchedAt: 0, lastTick: null,
+    seatReleaseRevision: 0, identity: { sessionId: "current-seat-session" },
     showToast() {}, clearImmersiveAutoEnter() {}, renderAccessOverlay() {}, persistActiveSession() {},
     closePersonalCenter() {}, render() {}, startTicker() {}, updateAudio() {},
     closeAccessOverlay() { context.state.accessOverlay = null; context.state.focusRecovery = null; },
@@ -175,4 +176,33 @@ test('an in-flight pause cannot swallow a later end, and terminal state wins ove
  c.queueFocusUpdate('racing-focus',{status:'ended_early',actualSeconds:21});
  c.queueFocusUpdate('racing-focus',{status:'running',actualSeconds:20});release();await flushing;
  assert.deepEqual(sent,['paused','ended_early']);assert.deepEqual(JSON.parse(c.localStorage.getItem('focusIslandPendingFocusUpdatesV1')),[]);
+});
+
+test("leaving while cloud session validation is pending cannot recover a seat or timer", async () => {
+  let finish; let restores=0;
+  const session={client_session_id:"previous-library",status:"paused",scene_id:"library",room_id:"library-01",seat_id:3,timer_mode:25};
+  const context=harness(["resolvePreviousFocus"],{
+    PUBLIC_CONFIG:{minimalMvp:true},
+    api:()=>new Promise(resolve=>{finish=()=>resolve({session});}),
+    restoreCloudFocusPlace:async()=>{restores++;},
+  });
+  context.state.focusRecovery=session;context.state.accessOverlay="focus-recovery";context.state.view="focus";
+  const pending=context.resolvePreviousFocus(false);
+  context.seatReleaseRevision++;context.state.view="island";context.state.sceneId=null;
+  finish();await pending;
+  assert.equal(restores,0);assert.equal(context.state.view,"island");assert.equal(context.state.cloudFocusClientId,null);assert.equal(context.state.sessionStartedAt,null);assert.equal(context.state.authPending,false);
+});
+
+test("leaving while ending a previous cloud session cannot start a new timer", async () => {
+  let finish;let starts=0;
+  const context=harness(["resolvePreviousFocus"],{
+    PUBLIC_CONFIG:{minimalMvp:true},
+    api:()=>new Promise(resolve=>{finish=()=>resolve({});}),
+    startFocusFromSeat:async()=>{starts++;return true;},
+  });
+  context.state.focusRecovery={client_session_id:"previous-library",actual_seconds:120};context.state.accessOverlay="focus-recovery";context.state.view="focus";
+  const pending=context.resolvePreviousFocus(true);
+  context.seatReleaseRevision++;context.state.view="island";context.state.sceneId=null;
+  finish();await pending;
+  assert.equal(starts,0);assert.equal(context.state.view,"island");assert.equal(context.state.cloudFocusClientId,null);assert.equal(context.state.sessionStartedAt,null);assert.equal(context.state.authPending,false);
 });

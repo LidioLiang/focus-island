@@ -19,7 +19,7 @@ select has_function('public', 'release_session', array['uuid']);
 select has_function('public', 'get_room_state', array['text']);
 select has_function('public', 'cleanup_stale_anonymous_users', array['timestamp with time zone']);
 select results_eq(
-  $$select room_id from public.room_instances order by room_id$$,
+  $$select room_id from public.room_instances where scene_id='cafe' order by room_id$$,
   $$values ('cafe-01'::text),('cafe-02'::text),('cafe-03'::text)$$,
   'three stable cafe rooms are seeded'
 );

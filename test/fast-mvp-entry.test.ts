@@ -13,7 +13,7 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=52/);
+  assert.match(pageSource, /app\.js\?v=53/);
   assert.match(layoutSource, /styles\.css\?v=39/);
   assert.match(source, /language: "en"/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);
@@ -57,7 +57,7 @@ test("personal center language switch enables Chinese and English without a disa
 });
 
 test("production cafe entry allocates a room and opens the static room", () => {
-  assert.match(source, /api\/scenes\/cafe\/allocate/);
+  assert.match(source, /api\/scenes\/\$\{allocationScene\}\/allocate/);
   assert.match(source, /state\.view = roomViewForScene\(\)/);
   assert.match(source, /CAFE_ROOM_RENDERER_STATIC = "static"/);
   assert.match(source, /static-seat-room/);
