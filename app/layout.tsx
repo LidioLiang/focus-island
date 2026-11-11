@@ -39,7 +39,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <link rel="stylesheet" href="/styles.css?v=39" />
         <link rel="stylesheet" href="/landing-final.css?v=2" />
-        <link rel="stylesheet" href="/minimal-mvp.css?v=4" />
+        <link rel="stylesheet" href="/minimal-mvp.css?v=5" />
         <link rel="stylesheet" href="/account-center.css?v=1" />
       </head>
       <body>
@@ -48,7 +48,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <Script src="/locales/en.js?v=13" strategy="beforeInteractive" />
         <Script src="/account-center.js?v=2" strategy="beforeInteractive" />
         <Script src="/scene-runtime.js?v=2" strategy="beforeInteractive" />
-        <Script src="/minimal-mvp.js?v=7" strategy="beforeInteractive" />
+        <Script src="/minimal-mvp.js?v=8" strategy="beforeInteractive" />
         <Script src="/i18n.js?v=12" strategy="afterInteractive" />
       </body>
     </html>
