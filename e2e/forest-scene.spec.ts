@@ -62,7 +62,7 @@ test('resuming an old forest session releases cafe and restores its actual room,
 test('forest has five functional views and non-overlapping mobile seats; switching views preserves the clock and lease',async({page},info)=>{
  const {starts}=await mocks(page);await page.goto('/');await page.locator('[data-place="forest"]').click();
  for(const viewport of [{width:1280,height:720},{width:390,height:844},{width:320,height:568},{width:844,height:300},{width:844,height:390}]){
-  await page.setViewportSize(viewport);await expect(page.locator('button.seat.available')).toHaveCount(6);const boxes=await page.locator('button.seat.available').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}));
+  await page.setViewportSize(viewport);await expect(page.locator('button.seat.available')).toHaveCount(6);await expect(page.locator('.seat-button[data-seat-id="1"]')).toHaveAttribute('style',Math.min(viewport.width,viewport.height*1672/941)<700?/top:58%/:/top:75%/);const boxes=await page.locator('button.seat.available').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}));
   expect(boxes).toHaveLength(6);for(const b of boxes){expect(b.w).toBeGreaterThanOrEqual(44);expect(b.x).toBeGreaterThanOrEqual(0);expect(b.x+b.w).toBeLessThanOrEqual(viewport.width);expect(b.y).toBeGreaterThanOrEqual(0);expect(b.y+b.h).toBeLessThanOrEqual(viewport.height);}
   for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];expect(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y).toBe(true);}
   await page.screenshot({path:info.outputPath(`forest-room-${viewport.width}.png`)});
@@ -87,7 +87,7 @@ test('six forest member avatars remain separate on short and narrow canvases',as
  await mocks(page);await page.route('**/api/rooms/forest-01/state',r=>r.fulfill({json:{serverNow:Date.now(),leases:Array.from({length:6},(_,i)=>({roomId:'forest-01',seatId:i+1,sessionId:'fixture-'+i,displayName:'Test '+i,avatarSkin:i%4,memberType:'human',state:'occupied',activity:'Seated',expiresAt:Date.now()+45000}))}}));
  await page.goto('/');await page.locator('[data-place="forest"]').click();await expect(page.locator('.avatar-marker')).toHaveCount(6);
  for(const viewport of [{width:390,height:844},{width:844,height:300},{width:620,height:900}]){
-  await page.setViewportSize(viewport);const boxes=await page.locator('.avatar-marker').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}));
+  await page.setViewportSize(viewport);await expect(page.locator('.avatar-marker[data-seat-id="1"]')).toHaveAttribute('style',Math.min(viewport.width,viewport.height*1672/941)<700?/top:58%/:/top:72.5%/);const boxes=await page.locator('.avatar-marker').evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};}));
   for(const b of boxes){expect(b.x).toBeGreaterThanOrEqual(0);expect(b.y).toBeGreaterThanOrEqual(0);expect(b.x+b.w).toBeLessThanOrEqual(viewport.width);expect(b.y+b.h).toBeLessThanOrEqual(viewport.height);}
   for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];expect(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y).toBe(true);}
   await page.screenshot({path:info.outputPath(`forest-members-${viewport.width}-${viewport.height}.png`)});
