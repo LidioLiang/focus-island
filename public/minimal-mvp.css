@@ -254,3 +254,20 @@ body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
  .minimal-root[data-view=island] .pin-glyph { top:20px; }
  .minimal-root[data-view=island] .pin-glyph svg { width:16px; height:16px; }
 }
+
+/* Oversized scenery must never turn the viewport into a focus-scroll container. */
+.minimal-root[data-view=island],
+.minimal-root[data-view=island] .world { overflow:clip; }
+/* Only visible header controls intercept input; transparent gaps pass through to pins. */
+.minimal-root[data-view=island] .scene-header { pointer-events:none; }
+.minimal-root[data-view=island] .scene-left,
+.minimal-root[data-view=island] .scene-tools { pointer-events:auto; }
+/* The island has a single fixed settings anchor; keep its panel in the viewport
+   during content replacement, image decode and orientation changes. */
+.minimal-root[data-view=island] .floating-panel {
+ position:absolute; left:auto!important; right:24px!important; top:74px!important;
+ max-height:calc(100dvh - 98px)!important;
+}
+@media(max-width:650px) {
+ .minimal-root[data-view=island] .floating-panel { right:12px!important; top:64px!important; max-height:calc(100dvh - 80px)!important; }
+}
