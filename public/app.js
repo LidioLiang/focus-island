@@ -988,9 +988,11 @@ async function enterCafeRoom() {
   state.isAllocatingRoom = true;
   const allocationScene = state.sceneId || "cafe";
   showToast(PUBLIC_CONFIG.minimalMvp ? `Preparing ${sceneLabel(allocationScene)}…` : "正在为你准备咖啡馆座位…");
+  if (PUBLIC_CONFIG.minimalMvp) setMinimalPending("Preparing your room…");
   let access = null;
   try {
     await ensureOnlineIdentity();
+    if (!PUBLIC_CONFIG.minimalMvp) {
     access = await getAccessStatus({ refresh: Date.now() - accessStatusFetchedAt > 15000 });
     if (!access.authenticated) {
       openAuthGate(access.paywallReason);
@@ -1000,12 +1002,13 @@ async function enterCafeRoom() {
       openPaywall(access.paywallReason);
       return;
     }
-    await ensureOnlineIdentity();
+    }
     const allocation = await api(`/api/scenes/${allocationScene}/allocate`, {
       method: "POST",
       body: JSON.stringify(identityBody()),
     });
     if (state.sceneId !== allocationScene) return;
+    if (allocation.access) { state.accessStatus = allocation.access; accessStatusFetchedAt = Date.now(); }
     state.roomId = allocation.roomId;
     state.localRoom = allocation.mode === "local";
     if (PUBLIC_CONFIG.minimalMvp) { state.offlineFocus = false; state.presenceUnavailable = false; }
@@ -1027,6 +1030,7 @@ async function enterCafeRoom() {
     }
   } finally {
     state.isAllocatingRoom = false;
+    if (PUBLIC_CONFIG.minimalMvp) setMinimalPending(null);
   }
   state.localNpcRoster = createLocalNpcLeases();
   state.roomPresence = state.localRoom
@@ -3932,6 +3936,7 @@ async function occupySelectedSeat() {
   state.isTransitioning = true;
   const targetSeatId = state.selectedSeat + 1;
   const fromSeatId = state.currentSeatId;
+  if (PUBLIC_CONFIG.minimalMvp && typeof setMinimalPending === "function") setMinimalPending(`Preparing seat ${targetSeatId}…`);
   const footerTitle = document.querySelector(".room-footer-copy strong");
   const footerNote = document.querySelector(".room-footer-copy span");
   const sitButton = document.querySelector('[data-action="sit-down"]');
@@ -3964,6 +3969,7 @@ async function occupySelectedSeat() {
         serverNow: Date.now(),
       };
     } else {
+      let confirmation;
       if (fromSeatId) {
         await api(`/api/sessions/${identity.sessionId}/switch-seat`, {
           method: "POST",
@@ -3971,16 +3977,17 @@ async function occupySelectedSeat() {
         });
         state.switchingFromSeatId = fromSeatId;
       } else {
-        await api(`/api/rooms/${currentRoomApiId()}/seats/${targetSeatId}/reserve`, {
+        confirmation = await api(`/api/rooms/${currentRoomApiId()}/seats/${targetSeatId}/reserve`, {
           method: "POST",
-          body: JSON.stringify(identityBody()),
+          body: JSON.stringify(identityBody({ occupyImmediately: Boolean(PUBLIC_CONFIG.minimalMvp) })),
         });
       }
-      await api(`/api/sessions/${identity.sessionId}/occupy`, {
+      if (confirmation?.state !== "occupied") confirmation = await api(`/api/sessions/${identity.sessionId}/occupy`, {
         method: "POST",
         body: JSON.stringify({ roomId: currentRoomApiId(), seatId: targetSeatId }),
       });
-      await syncCafeState({ refreshMarkers: false });
+      if (PUBLIC_CONFIG.minimalMvp && typeof acceptMinimalSeatConfirmation === "function") acceptMinimalSeatConfirmation(confirmation, targetSeatId);
+      else await syncCafeState({ refreshMarkers: false });
     }
     state.currentSeatId = targetSeatId;
     state.switchingFromSeatId = null;
@@ -4017,6 +4024,7 @@ async function occupySelectedSeat() {
       state.view = "focus";
       persistActiveSession(true);
       renderFocus();
+      if (!state.localRoom) void syncCafeState({ refreshMarkers: false });
     } else {
       beginImmersiveAutoEnter();
       renderRoom();
@@ -4030,8 +4038,8 @@ async function occupySelectedSeat() {
     } else {
       showToast("座位连接暂时不稳定，请再试一次");
     }
-    if (!state.localRoom) await syncCafeState();
     renderRoom();
+    if (!state.localRoom) void syncCafeState();
     return;
   }
   state.isTransitioning = false;
@@ -4339,6 +4347,7 @@ async function setTimerMode(mode) {
 }
 
 async function toggleTimer() {
+  if (state.isStartingFocus) return;
   const timerHadStarted = Boolean(state.sessionStartedAt);
   if (state.isRunning) {
     syncTimerFromClock();
@@ -4349,7 +4358,18 @@ async function toggleTimer() {
     if (state.cloudFocusClientId) { queueFocusUpdate(state.cloudFocusClientId, { status: "paused", actualSeconds: state.elapsedSeconds, pausedSeconds: 0 }); void flushPendingFocusUpdates(); }
     sendHeartbeat();
   } else {
-    if (!timerHadStarted && !await authorizeFocusStart()) return;
+    if (!timerHadStarted) {
+      state.isStartingFocus = true;
+      const button = document.querySelector('[data-action="toggle-timer"]');
+      if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); }
+      if (PUBLIC_CONFIG.minimalMvp) setMinimalPending("Starting your focus session…");
+      try { if (!await authorizeFocusStart()) return; }
+      finally {
+        state.isStartingFocus = false;
+        if (button) { button.disabled = false; button.removeAttribute("aria-busy"); }
+        if (PUBLIC_CONFIG.minimalMvp) setMinimalPending(null);
+      }
+    }
     state.isRunning = true;
     state.sessionStartedAt = state.sessionStartedAt || Date.now();
     lastTick = Date.now();
@@ -5169,7 +5189,7 @@ async function copyTextToClipboard(text) {
 }
 
 document.addEventListener("click", async (event) => {
-  const clickedOutsideFocusSettings = state.view === "focus"
+  const clickedOutsideFocusSettings = !PUBLIC_CONFIG.minimalMvp && state.view === "focus"
     && state.sessionPanelOpen
     && !event.target.closest(".session-control-panel")
     && !event.target.closest("[data-action]");

@@ -60,9 +60,9 @@ test("focus records and billing state are private and mutated through RPC or ver
   assert.match(stripeMigration, /check \(provider = 'stripe'\)/);
 });
 
-test("paid access uses a signed 72-hour snapshot and North America deployment region", () => {
+test("paid access uses a signed 72-hour snapshot and API region colocated with the production database", () => {
   assert.match(proxySource, /getClaims\(\)/);
-  assert.deepEqual(vercelConfig.regions, ["iad1"]);
+  assert.deepEqual(vercelConfig.regions, ["sin1"]);
   assert.match(appSource, /plus_monthly/);
   assert.match(appSource, /plus_annual/);
   assert.match(appSource, /founder_lifetime/);

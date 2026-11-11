@@ -146,3 +146,67 @@ test('developer panel can move and collapse while seat six remains draggable',as
  await page.getByRole('button',{name:'Expand layout tools',exact:true}).click();await page.locator('[data-minimal="save-layout"]').click();
  await page.screenshot({path:testInfo.outputPath('seat-six-movable-inspector.png')});
 });
+
+test('native focus controls respond to the first click without rebuilding the panel', async ({page}) => {
+ await mockRooms(page);await page.goto('/');
+ await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();
+ await page.locator('[data-panel="settings"]').click();
+ const control=page.locator('[data-minimal-motion]');
+ await control.evaluate(e=>e.setAttribute('data-click-proof','kept'));
+ await control.click();
+ await expect(control).toBeChecked();await expect(control).toHaveAttribute('data-click-proof','kept');
+ await expect(page.locator('#minimal-panel')).toBeVisible();
+ await page.locator('[data-panel="sound"]').click();
+ const sound=page.getByLabel('White noise',{exact:true});await sound.click();await expect(sound).toBeChecked();
+ await expect(page.locator('#minimal-panel')).toBeVisible();
+});
+
+test('a pressed seat survives the first snapshot and atomic entry does not wait for another snapshot', async ({page}) => {
+ await mockRooms(page);
+ let snapshot: import('@playwright/test').Route|undefined;
+ let claim: import('@playwright/test').Route|undefined;
+ let claims=0,occupies=0;
+ await page.route('**/api/rooms/cafe-01/state',r=>{snapshot=r;});
+ await page.route('**/api/rooms/cafe-01/seats/*/reserve',r=>{claims++;claim=r;});
+ await page.route('**/api/sessions/*/occupy',r=>{occupies++;return r.fulfill({json:{ok:true}});});
+ await page.goto('/');await page.locator('[data-place="cafe"]').click();
+ const seat=page.locator('[data-seat="0"]');await expect(seat).toBeVisible();
+ await expect.poll(()=>Boolean(snapshot)).toBe(true);
+ const box=await seat.boundingBox();if(!box)throw new Error('seat missing');
+ await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
+ await seat.evaluate(e=>e.setAttribute('data-click-proof','kept'));
+ await snapshot!.fulfill({json:{serverNow:Date.now(),leases:[]}});
+ await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+ await expect(seat).toHaveAttribute('data-click-proof','kept');
+ await page.mouse.up();await expect.poll(()=>claims).toBe(1);
+ await expect(page.getByRole('status').filter({hasText:'Preparing seat 1'})).toBeVisible();
+ await expect(seat).toBeDisabled();await expect(page.locator('[data-session-clock]')).toHaveCount(0);
+ await seat.dispatchEvent('click');expect(claims).toBe(1);
+ expect(claim!.request().postDataJSON().occupyImmediately).toBe(true);
+ await claim!.fulfill({json:{ok:true,state:'occupied',roomId:'cafe-01',seatId:1,expiresAt:Date.now()+45000}});
+ await expect(page.locator('[data-session-clock]')).toHaveText('25:00');expect(occupies).toBe(0);
+ // The background snapshot deliberately remains pending throughout this assertion.
+});
+
+test('a rejected atomic seat claim stays in the room and allows another seat', async ({page}) => {
+ await mockRooms(page);let calls=0;
+ await page.route('**/api/rooms/cafe-01/seats/*/reserve',r=>{
+  calls++;return calls===1?r.fulfill({status:409,json:{error:'seat_taken'}}):r.fulfill({json:{ok:true,state:'occupied',roomId:'cafe-01',seatId:2}});
+ });
+ await page.goto('/');await page.locator('[data-place="cafe"]').click();await page.locator('[data-seat="0"]').click();
+ await expect(page.locator('[data-session-clock]')).toHaveCount(0);await expect(page.locator('[data-seat="1"]')).toBeEnabled();
+ await page.locator('[data-seat="1"]').click();await expect(page.locator('[data-session-clock]')).toHaveText('25:00');expect(calls).toBe(2);
+});
+
+test('slow start gives immediate feedback and ignores repeat clicks and navigation', async ({page}) => {
+ await mockRooms(page);let start:import('@playwright/test').Route|undefined;let starts=0;
+ await page.route('**/api/focus/sessions/start',r=>{starts++;start=r;});
+ await page.goto('/');await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();
+ const button=page.getByRole('button',{name:'Start',exact:true});await button.click();
+ await expect.poll(()=>starts).toBe(1);await expect(button).toBeDisabled();
+ await expect(page.getByRole('status').filter({hasText:'Starting your focus session'})).toBeVisible();
+ await button.dispatchEvent('click');await page.locator('[data-minimal="back-room"]').click();
+ await expect(page.locator('[data-session-clock]')).toBeVisible();expect(starts).toBe(1);
+ await start!.fulfill({json:{session:{status:'running'}}});
+ await page.locator('.time-readout').hover();await expect(page.getByRole('button',{name:'Pause',exact:true})).toBeVisible();expect(starts).toBe(1);
+});

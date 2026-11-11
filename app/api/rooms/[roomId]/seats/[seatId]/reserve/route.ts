@@ -6,11 +6,12 @@ export async function POST(request: Request, context: { params: Promise<{ roomId
   const { roomId, seatId: rawSeatId } = await context.params;
   const seatId = Number(rawSeatId);
   if (!validRoom(roomId) || !validSeat(seatId)) return json({ error: "invalid_room_or_seat" }, { status: 404 });
-  const identity = parseIdentity(await request.json().catch(() => null));
+  const body = await request.json().catch(() => null);
+  const identity = parseIdentity(body);
   if (!identity) return json({ error: "invalid_identity" }, { status: 400 });
   const auth = await authenticatedSupabase();
   if (!auth) return json({ error: "authentication_required" }, { status: 401 });
-  const { data, error } = await auth.supabase.rpc("reserve_seat", {
+  const { data, error } = await auth.supabase.rpc(body?.occupyImmediately === true ? "reserve_and_occupy_seat" : "reserve_seat", {
     p_room_id: roomId, p_seat_id: seatId, p_session_id: identity.sessionId,
     p_display_name: identity.displayName, p_avatar_skin: identity.avatarSkin, p_activity: identity.activity,
   });
