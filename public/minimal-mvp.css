@@ -224,7 +224,7 @@ body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
 /* The island camera crops peripheral sky/sea; art and hotspots share one canvas. */
 .minimal-root[data-view=island] .island-canvas {
  position:absolute; left:50%; top:50%;
- width:max(100vw,100dvh,min(145vw,205dvh)); aspect-ratio:1;
+ width:max(100vw,calc(100dvh * 1672 / 941)); aspect-ratio:1672/941;
  transform:translate(-50%,-50%);
 }
 .minimal-root[data-view=island] .island-panorama {
@@ -270,4 +270,10 @@ body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
 }
 @media(max-width:650px) {
  .minimal-root[data-view=island] .floating-panel { right:12px!important; top:64px!important; max-height:calc(100dvh - 80px)!important; }
+}
+
+/* Wider framing preserves the mountain and shore without the old square zoom. */
+@media(min-aspect-ratio:2/1) {
+ .minimal-root[data-view=island] .island-canvas { width:max(100vw,calc(100dvh * 1586 / 992)); aspect-ratio:1586/992; top:40%; transform:translate(-50%,-40%); }
+ .minimal-root[data-view=island] .map-pin { left:var(--wide-x); top:var(--wide-y); }
 }

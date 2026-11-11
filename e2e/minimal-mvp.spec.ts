@@ -217,10 +217,13 @@ test('island artwork fills portrait, desktop and ultrawide screens without blur 
   await page.setViewportSize({width,height});
   const art=page.locator('.island-panorama');
   await expect(art).toBeVisible();await expect.poll(()=>art.evaluate((e:HTMLImageElement)=>e.complete&&e.naturalWidth>0)).toBe(true);
-  const image=await art.evaluate((e:HTMLImageElement)=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,filter:getComputedStyle(e).filter,src:e.currentSrc};});
+  const image=await art.evaluate((e:HTMLImageElement)=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,filter:getComputedStyle(e).filter,src:e.currentSrc,width:r.width,naturalWidth:e.naturalWidth};});
   expect(image.x).toBeLessThanOrEqual(1);expect(image.y).toBeLessThanOrEqual(1);
   expect(image.right).toBeGreaterThanOrEqual(width-1);expect(image.bottom).toBeGreaterThanOrEqual(height-1);
-  expect(image.filter).toBe('none');expect(image.src).toContain(height>width?'expanded-portrait.webp':'expanded-square.webp');
+  expect(image.filter).toBe('none');expect(image.src).toContain(height>width?'expanded-portrait.webp':width/height>=2?'detail-wide.webp':'detail-landscape.webp');
+  // Guard against restoring the oversized square camera that caused the blur.
+  if(width===1920){expect(image.naturalWidth).toBeGreaterThanOrEqual(1672);expect(image.width/image.naturalWidth).toBeLessThan(1.16);}
+  if(width===3440){expect(image.naturalWidth).toBeGreaterThanOrEqual(1586);expect(image.width).toBeLessThanOrEqual(width+1);}
   await expect(page.locator('.scene-atmosphere')).toHaveCount(0);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   const pins=await page.locator('[data-place]').evaluateAll(nodes=>nodes.map(node=>{
