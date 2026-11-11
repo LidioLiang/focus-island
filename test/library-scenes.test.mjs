@@ -9,7 +9,7 @@ const ast=ts.createSourceFile('scene.js',src,ts.ScriptTarget.Latest,true,ts.Scri
 const functions=names=>names.map(name=>ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name.text===name).getText(ast)).join('\n');
 function context(extra={}){return vm.createContext({PUBLIC_CONFIG:{minimalMvp:true,sceneCatalog:catalog},state:{sceneId:'library'},preferences:{rememberLastFocusView:true},MINIMAL_LAYOUT_KEY:'layout',staticSeatSlots:[],...extra});}
 test('per-scene seat defaults and remembered views never leak across places',()=>{
- const c=context();vm.runInContext(functions(['focusSceneDefinition','sceneDefaultFocusView','sceneLayoutStorageKey']),c);
+ const c=context();vm.runInContext(functions(['focusSceneDefinition','sceneDefaultFocusView','sceneUsesCompactLayout','sceneLayoutStorageKey']),c);
  assert.equal(c.sceneDefaultFocusView(1),'window');assert.equal(c.sceneDefaultFocusView(3),'reading');assert.equal(c.sceneDefaultFocusView(6),'alcove');
  c.preferences.sceneViews={cafe:'mist',library:'reading'};assert.equal(c.sceneDefaultFocusView(6),'reading');assert.equal(c.sceneLayoutStorageKey(),'layout:library');
  c.state.sceneId='cafe';assert.equal(c.sceneDefaultFocusView(3),'mist');assert.equal(c.sceneLayoutStorageKey(),'layout');
@@ -33,7 +33,7 @@ test('a late library ambience decode cannot play after mute or scene change',asy
 
 test('shared runtime is loaded before minimal UI and app boot',async()=>{
  const layout=await readFile(new URL('../app/layout.tsx',import.meta.url),'utf8');
- assert.match(layout,/<Script src="\/scene-runtime.js\?v=1" strategy="beforeInteractive"/);
+ assert.match(layout,/<Script src="\/scene-runtime.js\?v=2" strategy="beforeInteractive"/);
  assert.ok(layout.indexOf('/scene-runtime.js')<layout.indexOf('/minimal-mvp.js'));
 });
 test('late recovery is drained before release and cannot restore the ended seat',async()=>{
@@ -96,4 +96,44 @@ for(const localOrigin of [false,true])for(const fail of [false,true])test(`exiti
  assert.equal(order.length,firstReleases.length);finish();await rejected;await leaving;
  assert.deepEqual(order,[...firstReleases,'/api/sessions/library-lease/release']);
  assert.equal(c.state.sceneId,null);assert.equal(c.state.currentSeatId,null);assert.equal(c.state.view,'island');assert.equal(c.seatRecoveryPromise,null);
+});
+
+test('forest uses shared room dispatch, its own six seats, three defaults and isolated layout',()=>{
+ const c=context({state:{sceneId:'forest'}});vm.runInContext(functions(['focusSceneDefinition','sharedFocusScene','sceneSeatSlots','sceneDefaultFocusView','sceneUsesCompactLayout','sceneLayoutStorageKey','rememberSceneFocusView']),c);
+ assert.equal(c.sharedFocusScene(),true);assert.equal(c.sceneLayoutStorageKey(),'layout:forest');assert.equal(c.sceneSeatSlots().length,6);
+ assert.deepEqual([1,2,3,4,5,6].map(x=>c.sceneDefaultFocusView(x)),['root','root','deep','deep','fern','fern']);
+ c.preferences.sceneViews={cafe:'snow',library:'alcove',forest:'mist'};assert.equal(c.sceneDefaultFocusView(1),'mist');
+ c.state.focusImageChoice='sun';c.rememberSceneFocusView();assert.equal(c.preferences.sceneViews.library,'alcove');assert.equal(c.preferences.sceneViews.cafe,'snow');
+ c.preferences.rememberLastFocusView=false;assert.equal(c.sceneDefaultFocusView(6),'fern');
+ c.state.sceneId='snow';assert.equal(c.sharedFocusScene(),false);
+});
+
+test('switching from a pending library decode starts forest audio without reviving library',async()=>{
+ const decodes=[];const sources=[];
+ const audio={state:'running',currentTime:0,destination:{},createGain:()=>({gain:{value:0,cancelScheduledValues(){},setValueAtTime(){},setTargetAtTime(){}},connect(){}}),decodeAudioData:()=>new Promise(r=>decodes.push(r)),createBufferSource:()=>{const s={connect(){},start(){sources.push(this.buffer);},stop(){}};return s;}};
+ const c=context({audioContext:audio,fetch:async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(2)})});
+ c.state.isRunning=true;c.state.sounds={ambient:true};c.state.soundVolumes={ambient:25};
+ vm.runInContext(src.slice(src.indexOf('let sceneAmbience')),c);vm.runInContext(functions(['focusSceneDefinition']),c);
+ const first=c.syncSceneAmbience();await new Promise(r=>setImmediate(r));c.state.sceneId='forest';const second=c.syncSceneAmbience();await new Promise(r=>setImmediate(r));
+ assert.equal(decodes.length,2);decodes[1]('forest-buffer');await second;decodes[0]('library-buffer');await first;assert.deepEqual(sources,['forest-buffer']);
+ c.state.sounds.ambient=false;await c.syncSceneAmbience();assert.equal(sources.length,1);
+});
+
+for(const sceneId of ['cafe','library','forest'])test(`${sceneId} seat selection reserves and occupies before entering focus`,async()=>{
+ const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');const tree=ts.createSourceFile('app.js',app,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+ const calls=[];const c=context({state:{sceneId,selectedSeat:2,currentSeatId:null,roomId:sceneId+'-01',localRoom:false,view:'room'},scenes:{[sceneId]:{id:sceneId}},identity:{sessionId:'lease'},preferences:{defaultTimerMode:25,rememberLastSound:true},document:{querySelector:()=>null,querySelectorAll:()=>[]},api:async(path)=>{calls.push(path);},identityBody:()=>({}),currentRoomApiId:()=>sceneId+'-01',syncCafeState:async()=>{},stopTicker(){},DEFAULT_REST_MINUTES:5,lastTick:0,localStorage:{removeItem(){}},STORAGE_KEYS:{activeSession:'active'},clearImmersiveAutoEnter(){},persistActiveSession(){},renderFocus(){calls.push('render-focus');},render(){calls.push('WRONG-LEGACY');},renderRoom(){},showToast(){}});
+ vm.runInContext(functions(['focusSceneDefinition','sharedFocusScene','sceneDefaultFocusView'])+'\n'+tree.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name.text==='occupySelectedSeat').getText(tree),c);
+ await c.occupySelectedSeat();assert.deepEqual(calls,[`/api/rooms/${sceneId}-01/seats/3/reserve`,'/api/sessions/lease/occupy','render-focus']);assert.equal(c.state.currentSeatId,3);assert.equal(c.state.isRunning,false);assert.equal(c.state.focusImageChoice,{cafe:'window',library:'reading',forest:'deep'}[sceneId]);
+});
+
+test('forest and library custom ambience do not mix the cafe noise channel',async()=>{
+ const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');const tree=ts.createSourceFile('app.js',app,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);const levels=[];
+ const c=context({initAudio(){},audioContext:{resume(){},currentTime:0},noiseGain:{gain:{setTargetAtTime:v=>levels.push(v)}},whiteNoiseGain:null,noiseFilter:null,CAFE_AMBIENT_GAIN:.09,updateMusicAudio(){},syncSceneAmbience(){}});
+ c.state.sounds={ambient:true};c.state.soundVolumes={ambient:50};vm.runInContext(functions(['focusSceneDefinition'])+'\n'+tree.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name.text==='updateAudio').getText(tree),c);
+ for(const id of ['library','forest','cafe']){c.state.sceneId=id;c.updateAudio();}assert.deepEqual(levels,[0,0,.045]);
+});
+
+test('forest desktop and compact layout keys are isolated while existing scene keys stay compatible',()=>{
+ const c=context({state:{sceneId:'forest'},window:{innerWidth:1440}});vm.runInContext(functions(['focusSceneDefinition','sceneUsesCompactLayout','sceneLayoutStorageKey']),c);
+ assert.equal(c.sceneLayoutStorageKey(),'layout:forest');c.window.innerWidth=844;c.window.innerHeight=300;assert.equal(c.sceneLayoutStorageKey(),'layout:forest:compact');c.window.innerWidth=390;assert.equal(c.sceneLayoutStorageKey(),'layout:forest:compact');c.state.sceneId='library';assert.equal(c.sceneLayoutStorageKey(),'layout:library');c.state.sceneId='cafe';assert.equal(c.sceneLayoutStorageKey(),'layout');
 });

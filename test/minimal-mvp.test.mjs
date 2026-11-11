@@ -15,7 +15,7 @@ test('layout validation rejects corrupted, incomplete and out-of-bounds position
 });
 test('avatar and seat button adjustments remain independent and cannot be edited by ordinary accounts',()=>{
  const slot={seat_id:1,avatar_anchor:[20,30],hit_area:[40,50]};
- const c=vm.createContext({minimalUi:{layout:{},layoutScene:'cafe',seat:1,target:'avatar',editing:true},state:{isDeveloper:true},staticSeatSlots:[slot],sceneSeatSlots:()=>[slot],sceneLayoutStorageKey:()=>"layout",minimalUpdateLayoutFields(){},document:{querySelector(){return null;}},localStorage:{getItem(){return null;}}});
+ const c=vm.createContext({minimalUi:{layout:{},layoutScene:'cafe',seat:1,target:'avatar',editing:true},state:{isDeveloper:true},staticSeatSlots:[slot],sceneSeatSlots:()=>[slot],sceneLayoutStorageKey:()=>"layout",sceneUsesCompactLayout:()=>false,minimalUpdateLayoutFields(){},document:{querySelector(){return null;}},localStorage:{getItem(){return null;}}});
  vm.runInContext([fn('minimalSeatPosition'),fn('minimalMoveMarker')].join('\n'),c);
  c.minimalMoveMarker(25,35);assert.deepEqual(Array.from(c.minimalUi.layout[1].button),[40,50]);assert.deepEqual(Array.from(c.minimalUi.layout[1].avatar),[25,35]);
  c.state.isDeveloper=false;c.minimalMoveMarker(70,80);assert.deepEqual(Array.from(c.minimalUi.layout[1].avatar),[25,35]);

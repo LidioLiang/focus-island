@@ -233,5 +233,131 @@
     "ambientAsset": "/assets/audio/20261110-library-room-tone.wav",
     "ambientGain": 0.16,
     "filter": 340
+  },
+  "forest": {
+    "id": "forest",
+    "label": "Forest",
+    "enabled": true,
+    "roomImage": "/assets/20261111-forest-room-six-seats.webp",
+    "designSize": [
+      1672,
+      941
+    ],
+    "onlineRooms": [
+      "forest-01",
+      "forest-02",
+      "forest-03"
+    ],
+    "seats": [
+      {
+        "seat_id": 1,
+        "avatar_anchor": [
+          24.7,
+          72.5
+        ],
+        "hit_area": [
+          24.7,
+          75
+        ],
+        "desk_zone_id": "root"
+      },
+      {
+        "seat_id": 2,
+        "avatar_anchor": [
+          32.2,
+          72.5
+        ],
+        "hit_area": [
+          32.2,
+          75
+        ],
+        "desk_zone_id": "root"
+      },
+      {
+        "seat_id": 3,
+        "avatar_anchor": [
+          45.2,
+          72.5
+        ],
+        "hit_area": [
+          45.2,
+          75
+        ],
+        "desk_zone_id": "deep"
+      },
+      {
+        "seat_id": 4,
+        "avatar_anchor": [
+          53.9,
+          72.5
+        ],
+        "hit_area": [
+          53.9,
+          75
+        ],
+        "desk_zone_id": "deep"
+      },
+      {
+        "seat_id": 5,
+        "avatar_anchor": [
+          67.6,
+          72.5
+        ],
+        "hit_area": [
+          67.6,
+          75
+        ],
+        "desk_zone_id": "fern"
+      },
+      {
+        "seat_id": 6,
+        "avatar_anchor": [
+          75.8,
+          72.5
+        ],
+        "hit_area": [
+          75.8,
+          75
+        ],
+        "desk_zone_id": "fern"
+      }
+    ],
+    "focusViews": [
+      {
+        "id": "root",
+        "label": "Rootside Desk",
+        "image": "/assets/20261111-forest-root-focus.webp",
+        "thumbnail": "/assets/20261111-forest-root-thumb.webp"
+      },
+      {
+        "id": "deep",
+        "label": "Deep Forest Desk",
+        "image": "/assets/20261111-forest-deep-focus.webp",
+        "thumbnail": "/assets/20261111-forest-deep-thumb.webp"
+      },
+      {
+        "id": "fern",
+        "label": "Glowing Ferns",
+        "image": "/assets/20261111-forest-fern-focus.webp",
+        "thumbnail": "/assets/20261111-forest-fern-thumb.webp"
+      },
+      {
+        "id": "sun",
+        "label": "Sunlit Canopy",
+        "image": "/assets/20261111-forest-sun-focus.webp",
+        "thumbnail": "/assets/20261111-forest-sun-thumb.webp"
+      },
+      {
+        "id": "mist",
+        "label": "Misty Woodland",
+        "image": "/assets/20261111-forest-mist-focus.webp",
+        "thumbnail": "/assets/20261111-forest-mist-thumb.webp"
+      }
+    ],
+    "ambientLabel": "Forest breeze",
+    "ambientAsset": "/assets/audio/20261111-forest-breeze.wav",
+    "ambientGain": 0.22,
+    "ambientVolume": 35,
+    "filter": 820
   }
 }

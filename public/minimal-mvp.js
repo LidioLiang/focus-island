@@ -34,12 +34,19 @@ function validMinimalLayout(value) {
 }
 
 function minimalSeatPosition(slot, target) {
-  if (!minimalUi.layout || minimalUi.layoutScene !== (state.sceneId || "cafe")) {
+  if (!minimalUi.layout || minimalUi.layoutScene !== (state.sceneId || "cafe") || minimalUi.layoutKey !== sceneLayoutStorageKey()) {
     minimalUi.layoutScene = state.sceneId || "cafe";
+    minimalUi.layoutKey = sceneLayoutStorageKey();
     try { const saved = JSON.parse(localStorage.getItem(sceneLayoutStorageKey()) || "null"); minimalUi.layout = validMinimalLayout(saved) ? saved : {}; }
     catch (_) { minimalUi.layout = {}; }
   }
-  return minimalUi.layout[slot.seat_id]?.[target] || (target === "avatar" ? slot.avatar_anchor : slot.hit_area);
+  const custom = minimalUi.layout[slot.seat_id]?.[target];
+  if (custom) return custom;
+  const point = target === "avatar" ? slot.avatar_anchor : slot.hit_area;
+  // Stagger the six controls on compact forest canvases. The editor sees the same
+  // coordinates as visitors, and explicitly saved coordinates always win.
+  return sceneUsesCompactLayout()
+    ? [point[0], slot.seat_id % 2 ? 58 : 90] : point;
 }
 
 function minimalTool(panel, name, avatar = false) {
@@ -51,7 +58,7 @@ function minimalHeader(view) {
   const left = view === "island" ? '<span class="wordmark">Focus Isle</span>' : `<button type="button" class="back-button" data-minimal="${view === "focus" ? "back-room" : "back-island"}" aria-label="${view === "focus" ? "Back to room" : "Back to island"}">${minimalIcon("back")}</button>${view === "room" ? `<span class="room-title">${escapeHtml(sceneLabel())}</span>` : ""}`;
   const tools = view === "focus"
     ? minimalTool("scene", "Scene") + minimalTool("sound", "Sound") + minimalTool("settings", "Settings") + minimalTool("avatar", "Your avatar", true)
-    : (view !== "island" ? minimalTool("sound", "Sound") : "") + minimalTool("settings", "Settings");
+    : (view !== "island" ? minimalTool("sound", "Sound") : "") + minimalTool("settings", "Settings") + (view === "room" ? minimalTool("avatar", "Your avatar", true) : "");
   return `<header class="scene-header chrome"><div class="scene-left">${left}</div><nav class="scene-tools" aria-label="View controls">${tools}</nav></header>`;
 }
 
@@ -73,7 +80,7 @@ function minimalShell(view, content) {
 }
 
 function renderMinimalIsland() {
-  const pins = [["cafe","coffee","Four Seasons Café",28,49,true],["library","book","Academy Library",48,26,Boolean(PUBLIC_CONFIG.sceneCatalog?.library?.enabled)],["forest","forest","Forest",69,44,false],["lakeside","lake","Lakeside",53,61,false],["seaside","sea","Seaside",79,77,false],["snow","mountain","Snowy Mountains",84,20,false]];
+  const pins = [["cafe","coffee","Four Seasons Café",28,49,true],["library","book","Academy Library",48,26,Boolean(PUBLIC_CONFIG.sceneCatalog?.library?.enabled)],["forest","forest","Forest",69,44,Boolean(PUBLIC_CONFIG.sceneCatalog?.forest?.enabled)],["lakeside","lake","Lakeside",53,61,false],["seaside","sea","Seaside",79,77,false],["snow","mountain","Snowy Mountains",84,20,false]];
   minimalShell("island", `${minimalBackdrop(islandImage)}<div class="scene-art" style="background-image:url('${islandImage}')"></div><div class="scene-veil"></div><div class="scene-markers">${pins.map(([id,icon,name,x,y,open]) => `<button type="button" class="map-pin ${open ? "" : "future"}" data-minimal="place" data-place="${id}" data-place-name="${name}" data-open="${open}" style="left:${x}%;top:${y}%" aria-label="${name}, ${open ? "Open now" : "Coming soon"}">${minimalMapPin(icon)}</button>`).join("")}</div>${Boolean(PUBLIC_CONFIG.sceneCatalog?.[localStorage.getItem("focusIslandLastPlaceV1")]?.enabled) ? '<button class="minimal-return" type="button" data-minimal="return-place">Return to your quiet corner</button>' : ""}<footer class="minimal-legal"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>`);
 }
 
@@ -90,7 +97,7 @@ function minimalAvatarMarkup() {
     const label = ghost ? "Layout sample" : mine ? "You" : lease.memberType === "npc" ? "Islander" : focusing ? "Focusing" : "Seated";
     const [x,y] = minimalSeatPosition(slot, "avatar");
     const edit = minimalUi.editing && state.isDeveloper;
-    return `<button type="button" class="avatar-marker ${focusing ? "rippling" : ""} ${ghost ? "ghost" : ""} ${mine ? "is-mine" : ""}" data-minimal="${edit ? "select-marker" : "avatar-info"}" ${edit ? `data-layout-target="avatar" data-layout-seat="${slot.seat_id}"` : ""} style="left:${x}%;top:${y}%" aria-label="Seat ${slot.seat_id}: ${escapeHtml((mine?identity.displayName:lease?.displayName || label)+" · "+label)}"><img src="${escapeHtml(accountAvatar(mine ? identity : {avatarSkin:lease?.avatarSkin,avatarUrl:lease?.avatarUrl}))}" alt=""><span class="seat-caption">${label}</span></button>`;
+    return `<button type="button" class="avatar-marker ${focusing ? "rippling" : ""} ${ghost ? "ghost" : ""} ${mine ? "is-mine" : ""}" data-minimal="${edit ? "select-marker" : "avatar-info"}" ${edit ? `data-layout-target="avatar" data-layout-seat="${slot.seat_id}"` : ""} data-seat-id="${slot.seat_id}" style="left:${x}%;top:${y}%" aria-label="Seat ${slot.seat_id}: ${escapeHtml((mine?identity.displayName:lease?.displayName || label)+" · "+label)}"><img src="${escapeHtml(accountAvatar(mine ? identity : {avatarSkin:lease?.avatarSkin,avatarUrl:lease?.avatarUrl}))}" alt=""><span class="seat-caption">${label}</span></button>`;
   }).join("");
 }
 
@@ -100,7 +107,7 @@ function minimalButtonMarkup() {
     const edit = minimalUi.editing && state.isDeveloper;
     if (lease && !edit) return "";
     const [x,y] = minimalSeatPosition(slot, "button");
-    return `<button type="button" class="seat-button seat ${lease ? "occupied" : "available"}" ${edit ? `data-minimal="select-marker" data-layout-target="button" data-layout-seat="${slot.seat_id}"` : `data-seat="${slot.seat_id - 1}"`} style="left:${x}%;top:${y}%" ${(state.isTransitioning || state.presenceUnavailable) && !edit ? "disabled" : ""} aria-label="${edit ? "Position seat button" : "Choose seat"} ${slot.seat_id}">${minimalIcon("plus")}</button>`;
+    return `<button type="button" class="seat-button seat ${lease ? "occupied" : "available"}" ${edit ? `data-minimal="select-marker" data-layout-target="button" data-layout-seat="${slot.seat_id}"` : `data-seat="${slot.seat_id - 1}"`} data-seat-id="${slot.seat_id}" style="left:${x}%;top:${y}%" ${(state.isTransitioning || state.presenceUnavailable) && !edit ? "disabled" : ""} aria-label="${edit ? "Position seat button" : "Choose seat"} ${slot.seat_id}">${minimalIcon("plus")}</button>`;
   }).join("");
 }
 
@@ -157,7 +164,7 @@ function minimalRenderPanel() {
     const avatar=AVATAR_OPTIONS.find(a=>a.id===Number(identity.avatarSkin))||AVATAR_OPTIONS[0];
     body=minimalPanelHeading("Your avatar")+`<div class="profile-sample"><img src="${avatar.image}" alt="Your illustrated avatar"><span>You</span></div><label class="minimal-select-label">Display name<input class="name-input" data-minimal-name maxlength="24" value="${escapeHtml(localizedIdentityDisplayName(identity.displayName))}"></label><button class="minimal-panel-link" type="button" data-minimal="save-name">Save name</button>`;
   }else{
-    body=minimalPanelHeading("Scene")+(focusSceneDefinition()?.focusViews || []).filter(view=>!view.hidden).map(view=>`<button type="button" class="scene-choice" data-minimal-scene="${view.id}" aria-pressed="${state.focusImageChoice===view.id}"><img src="${view.image}" alt="" loading="lazy"><span>${view.label}</span>${state.focusImageChoice===view.id?minimalIcon("check"):""}</button>`).join("");
+    body=minimalPanelHeading("Scene")+(focusSceneDefinition()?.focusViews || []).filter(view=>!view.hidden).map(view=>`<button type="button" class="scene-choice" data-minimal-scene="${view.id}" aria-pressed="${state.focusImageChoice===view.id}"><img src="${view.thumbnail || view.image}" alt="" loading="lazy"><span>${view.label}</span>${state.focusImageChoice===view.id?minimalIcon("check"):""}</button>`).join("");
   }
   box.innerHTML=body;
   const active=document.querySelector(`[data-minimal="panel"][data-panel="${minimalUi.panel}"]`);
@@ -176,7 +183,7 @@ function minimalRenderConfirm(){
   layer.querySelector('button')?.focus();
 }
 
-function minimalLayoutTools(){return `<section class="minimal-layout-tools ${minimalUi.layoutCollapsed ? "is-collapsed" : ""}" aria-label="Developer seat layout"><header data-layout-panel-handle tabindex="0" aria-label="Move layout panel"><strong>${minimalIcon('move')}Developer layout</strong><div><button type="button" data-minimal="collapse-layout" aria-label="${minimalUi.layoutCollapsed ? 'Expand' : 'Collapse'} layout tools" aria-expanded="${!minimalUi.layoutCollapsed}">${minimalIcon(minimalUi.layoutCollapsed ? 'plus' : 'minus')}</button><button type="button" data-minimal="layout" aria-label="Close layout tools">${minimalIcon('close')}</button></div></header><div class="minimal-layout-body"><div class="minimal-layout-row"><label>Seat<select data-layout-select aria-label="Layout seat">${sceneSeatSlots().map(s=>`<option value="${s.seat_id}" ${s.seat_id===minimalUi.seat?'selected':''}>${s.seat_id}</option>`).join('')}</select></label><div class="segmented"><button type="button" data-layout-kind="avatar" aria-pressed="${minimalUi.target==='avatar'}">Avatar</button><button type="button" data-layout-kind="button" aria-pressed="${minimalUi.target==='button'}">Seat button</button></div><label>X<input type="number" data-layout-x step=".1" min="0" max="100" aria-label="Horizontal position"></label><label>Y<input type="number" data-layout-y step=".1" min="0" max="100" aria-label="Vertical position"></label></div><div class="minimal-layout-row"><button type="button" data-minimal="save-layout">Save layout</button><button type="button" data-minimal="export-layout">Export layout</button><button type="button" data-minimal="reset-layout">Reset layout</button></div><small>Drag this panel to move it. Drag markers or use arrow keys. Save applies on this browser.</small></div></section>`;}
+function minimalLayoutTools(){return `<section class="minimal-layout-tools ${minimalUi.layoutCollapsed ? "is-collapsed" : ""}" aria-label="Developer seat layout"><header data-layout-panel-handle tabindex="0" aria-label="Move layout panel"><strong>${minimalIcon('move')}Developer layout</strong><div><button type="button" data-minimal="collapse-layout" aria-label="${minimalUi.layoutCollapsed ? 'Expand' : 'Collapse'} layout tools" aria-expanded="${!minimalUi.layoutCollapsed}">${minimalIcon(minimalUi.layoutCollapsed ? 'plus' : 'minus')}</button><button type="button" data-minimal="layout" aria-label="Close layout tools">${minimalIcon('close')}</button></div></header><div class="minimal-layout-body"><div class="minimal-layout-row"><label>Seat<select data-layout-select aria-label="Layout seat">${sceneSeatSlots().map(s=>`<option value="${s.seat_id}" ${s.seat_id===minimalUi.seat?'selected':''}>${s.seat_id}</option>`).join('')}</select></label><div class="segmented"><button type="button" data-layout-kind="avatar" aria-pressed="${minimalUi.target==='avatar'}">Avatar</button><button type="button" data-layout-kind="button" aria-pressed="${minimalUi.target==='button'}">Seat button</button></div><label>X<input type="number" data-layout-x step=".1" min="0" max="100" aria-label="Horizontal position"></label><label>Y<input type="number" data-layout-y step=".1" min="0" max="100" aria-label="Vertical position"></label></div><div class="minimal-layout-row"><button type="button" data-minimal="save-layout">Save layout</button><button type="button" data-minimal="export-layout">Export layout</button><button type="button" data-minimal="reset-layout">Reset layout</button></div><small>Drag this panel to move it. Drag markers or use arrow keys. Save applies on this browser. Forest keeps separate desktop and compact layouts.</small></div></section>`;}
 
 function minimalPositionLayoutPanel(position = minimalUi.panelPosition) {
   const panel = document.querySelector('.minimal-layout-tools');
@@ -255,7 +262,7 @@ document.addEventListener('click',async event=>{
   if(action==='select-marker'){if(!state.isDeveloper)return;minimalUi.seat=Number(node.dataset.layoutSeat);minimalUi.target=node.dataset.layoutTarget;minimalUpdateLayoutFields();return;}
   if(action==='save-layout'){if(!state.isDeveloper)return;const layout=Object.fromEntries(sceneSeatSlots().map(s=>[s.seat_id,{avatar:[...minimalSeatPosition(s,'avatar')],button:[...minimalSeatPosition(s,'button')]}]));localStorage.setItem(sceneLayoutStorageKey(),JSON.stringify(layout));showToast('Layout saved on this browser.');return;}
   if(action==='reset-layout'){if(!state.isDeveloper)return;minimalUi.layout={};localStorage.removeItem(sceneLayoutStorageKey());refreshMinimalSeats();return;}
-  if(action==='export-layout'){if(!state.isDeveloper)return;const text=JSON.stringify({sceneId:state.sceneId,layoutVersion:1,designSize:focusSceneDefinition()?.designSize,seats:Object.fromEntries(sceneSeatSlots().map(s=>[s.seat_id,{avatar:minimalSeatPosition(s,'avatar'),button:minimalSeatPosition(s,'button')}]))}),blob=new Blob([text],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`focus-isle-${state.sceneId}-seat-layout.json`;link.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);return;}
+  if(action==='export-layout'){if(!state.isDeveloper)return;const text=JSON.stringify({sceneId:state.sceneId,layoutVersion:1,viewport:sceneUsesCompactLayout()?'compact':'desktop',designSize:focusSceneDefinition()?.designSize,seats:Object.fromEntries(sceneSeatSlots().map(s=>[s.seat_id,{avatar:minimalSeatPosition(s,'avatar'),button:minimalSeatPosition(s,'button')}]))}),blob=new Blob([text],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`focus-isle-${state.sceneId}-seat-layout.json`;link.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);return;}
   if(action==='save-name'){const n=document.querySelector('[data-minimal-name]');const value=n?.value.trim();if(value){identity.displayName=value.slice(0,24);persistIdentity();showToast('Name saved.');}return;}
   if(action==='mute'){state.sounds={ambient:false,white:false,music:false};muteAllAudioImmediately();saveSoundPreferencesFromState();minimalRenderPanel();return;}
 });
@@ -307,3 +314,5 @@ document.addEventListener('submit',event=>{
 window.addEventListener('offline',()=>{if(window.__FOCUS_ISLAND_CONFIG__?.minimalMvp&&!state.localRoom){state.presenceUnavailable=true;refreshMinimalSeats();}});
 
 window.addEventListener("resize",()=>{if(window.__FOCUS_ISLAND_CONFIG__?.minimalMvp && document.querySelector(".minimal-layout-tools"))minimalPositionLayoutPanel();});
+
+window.addEventListener("resize", () => { if (PUBLIC_CONFIG.minimalMvp && state.sceneId === "forest" && state.view === "room") refreshMinimalSeats(); });

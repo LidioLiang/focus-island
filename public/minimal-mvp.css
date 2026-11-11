@@ -207,3 +207,10 @@ body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
 
 /* Shared scene canvas: marker geometry is tied to the artwork, not the viewport. */
 .minimal-root .room-stage{width:min(100%,calc(100dvh * var(--scene-width,1672) / var(--scene-height,941)));aspect-ratio:var(--scene-width,1672)/var(--scene-height,941)}
+
+/* Forest controls remain distinct on narrow screens while the full six-seat art stays visible. */
+@media(max-width:600px){
+ .minimal-root[data-view=forest] .seat-caption{font-size:10px;padding:2px 5px;top:calc(100% + 3px)}
+}
+/* Keep guidance away from the lower seat markers, including short landscape screens. */
+.minimal-root[data-view=forest] .room-hint{top:78px;bottom:auto;left:24px;transform:none;background:none;box-shadow:none;color:#f4fbff;text-shadow:0 1px 6px #18382f;padding:0;font-size:12px;white-space:normal;max-width:calc(100% - 48px);pointer-events:none}
