@@ -66,9 +66,34 @@ test('first library visit preserves cafe sound defaults and later restores each 
  const defaults=()=>({sounds:{ambient:true,white:false,music:false},soundVolumes:{ambient:55,white:30,music:24},musicTrack:'rainy-notes'});
  const c=context({seatReleasePromise:null,minimalUi:{},identity:{},crypto:{randomUUID:()=> 'session'},persistIdentity(){},hasActiveSeatSession:()=>false,showToast(){},stopRoomPresence(){},suspendAudio(){},resetTimerState(){},savePreferences(){},localStorage:{setItem(){}},defaultPreferences:defaults,clampVolume:(x,f)=>Number.isFinite(Number(x))?Math.min(100,Math.max(0,Number(x))):f,FOCUS_MUSIC_TRACKS:{'rainy-notes':{}},enterCafeRoom:async()=>{c.state.view='room';c.state.roomId=c.state.sceneId+'-01';}});
  c.state={sceneId:null,...defaults()};c.preferences={...defaults(),rememberLastSound:true,rememberLastFocusView:true};
- vm.runInContext(functions(['focusSceneDefinition','sceneDefaultFocusView','rememberSceneAudio','enterMinimalScene']),c);
+ vm.runInContext(functions(['focusSceneDefinition','sceneDefaultFocusView','rememberSceneAudio','applySceneAudioPreferences','enterMinimalScene']),c);
  await c.enterMinimalScene('library');assert.equal(c.state.soundVolumes.ambient,25);c.state.sounds.music=true;c.rememberSceneAudio();
  await c.enterMinimalScene('cafe');assert.equal(c.state.soundVolumes.ambient,55);assert.equal(c.state.sounds.music,false);
  await c.enterMinimalScene('library');assert.equal(c.state.sounds.music,true);c.state.sounds={ambient:false,white:false,music:false};
  await c.enterMinimalScene('cafe');assert.equal(Object.values(c.state.sounds).some(Boolean),false);
+});
+
+for(const fail of [false,true])test(`cloud resume restores the old place only after lease confirmation (failure=${fail})`,async()=>{
+ const calls=[];const session={scene_id:'library',room_id:'library-01',seat_id:3,status:'paused',started_at:new Date().toISOString()};
+ const c=context({seatReleaseRevision:0,seatRecoveryPromise:null,identity:{sessionId:'cafe-lease',displayName:'Reader',avatarSkin:1},minimalUi:{},crypto:{randomUUID:()=> 'library-lease'},persistIdentity(){},releaseSeat:async()=>{calls.push('release-cafe');c.state.currentSeatId=null;},api:async(path,options)=>{calls.push('resume-library');assert.equal(JSON.parse(options.body).preferredRoomId,'library-01');if(fail)throw new Error('session_conflict');return {roomId:'library-02',seatId:5};},suspendAudio(){},applySceneAudioPreferences(){},localStorage:{setItem(){}}});
+ c.state={sceneId:'cafe',roomId:'cafe-01',currentSeatId:1};vm.runInContext(functions(['focusSceneDefinition','sceneDefaultFocusView','restoreCloudFocusPlace']),c);
+ if(fail){await assert.rejects(c.restoreCloudFocusPlace(session),/session_conflict/);assert.equal(c.state.sceneId,'cafe');assert.equal(c.state.currentSeatId,null);}
+ else{await c.restoreCloudFocusPlace(session);assert.equal(c.state.sceneId,'library');assert.equal(c.state.roomId,'library-02');assert.equal(c.state.currentSeatId,5);assert.equal(c.state.focusImageChoice,'alcove');}
+ assert.deepEqual(calls,['release-cafe','resume-library']);
+});
+
+for(const localOrigin of [false,true])for(const fail of [false,true])test(`exiting during cloud place recovery drains its RPC before releasing (failure=${fail}, local origin=${localOrigin})`,async()=>{
+ const app=await readFile(new URL('../public/app.js',import.meta.url),'utf8');const tree=ts.createSourceFile('app.js',app,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+ const releaseCode=['releaseSeat','releaseSeatOnce'].map(name=>tree.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name.text===name).getText(tree)).join('\n');
+ let finish;const order=[];
+ const c=context({identity:{sessionId:'cafe-lease',displayName:'Reader',avatarSkin:1},minimalUi:{},crypto:{randomUUID:()=> 'library-lease'},persistIdentity(){},seatReleaseRevision:0,seatReleasePromise:null,seatRecoveryPromise:null,stopRoomPresence(){},clearImmersiveAutoEnter(){},createLocalNpcLeases:()=>[],navigator:{},fetch:async url=>{order.push(url);},api:(url)=>url.endsWith('/release')?Promise.resolve({}):new Promise((resolve,reject)=>{finish=()=>fail?reject(new Error('session_conflict')):resolve({roomId:'library-02',seatId:5});}),suspendAudio(){},applySceneAudioPreferences(){},localStorage:{setItem(){}}});
+ c.state={sceneId:'cafe',roomId:localOrigin?'cafe-local':'cafe-01',currentSeatId:1,view:'focus',localRoom:localOrigin,localNpcRoster:[],roomPresence:{}};
+ vm.runInContext(releaseCode+'\n'+functions(['focusSceneDefinition','sceneDefaultFocusView','restoreCloudFocusPlace']),c);
+ const restoring=c.restoreCloudFocusPlace({scene_id:'library',room_id:'library-01',seat_id:3,status:'paused',started_at:new Date().toISOString()});
+ await new Promise(r=>setImmediate(r));const firstReleases=localOrigin?[]:['/api/sessions/cafe-lease/release'];assert.deepEqual(order,firstReleases);
+ const rejected=assert.rejects(restoring,fail?/session_conflict/:/focus_place_unavailable/);
+ const leaving=c.releaseSeat();c.state.view='island';c.state.sceneId=null;
+ assert.equal(order.length,firstReleases.length);finish();await rejected;await leaving;
+ assert.deepEqual(order,[...firstReleases,'/api/sessions/library-lease/release']);
+ assert.equal(c.state.sceneId,null);assert.equal(c.state.currentSeatId,null);assert.equal(c.state.view,'island');assert.equal(c.seatRecoveryPromise,null);
 });

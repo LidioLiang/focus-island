@@ -44,3 +44,17 @@ test('library developer layout persists separately from cafe and exports the sce
  const download=page.waitForEvent('download');await page.locator('[data-minimal="export-layout"]').click();expect((await download).suggestedFilename()).toBe('focus-isle-library-seat-layout.json');
  await page.reload();await page.locator('[data-place="library"]').click();await page.locator('[data-panel="settings"]').click();await page.locator('[data-minimal="layout"]').click();await page.getByLabel('Layout seat',{exact:true}).selectOption('6');await page.locator('[data-layout-kind="button"]').click();await expect(page.getByLabel('Horizontal position')).toHaveValue('90');
 });
+test('resuming an old library session releases cafe and restores its actual room, seat and view',async({page})=>{
+ await mocks(page);const order:string[]=[];let restoredLease='';
+ const previous={client_session_id:'previous-library-focus',scene_id:'library',room_id:'library-01',seat_id:3,status:'paused',timer_mode:25,planned_seconds:1500,actual_seconds:120,paused_seconds:0,started_at:new Date(Date.now()-120000).toISOString()};
+ await page.route('**/api/focus/sessions/start',r=>r.request().postDataJSON().clientSessionId===previous.client_session_id?r.fulfill({json:{session:previous,resumed:true}}):r.fulfill({status:409,json:{error:'active_session_exists'}}));
+ await page.route('**/api/focus/sessions?active=1',r=>r.fulfill({json:{sessions:[previous]}}));
+ await page.route('**/api/sessions/*/release',r=>{order.push('release-cafe');return r.fallback();});
+ await page.route('**/api/sessions/*/resume',r=>{order.push('resume-library');expect(r.request().postDataJSON()).toMatchObject({preferredRoomId:'library-01',preferredSeatId:3,focusing:false});restoredLease=r.request().url().split('/sessions/')[1].split('/')[0];return r.fulfill({json:{ok:true,roomId:'library-02',seatId:5,moved:true}});});
+ await page.route('**/api/rooms/library-02/state',r=>r.fulfill({json:{serverNow:Date.now(),leases:[{roomId:'library-02',seatId:5,sessionId:restoredLease,displayName:'Reader',avatarSkin:0,memberType:'human',state:'occupied',activity:'Seated'}]}}));
+ await page.goto('/');await page.locator('[data-place="cafe"]').click();await page.getByRole('button',{name:'Choose seat 1',exact:true}).click();await page.getByRole('button',{name:'Start',exact:true}).click();
+ await expect(page.locator('#focus-recovery-title')).toBeVisible();expect(await page.locator('[aria-labelledby="focus-recovery-title"]').innerText()).not.toMatch(/[\u4e00-\u9fff]/);
+ await page.locator('[data-action="continue-previous-focus"]').click();await expect(page.locator('#focus-recovery-title')).toHaveCount(0);await expect(page.locator('[data-focus-scene-image]')).toHaveAttribute('src',/library-alcove-focus/);await expect(page.locator('[data-session-clock]')).toHaveText('23:00');expect(order).toEqual(['release-cafe','resume-library']);
+ const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('focusIslandActiveSessionV1')||'null'));expect(saved).toMatchObject({sceneId:'library',roomId:'library-02',selectedSeat:4,cloudFocusClientId:'previous-library-focus',isRunning:false});
+ await page.locator('[data-minimal="back-room"]').click();await expect(page.locator('.room-title')).toHaveText('Academy Library');await expect(page.locator('.avatar-marker.is-mine')).toHaveAttribute('aria-label',/^Seat 5:/);
+});

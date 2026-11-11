@@ -743,6 +743,9 @@ function renderAccessOverlay() {
     </section>`;
   } else if (state.accessOverlay === "focus-recovery") {
     const previous = state.focusRecovery;
+    if (PUBLIC_CONFIG.minimalMvp) {
+      shell.innerHTML=`<section class="access-dialog" data-no-auto-i18n role="dialog" aria-modal="true" aria-labelledby="focus-recovery-title"><button class="access-close" data-action="close-access-overlay" aria-label="Close" ${state.authPending?"disabled":""}>×</button><p class="access-eyebrow">RESUME FOCUS</p><h2 id="focus-recovery-title">Your previous session is still open</h2><p>Continue where you left off in ${escapeHtml(sceneLabel(previous?.scene_id))}, or end that session and start fresh. Ending it also stops it on another device.</p><button type="button" class="primary-button" data-action="continue-previous-focus" ${state.authPending?'disabled':''}>Resume previous session</button><button type="button" class="access-link" data-action="replace-previous-focus" ${state.authPending?'disabled':''}>End previous session and start fresh</button>${state.authError?`<p class="access-error" role="status">${escapeHtml(state.authError)}</p>`:''}</section>`;
+    } else {
     shell.innerHTML = `<section class="access-dialog" role="dialog" aria-modal="true" aria-labelledby="focus-recovery-title">
       <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
       <p class="access-eyebrow">RESUME FOCUS</p><h2 id="focus-recovery-title">上次专注尚未结束</h2>
@@ -752,6 +755,7 @@ function renderAccessOverlay() {
       <button type="button" class="access-link" data-action="replace-previous-focus" ${state.authPending ? "disabled" : ""}>结束上次并重新开始</button>
       ${state.authError ? `<p class="access-error">${escapeHtml(authErrorCopy(state.authError))}</p>` : ""}
     </section>`;
+    }
   } else if (state.accessOverlay === "paywall") {
     shell.innerHTML = `<section class="access-dialog paywall-dialog" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
       <button class="access-close" data-action="close-access-overlay" aria-label="关闭">×</button>
@@ -875,6 +879,8 @@ async function openFocusRecovery() {
 async function resolvePreviousFocus(restart) {
   const previous = state.focusRecovery;
   if (!previous || state.authPending) return;
+  const originRevision=seatReleaseRevision, originIdentity=identity.sessionId;
+  const originScene=state.sceneId, originView=state.view;
   state.authPending = true;
   renderAccessOverlay();
   try {
@@ -882,6 +888,7 @@ async function resolvePreviousFocus(restart) {
       await api(`/api/focus/sessions/${encodeURIComponent(previous.client_session_id)}`, {
         method: "PATCH", body: JSON.stringify({ status: "interrupted", actualSeconds: Number(previous.actual_seconds) || 0, pausedSeconds: Number(previous.paused_seconds) || 0 }),
       });
+      if(PUBLIC_CONFIG.minimalMvp && (seatReleaseRevision!==originRevision || identity.sessionId!==originIdentity || state.sceneId!==originScene || state.view!==originView || state.focusRecovery!==previous))throw new Error("focus_place_unavailable");
       closeAccessOverlay();
       state.cloudFocusClientId = null;
       state.sessionStartedAt = null;
@@ -889,6 +896,7 @@ async function resolvePreviousFocus(restart) {
       state.remainingSeconds = state.durationSeconds;
       state.isRunning = false;
       persistActiveSession(true);
+      if(PUBLIC_CONFIG.minimalMvp && !state.currentSeatId){state.view="room";render();showToast("Choose a seat to begin your next session.");return;}
       if (!await startFocusFromSeat()) return;
     } else {
       // Revalidate the exact prior session; never create a second trial.
@@ -898,6 +906,10 @@ async function resolvePreviousFocus(restart) {
       }) });
       const session = result.session;
       if (!session || !["running", "paused"].includes(session.status)) throw new Error("focus_session_finished");
+      if (PUBLIC_CONFIG.minimalMvp) {
+        if(seatReleaseRevision!==originRevision || identity.sessionId!==originIdentity || state.sceneId!==originScene || state.view!==originView || state.focusRecovery!==previous)throw new Error("focus_place_unavailable");
+        await restoreCloudFocusPlace(session);
+      }
       closeAccessOverlay();
       state.cloudFocusClientId = session.client_session_id;
       state.timerMode = session.timer_mode;
@@ -915,9 +927,10 @@ async function resolvePreviousFocus(restart) {
     closePersonalCenter();
     state.view = "focus";
     render();
+    if(PUBLIC_CONFIG.minimalMvp && state.isRunning)updateAudio();
     if (state.isRunning && state.timerMode > 0 && state.remainingSeconds === 0) await finishSession("completed");
   } catch (error) {
-    state.authError = error.message;
+    state.authError = PUBLIC_CONFIG.minimalMvp ? error.message==='system_rooms_full' ? 'Your previous room is full. End that session to choose a new seat.' : error.message==='session_conflict' ? 'This session is active in another tab or device. End it here to start fresh.' : 'Your previous seat could not be restored. Try again, or end that session to start fresh.' : error.message;
     if (state.accessOverlay === "focus-recovery") renderAccessOverlay();
     else showToast("上次专注状态已变化，请重新开始");
   } finally { state.authPending = false; if (state.accessOverlay === "focus-recovery") renderAccessOverlay(); }
@@ -2141,8 +2154,8 @@ async function releaseSeat(options = {}) {
 
 async function releaseSeatOnce({ beacon = false, force = false } = {}) {
   clearImmersiveAutoEnter();
-  if (!force && !state.currentSeatId && !state.switchingFromSeatId) return;
-  if (state.localRoom) {
+  if (!force && !state.currentSeatId && !state.switchingFromSeatId && !seatRecoveryPromise) return;
+  if (state.localRoom && !seatRecoveryPromise) {
     if (!state.localNpcRoster.length) state.localNpcRoster = createLocalNpcLeases();
     state.roomPresence.leases = [...state.localNpcRoster];
     state.roomPresence.serverNow = Date.now();
@@ -5593,7 +5606,7 @@ document.addEventListener("click", async (event) => {
       importLocalHistory();
     }).catch((error) => openAuthGate(error.message || "access_service_unavailable", "enter-island"));
   }
-  if (action === "close-access-overlay") closeAccessOverlay();
+  if (action === "close-access-overlay") { if(state.accessOverlay === "focus-recovery" && state.authPending)return;closeAccessOverlay(); }
   if (action === "toggle-auth-mode") {
     state.authMode = state.authMode === "sign-up" ? "sign-in" : "sign-up";
     state.authError = "";
