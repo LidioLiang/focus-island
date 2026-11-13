@@ -42,7 +42,7 @@ body.landing-mode { min-width: 320px; overflow-x: hidden; background: var(--pape
 .landing-final .site-nav.is-scrolled { background: rgba(250, 246, 237, .95); box-shadow: 0 12px 35px rgba(20, 55, 46, .12); }
 .landing-final .brand { display: inline-flex; align-items: center; gap: 11px; color: var(--ink); text-decoration: none; font-size: 19px; font-weight: 800; }
 .landing-final .brand img { width: 39px; height: 39px; }
-.landing-final .brand img.brand-logo { width: 158px; height: auto; max-width: 42vw; }
+.landing-final .brand img.brand-logo { width: 39px; height: 39px; max-width: none; }
 .landing-final .nav-links { display: flex; align-items: center; gap: 27px; font-size: 13px; }
 .landing-final .nav-links a { color: #48645b; text-decoration: none; }
 .landing-final .nav-links a:hover { color: var(--ink); }
@@ -247,6 +247,7 @@ body.landing-mode { min-width: 320px; overflow-x: hidden; background: var(--pape
 @media (max-width: 700px) {
   .landing-final .site-nav { top: 10px; right: 10px; left: 10px; min-height: 62px; padding: 0 12px; }
   .landing-final .brand { gap: 7px; font-size: 16px; }
+  .landing-final .brand img.brand-logo { width: 39px; height: 39px; }
   .landing-final .brand img { width: 32px; height: 32px; }
   .landing-final .sign-in { display: none; }
   .landing-final .nav-cta { padding: 10px 13px; }
