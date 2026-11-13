@@ -10,6 +10,7 @@ export async function POST(request: Request) {
   if (rateLimited(request, "avatar-upload", 8, 10 * 60_000)) return json({ error: "rate_limited" }, { status: 429 });
   const auth = await authenticatedSupabase();
   if (!auth) return json({ error: "authentication_required" }, { status: 401 });
+  if (request.headers.get("X-Focus-User") !== auth.user.id) return json({ error: "identity_changed" }, { status: 409 });
   if (Number(request.headers.get("content-length")) > 4_300_000) return json({ error: "image_too_large" }, { status: 413 });
   const file = (await request.formData().catch(() => null))?.get("avatar");
   if (!(file instanceof File) || file.size > 4 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) return json({ error: "invalid_image" }, { status: 400 });

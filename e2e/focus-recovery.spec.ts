@@ -1,9 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 async function seedFocus(page: import("@playwright/test").Page, running: boolean) {
+  await page.route("**/api/auth/session", r=>r.fulfill({json:{authenticated:true,anonymous:true,userId:"focus-test-user"}}));
   await page.addInitScript(({ running: active }) => {
     localStorage.setItem("focusIslandPreferencesV1", JSON.stringify({ language: "zh-CN", reduceMotion: true }));
+    localStorage.setItem("focusIslandHistoryGuestV2", "local:test-guest");
     localStorage.setItem("focusIslandActiveSessionV1", JSON.stringify({
+      ownerUserId: "focus-test-user",
       sceneId: "cafe", roomId: "cafe-local", localRoom: true, selectedSeat: 0,
       timerMode: 25, durationSeconds: 1500, remainingSeconds: active ? 1380 : 1500,
       elapsedSeconds: active ? 120 : 0, isRunning: active, sessionPhase: "focus",

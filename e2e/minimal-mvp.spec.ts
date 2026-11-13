@@ -230,6 +230,7 @@ test('island artwork fills portrait, desktop and ultrawide screens without blur 
   await page.setViewportSize({width,height});
   const art=page.locator('.island-panorama');
   await expect(art).toBeVisible();await expect.poll(()=>art.evaluate((e:HTMLImageElement)=>e.complete&&e.naturalWidth>0)).toBe(true);
+  await expect.poll(()=>art.evaluate((e:HTMLImageElement)=>e.currentSrc)).toContain(height>width?'expanded-portrait.webp':width/height>=2?'detail-wide.webp':'detail-landscape.webp');
   const image=await art.evaluate((e:HTMLImageElement)=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,filter:getComputedStyle(e).filter,src:e.currentSrc,width:r.width,naturalWidth:e.naturalWidth};});
   expect(image.x).toBeLessThanOrEqual(1);expect(image.y).toBeLessThanOrEqual(1);
   expect(image.right).toBeGreaterThanOrEqual(width-1);expect(image.bottom).toBeGreaterThanOrEqual(height-1);
@@ -250,4 +251,14 @@ test('island artwork fills portrait, desktop and ultrawide screens without blur 
  await page.setViewportSize({width:390,height:844});
  await page.locator('[data-place="cafe"]').click();await expect(page.locator('button.seat.available')).toHaveCount(6);
  await page.getByRole('button',{name:'Back to island',exact:true}).click();await expect(page.locator('.island-panorama')).toBeVisible();
+});
+
+
+test('a failed online start offers local focus and preserves the ambiguous session ID',async({page})=>{
+ await mockRooms(page);let attempted='';
+ await page.route('**/api/focus/sessions/start',r=>{attempted=r.request().postDataJSON().clientSessionId;return r.fulfill({status:503,json:{error:'focus_start_failed'}});});
+ await page.goto('/');await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();await page.getByRole('button',{name:'Start',exact:true}).click();
+ await page.getByRole('button',{name:'Continue locally'}).click();await expect(page.getByRole('button',{name:'Pause',exact:true})).toBeVisible();
+ const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('focusIslandActiveSessionV1') || 'null'));
+ expect(saved.offlineFocus).toBe(true);expect(saved.ownerUserId).toBe('guest-test');expect(saved.cloudFocusClientId).toBe(attempted);expect(saved.roomId).toBe('cafe-local');
 });

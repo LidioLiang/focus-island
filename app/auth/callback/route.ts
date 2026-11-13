@@ -22,6 +22,7 @@ export async function GET(request: Request) {
       if (token) {
         try {
           const merged = await mergeGuestAccount(supabase, data.user, sha256(token));
+          if (merged.anonymousUserId) destination.searchParams.set("merged-from", String(merged.anonymousUserId));
           if (merged.profileTransferWarning) destination.searchParams.set("account-error", "profile_transfer_failed");
         } catch { destination.searchParams.set("account-error", "history_merge_failed"); }
       }

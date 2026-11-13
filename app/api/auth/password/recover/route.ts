@@ -1,0 +1,31 @@
+import { cookies } from 'next/headers';
+import { passwordSchema } from '@/lib/auth';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { json } from '@/lib/presence';
+import { rateLimited } from '@/lib/security';
+import { sha256 } from '@/lib/crypto';
+import { RECOVERY_COOKIE, recoverySession } from '@/lib/password-recovery';
+export async function POST(request: Request) {
+  const fail = () => json({ error: 'verification_expired' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
+  if (request.headers.get('origin') !== new URL(request.url).origin) return fail();
+  if (rateLimited(request, 'password-recover', 5)) return json({ error: 'rate_limited' }, { status: 429 });
+  const input = await request.json().catch(() => null);
+  const parsed = passwordSchema.safeParse(input?.password);
+  if (!parsed.success) return json({ error: 'invalid_password' }, { status: 400 });
+  const cookieStore = await cookies(), token = cookieStore.get(RECOVERY_COOKIE)?.value;
+  if (!token || !/^[a-f0-9]{64}$/.test(token)) return fail();
+  const supabase = await createServerSupabaseClient();
+  const [{ data: userData }, verified] = await Promise.all([supabase.auth.getUser(), supabase.auth.getClaims()]);
+  const user = userData.user;
+  const sessionId = user && !user.is_anonymous && !verified.error && verified.data ? recoverySession(verified.data.claims, user.id) : null;
+  if (!user || !sessionId) return fail();
+  const admin = createAdminSupabaseClient();
+  const { data: grants, error } = await admin.from('password_recovery_grants').update({ consumed_at: new Date().toISOString() }).eq('token_hash', sha256(token)).eq('user_id', user.id).eq('session_id', sessionId).is('consumed_at', null).gt('expires_at', new Date().toISOString()).select('token_hash');
+  cookieStore.set(RECOVERY_COOKIE, '', { path: '/api/auth/password/recover', maxAge: 0 });
+  if (error || grants?.length !== 1) return fail();
+  const { error: updateError } = await supabase.auth.updateUser({ password: parsed.data });
+  if (updateError) return json({ error: 'password_update_failed' }, { status: 400 });
+  await supabase.auth.signOut({ scope: 'global' });
+  return json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } });
+}

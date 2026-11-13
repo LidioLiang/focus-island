@@ -28,6 +28,7 @@ export async function POST(request: Request) {
   if (!focusScene(input.sceneId)?.enabled || (input.roomId && input.roomId !== `${input.sceneId}-local` && roomSceneId(input.roomId) !== input.sceneId) || (input.seatId !== null && input.seatId > 6)) return json({ error: "invalid_focus_session" }, { status: 400 });
   const auth = await authenticatedSupabase();
   if (!auth) return json({ error: "authentication_required" }, { status: 401 });
+  if (request.headers.get("X-Focus-User") !== auth.user.id) return json({ error: "identity_changed" }, { status: 409, headers: { "Cache-Control": "no-store" } });
   const { data, error } = await auth.supabase.rpc("start_my_focus_session", {
     p_client_session_id: parsed.data.clientSessionId,
     p_scene_id: parsed.data.sceneId,

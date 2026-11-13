@@ -25,7 +25,7 @@ test('profile is English, readable and responsive, and persists nickname plus av
 });
 test('social availability is truthful and email sign-in has no legacy Chinese states',async({page})=>{
  await setup(page);await page.getByRole('button',{name:'Sign-in & security',exact:true}).click();
- await expect(page.getByRole('button',{name:'Continue with Google'})).toBeEnabled();await expect(page.getByRole('button',{name:'Continue with Apple'})).toBeDisabled();await expect(page.getByRole('button',{name:'Continue with GitHub'})).toBeEnabled();
+ await expect(page.getByRole('button',{name:'Continue with Google'})).toBeEnabled();await expect(page.getByRole('button',{name:'Continue with Apple'})).toHaveCount(0);await expect(page.getByRole('button',{name:'Continue with GitHub'})).toHaveCount(0);
  await page.getByLabel('Email address').fill('demo@example.test');await page.getByLabel('Password',{exact:true}).fill('Test-fixture-only');await page.getByRole('button',{name:'Sign in with email'}).click();
  await expect(page.getByRole('status')).toContainText('You’re signed in');await expect(page.locator('.ac-identity')).toContainText('Member');expect(await page.locator('.account-center').innerText()).not.toMatch(/[\u4e00-\u9fff]/);
 });

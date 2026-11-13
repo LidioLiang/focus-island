@@ -328,6 +328,89 @@ let cafeSceneObjectDrag = null;
 let staticSeatMarkerDrag = null;
 let onlineIdentityPromise = null;
 let onlineUserId = null;
+let historyAnonymous = true;
+let historySyncPromise = null;
+let historyRevision = 0;
+let historyIdentityEpoch = 0;
+let historyStatus = 'local';
+let historyNextOffset = 0;
+let historyHasMore = true;
+const confirmedMergeSource = new URLSearchParams(location.search).get('merged-from');
+const focusHistory = window.FocusHistory.createStore(localStorage, () => crypto.randomUUID());
+
+function setHistoryIdentity(session, { sourceOwner = null } = {}) {
+  const next = session?.authenticated ? session.userId : null;
+  if (sourceOwner && next) focusHistory.transfer(sourceOwner, next);
+  if (onlineUserId !== next) {
+    historyRevision += 1; historyNextOffset = 0; historyHasMore = true;
+  }
+  onlineUserId = next;
+  historyAnonymous = session?.anonymous !== false;
+  focusHistory.select(next);
+  historyStatus = next ? 'ready' : 'local';
+}
+
+function clearSignedInHistory() {
+  // Freeze any recovered session under its existing owner before switching scope.
+  persistActiveSession(true);stopTicker();stopRoomPresence();stopAudio();clearImmersiveAutoEnter();
+  seatReleaseRevision+=1;state.isRunning=false;state.cloudFocusClientId=null;state.sessionStartedAt=null;
+  state.currentSeatId=null;state.selectedSeat=null;state.roomId=null;state.sceneId=null;
+  state.pendingFocusStartId=null;state.offlineStartAvailable=false;state.offlineFocus=false;
+  state.elapsedSeconds=0;state.sessionResult=null;state.sessionPhase='focus';state.view='island';
+  localStorage.removeItem(STORAGE_KEYS.activeSession);
+  historyIdentityEpoch += 1;
+  historyRevision += 1;
+  onlineUserId = null; historyAnonymous = true; onlineIdentityPromise = null;
+  state.isDeveloper=false;state.accessStatus=null;accountCenter.data=null;accountCenter.loaded=false;accountCenter.draft=null;
+  identity.avatarUrl=null;identity.avatarSource='builtin';identity.avatarSkin=0;identity.displayName='Guest';persistIdentity();
+  focusHistory.newGuest(); historyStatus = 'local';
+  historyNextOffset = 0; historyHasMore = true;
+  sessionStorage.removeItem('focusHistoryMergeSource');
+  localStorage.setItem('focusIdentityChangedV2', crypto.randomUUID());
+  render();
+}
+
+async function refreshFocusHistory({ more = false } = {}) {
+  const owner = onlineUserId, revision = historyRevision;
+  if (!owner) return;
+  const offset = more ? historyNextOffset : 0;
+  historyStatus = 'syncing';
+  try {
+    await importLocalHistory();
+    const result = await api('/api/focus/sessions?limit=50&offset=' + offset, { headers: { 'X-Focus-User': owner } });
+    if (onlineUserId !== owner || historyRevision !== revision || result.userId !== owner) return;
+    for (const row of result.sessions || []) {
+      if (!['completed','ended_early','interrupted'].includes(row.status)) continue;
+      const existing = readHistory().find(item => item.clientSessionId === row.client_session_id);
+      if (existing && !existing.synced && (!historyAnonymous || Number(existing.elapsedSeconds) !== Number(row.actual_seconds) || focusStatusKey(existing.status) !== row.status)) continue;
+      focusHistory.put({ id: row.client_session_id, clientSessionId: row.client_session_id,
+        sceneId: row.scene_id, roomId: row.room_id, seat: row.seat_id == null ? null : row.seat_id - 1,
+        timerMode: row.timer_mode, targetSeconds: row.planned_seconds, elapsedSeconds: row.actual_seconds,
+        startedAt: Date.parse(row.started_at), endedAt: Date.parse(row.ended_at), status: row.status, synced: true });
+    }
+    historyNextOffset = result.nextOffset ?? offset + (result.sessions || []).length;
+    historyHasMore = result.hasMore === true;
+    historyStatus = focusHistory.pending().length ? 'pending' : 'synced';
+  } catch { if (onlineUserId === owner && historyRevision === revision) historyStatus = 'error'; }
+  finally { if (state.personalCenter.open && state.personalCenter.tab === 'history') renderPersonalCenter(); }
+}
+
+async function initializeHistoryIdentity() {
+  const revision = historyRevision;
+  try {
+    const session = await api('/api/auth/session');
+    if (historyRevision !== revision) return;
+    setHistoryIdentity(session);
+    // A server-confirmed OAuth merge is the only source eligible for transfer.
+    const mergeSource = sessionStorage.getItem('focusHistoryMergeSource');
+    if (!session.anonymous && session.authenticated && confirmedMergeSource === mergeSource) {
+      focusHistory.transfer(mergeSource, session.userId);
+      sessionStorage.removeItem('focusHistoryMergeSource');
+    }
+    if (state.view === 'island' && !accountCenter.recovery) { restoreActiveSession(); render(); if(state.isRunning)startTicker();void recoverCafeSeat('identity-ready'); }
+    if (session.authenticated) void refreshFocusHistory();
+  } catch { if(historyRevision!==revision)return; historyStatus = 'local'; if (state.view === 'island') { restoreActiveSession(); render(); } }
+}
 let seatRecoveryPromise = null;
 let seatReleasePromise = null;
 let seatReleaseRevision = 0;
@@ -526,7 +609,7 @@ function identityBody(extra = {}) {
 async function api(path, options = {}) {
   const response = await fetch(path, {
     ...options,
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers: { "Content-Type": "application/json", ...((path.startsWith("/api/focus/") || path.startsWith("/api/profile")) && onlineUserId ? { "X-Focus-User": onlineUserId } : {}), ...(options.headers || {}) },
     cache: "no-store",
     signal: options.signal || AbortSignal.timeout(15000),
   });
@@ -581,35 +664,38 @@ async function turnstileToken() {
 
 async function ensureOnlineIdentity() {
   if (!onlineIdentityPromise) {
-    onlineIdentityPromise = (async () => {
-      const session = await api("/api/auth/session");
+    const revision = historyRevision, epoch=historyIdentityEpoch, sourceOwner=focusHistory.owner();
+    const task = (async () => {
+      const session = await api('/api/auth/session');
+      if(epoch!==historyIdentityEpoch || (revision!==historyRevision && !(session.authenticated && onlineUserId===session.userId)))throw new Error('identity_changed');
       if (session.authenticated) {
-        applyAccountProfile(session.profile);
-        onlineUserId = session.userId;
-        state.isDeveloper = session.developer === true;
-        return session;
+        applyAccountProfile(session.profile);setHistoryIdentity(session);
+        state.isDeveloper=session.developer===true;return session;
       }
-      const captchaToken = await turnstileToken();
-      const guest = await api("/api/auth/anonymous", { method: "POST", body: JSON.stringify({ ...identityBody(), captchaToken }) });
+      const captchaToken=await turnstileToken();
+      if(revision!==historyRevision)throw new Error('identity_changed');
+      const guest=await api('/api/auth/anonymous',{method:'POST',body:JSON.stringify({...identityBody(),captchaToken})});
+      if(revision!==historyRevision)throw new Error('identity_changed');
       applyAccountProfile(guest.profile);
-      onlineUserId = guest.userId;
-      state.isDeveloper = guest.developer === true;
-      if (guest.access) { state.accessStatus = guest.access; accessStatusFetchedAt = Date.now(); }
-      return { authenticated: true, anonymous: guest.anonymous, userId: guest.userId, developer: state.isDeveloper };
-    })().catch((error) => {
-      onlineIdentityPromise = null;
-      throw error;
-    });
+      setHistoryIdentity({...guest,authenticated:true},{sourceOwner:guest.anonymous && sourceOwner.startsWith('local:')?sourceOwner:null});
+      state.isDeveloper=guest.developer===true;
+      if(guest.access){state.accessStatus=guest.access;accessStatusFetchedAt=Date.now();}
+      return {authenticated:true,anonymous:guest.anonymous,userId:guest.userId,developer:state.isDeveloper};
+    })();
+    onlineIdentityPromise=task;
+    void task.catch(()=>{if(onlineIdentityPromise===task)onlineIdentityPromise=null;});
   }
   return onlineIdentityPromise;
 }
 
 async function getAccessStatus({ refresh = false } = {}) {
   if (state.accessStatus && !refresh) return state.accessStatus;
+  const epoch=historyIdentityEpoch;
   if (!accessStatusPromise) accessStatusPromise = (async () => {
     const response = await fetch("/api/access/status", { cache: "no-store" });
     const status = await response.json().catch(() => ({ authenticated: false, paywallReason: "access_service_unavailable" }));
     if (!response.ok) throw Object.assign(new Error(status.paywallReason || "access_service_unavailable"), { status: response.status });
+    if(epoch!==historyIdentityEpoch)throw new Error('identity_changed');
     state.accessStatus = status;
     state.isDeveloper = status.developer === true;
     accessStatusFetchedAt = Date.now();
@@ -661,7 +747,7 @@ async function prepareLifetimeInviteFromUrl() {
     state.pendingLifetimeInvite = true;
     const session = await api("/api/auth/session");
     if (session.authenticated && !session.anonymous) {
-      onlineUserId = session.userId;
+      setHistoryIdentity(session);
       state.isDeveloper = session.developer === true;
       await claimPendingLifetimeInvite();
     } else {
@@ -779,35 +865,58 @@ function renderAccessOverlay() {
 }
 
 async function importLocalHistory() {
-  const sessions = readHistory().slice(0, 100).map((item) => ({
-    client_session_id: String(item.clientSessionId || item.id), scene_id: item.sceneId || "cafe",
-    room_id: item.roomId || "", seat_id: Number(item.seat || 0) + 1,
-    timer_mode: [0, 25, 50].includes(Number(item.timerMode)) ? Number(item.timerMode) : 25,
-    planned_seconds: Number(item.targetSeconds) || 0, actual_seconds: Number(item.elapsedSeconds) || 0,
-    started_at: new Date(item.startedAt || Date.now()).toISOString(), ended_at: new Date(item.endedAt || Date.now()).toISOString(),
-    status: focusStatusKey(item.status) === "completed" ? "completed" : focusStatusKey(item.status),
-  }));
-  if (!sessions.length) return;
-  await api("/api/focus/sessions", { method: "POST", body: JSON.stringify({ sessions }) }).catch(() => {});
+  if (!onlineUserId || historyAnonymous) return;
+  if (historySyncPromise) return historySyncPromise;
+  const owner = onlineUserId, revision = historyRevision;
+  historySyncPromise = (async () => {
+    for (;;) {
+      if (onlineUserId !== owner || historyRevision !== revision) return;
+      const rows = focusHistory.pending().slice(0,100);
+      if (!rows.length) return;
+      const sessions = rows.map(item => ({
+        client_session_id: String(item.clientSessionId || item.id), scene_id: item.sceneId || 'cafe',
+        room_id: item.roomId || '', seat_id: item.seat == null ? null : Number(item.seat) + 1,
+        timer_mode: [0,25,50].includes(Number(item.timerMode)) ? Number(item.timerMode) : 25,
+        planned_seconds: Number(item.targetSeconds) || 0, actual_seconds: Number(item.elapsedSeconds) || 0,
+        started_at: new Date(item.startedAt || item.endedAt).toISOString(), ended_at: new Date(item.endedAt).toISOString(),
+        status: focusStatusKey(item.status),
+      }));
+      for (const item of rows) {
+        if (!item.clientSessionId) continue;
+        try { await api('/api/focus/sessions/' + encodeURIComponent(item.clientSessionId), {method:'PATCH',headers:{'X-Focus-User':owner},body:JSON.stringify({status:focusStatusKey(item.status),actualSeconds:Math.min(86400,Math.max(0,Math.floor(item.elapsedSeconds || 0))),pausedSeconds:Math.min(86400,Math.max(0,Math.floor(item.pausedSeconds || 0)))})}); }
+        catch(error) { if(error.status !== 404) throw error; }
+      }
+      await api('/api/focus/sessions', { method:'POST', headers:{'X-Focus-User':owner}, body:JSON.stringify({sessions}) });
+      if (onlineUserId !== owner || historyRevision !== revision) return;
+      focusHistory.markSynced(owner, rows.map(row => row.clientSessionId || row.id));
+    }
+  })().catch(() => { if (onlineUserId === owner) historyStatus = 'pending'; })
+    .finally(() => { historySyncPromise = null; });
+  return historySyncPromise;
 }
 
 async function completeAuthenticatedFlow(result) {
+  historyIdentityEpoch += 1;
+  const epoch=historyIdentityEpoch;
   if (PUBLIC_CONFIG.minimalMvp && onlineUserId !== result.userId) {
     resetTimerState(); identity.sessionId = crypto.randomUUID(); persistIdentity();
     state.currentSeatId = null; state.selectedSeat = null; state.roomId = null;
     state.roomPresence = { leases: [], serverNow: Date.now() };
   }
-  onlineUserId = result.userId;
+  setHistoryIdentity({authenticated:true,anonymous:false,userId:result.userId}, {sourceOwner:result.mergedFrom || null});
+  localStorage.setItem('focusIdentityChangedV2', crypto.randomUUID());
   state.isDeveloper = result.developer === true;
   onlineIdentityPromise = Promise.resolve({ authenticated: true, anonymous: false, userId: result.userId, developer: state.isDeveloper });
   state.accessStatus = result.access || null;
   accessStatusFetchedAt = result.access ? Date.now() : 0;
   await claimPendingLifetimeInvite();
+  if(epoch!==historyIdentityEpoch)return;
   if (!state.accessStatus) await getAccessStatus({ refresh: true });
+  if(epoch!==historyIdentityEpoch)return;
   const continuation = state.authContinuation;
   closeAccessOverlay();
   // History import and signed-grace refresh must not block the first screen.
-  void importLocalHistory();
+  void refreshFocusHistory();
   void flushPendingFocusUpdates();
   if (["subscription", "lifetime", "admin"].includes(state.accessStatus?.entitlementType)) {
     void getAccessStatus({ refresh: true }).catch(() => {});
@@ -829,29 +938,46 @@ async function authorizeFocusStart() {
 }
 
 async function requestFocusAuthorization() {
-  const clientSessionId = crypto.randomUUID();
+  const scene=state.sceneId, seat=state.selectedSeat, releaseRevision=seatReleaseRevision;
+  let revision=historyRevision;
+  const stillHere=()=>revision===historyRevision && releaseRevision===seatReleaseRevision && scene===state.sceneId && seat===state.selectedSeat;
+  const clientSessionId = state.pendingFocusStartId || crypto.randomUUID();
+  state.pendingFocusStartId = clientSessionId;
   try {
+    await ensureOnlineIdentity();
+    revision=historyRevision;
+    if(!stillHere())return false;
     await flushPendingFocusUpdates();
+    if(!stillHere())return false;
     await api("/api/focus/sessions/start", { method: "POST", body: JSON.stringify({
       clientSessionId, sceneId: state.sceneId || "cafe", roomId: state.roomId || "",
       seatId: state.selectedSeat === null ? null : state.selectedSeat + 1, timerMode: state.timerMode,
     }) });
+    if(!stillHere())return false;
     state.cloudFocusClientId = clientSessionId;
+    state.pendingFocusStartId = null; state.offlineStartAvailable = false;
     return true;
   } catch (error) {
+    if(!stillHere() || error.message==='identity_changed')return false;
     if (error.status === 402) openPaywall(error.message);
     else if (error.status === 401 || error.status === 403) openAuthGate(error.message, "start-focus");
     else if (error.status === 409 && error.message === "active_session_exists") await openFocusRecovery();
     else if (error.status === 429) showToast("操作有些频繁，请稍等一分钟后重试");
-    else showToast("暂时无法开始专注，请稍后再试");
+    else {
+      if (!error.status || error.status >= 500) state.offlineStartAvailable = true;
+      showToast('Connection interrupted. Retry or continue locally.');
+      if (state.view === 'focus') renderFocus();
+    }
     return false;
   }
 }
 
 async function openFocusRecovery() {
+  const historyOwner=onlineUserId, revision=historyRevision;
   clearImmersiveAutoEnter();
   try {
     const result = await api("/api/focus/sessions?active=1");
+    if(historyOwner!==onlineUserId || revision!==historyRevision)return;
     const previous = result.sessions?.[0];
     if (!previous) { showToast("上次专注已结束，请再次开始"); return; }
     state.focusRecovery = previous;
@@ -878,6 +1004,7 @@ async function resolvePreviousFocus(restart) {
       closeAccessOverlay();
       state.cloudFocusClientId = null;
       state.sessionStartedAt = null;
+  state.pausedSeconds = 0; state.pauseStartedAt = null; state.pendingFocusStartId = null; state.offlineStartAvailable = false;
       state.elapsedSeconds = 0;
       state.remainingSeconds = state.durationSeconds;
       state.isRunning = false;
@@ -901,8 +1028,9 @@ async function resolvePreviousFocus(restart) {
       state.timerMode = session.timer_mode;
       state.durationSeconds = session.planned_seconds;
       state.sessionStartedAt = Date.parse(session.started_at);
-      const elapsed = session.status === "paused" ? Number(session.actual_seconds) || 0
-        : Math.max(Number(session.actual_seconds) || 0, Math.floor((Date.now() - state.sessionStartedAt) / 1000) - (Number(session.paused_seconds) || 0));
+      const elapsed = recoveredFocusSeconds(session);
+      state.pausedSeconds = Number(session.paused_seconds) || 0;
+      state.pauseStartedAt = session.status === 'paused' ? Date.parse(session.updated_at || session.started_at) : null;
       state.elapsedSeconds = state.timerMode > 0 ? Math.min(elapsed, state.durationSeconds) : elapsed;
       state.remainingSeconds = Math.max(0, state.durationSeconds - state.elapsedSeconds);
       state.sessionPhase = "focus";
@@ -984,6 +1112,7 @@ function cafeSeatOccupancyLeases() {
 }
 
 async function enterCafeRoom() {
+  const epoch=historyIdentityEpoch;
   if (state.isAllocatingRoom) return;
   state.isAllocatingRoom = true;
   const allocationScene = state.sceneId || "cafe";
@@ -992,6 +1121,7 @@ async function enterCafeRoom() {
   let access = null;
   try {
     await ensureOnlineIdentity();
+    if(epoch!==historyIdentityEpoch)return;
     if (!PUBLIC_CONFIG.minimalMvp) {
     access = await getAccessStatus({ refresh: Date.now() - accessStatusFetchedAt > 15000 });
     if (!access.authenticated) {
@@ -1007,12 +1137,13 @@ async function enterCafeRoom() {
       method: "POST",
       body: JSON.stringify(identityBody()),
     });
-    if (state.sceneId !== allocationScene) return;
+    if (epoch!==historyIdentityEpoch || state.sceneId !== allocationScene) return;
     if (allocation.access) { state.accessStatus = allocation.access; accessStatusFetchedAt = Date.now(); }
     state.roomId = allocation.roomId;
     state.localRoom = allocation.mode === "local";
     if (PUBLIC_CONFIG.minimalMvp) { state.offlineFocus = false; state.presenceUnavailable = false; }
   } catch (error) {
+    if(epoch!==historyIdentityEpoch || error.message==='identity_changed')return;
     if (PUBLIC_CONFIG.minimalMvp && (!error.status || error.status >= 500)) {
       state.roomId = PUBLIC_CONFIG.minimalMvp ? `${state.sceneId}-local` : "cafe-local";
       state.localRoom = true;
@@ -2153,7 +2284,7 @@ async function releaseSeatOnce({ beacon = false, force = false } = {}) {
     state.switchingFromSeatId = null;
     return;
   }
-  const releasingSession=identity.sessionId;
+  const releasingSession=identity.sessionId, releasingRevision=seatReleaseRevision;
   const url = `/api/sessions/${releasingSession}/release`;
   // Drain recovery before deleting its lease, so a late RPC cannot recreate it.
   // Beacon still sends immediately on unload, with a second release after recovery.
@@ -2164,6 +2295,7 @@ async function releaseSeatOnce({ beacon = false, force = false } = {}) {
   } else {
     await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", keepalive: true }).catch(() => {});
   }
+  if(identity.sessionId!==releasingSession || seatReleaseRevision!==releasingRevision)return;
   state.currentSeatId = null;
   state.switchingFromSeatId = null;
 }
@@ -2271,7 +2403,7 @@ function openPersonalCenter({ tab = "overview" } = {}) {
   if (state.isRunning || state.sessionPhase === "rest") syncTimerFromClock();
   persistActiveSession(true);
   state.personalCenter.open = true;
-  state.personalCenter.tab = tab === "developer" && state.isDeveloper ? "developer" : PUBLIC_CONFIG.minimalMvp && tab === "account" ? "account" : "overview";
+  state.personalCenter.tab = tab === "developer" && state.isDeveloper ? "developer" : PUBLIC_CONFIG.minimalMvp && ["account","security","history","preferences"].includes(tab) ? tab : "overview";
   state.personalCenter.monthKey = shanghaiDateKey(Date.now()).slice(0, 7);
   state.personalCenter.selectedDate = shanghaiDateKey(Date.now());
   state.personalCenter.filters = { scene: "all", status: "all", mode: "all" };
@@ -2289,6 +2421,7 @@ function openPersonalCenter({ tab = "overview" } = {}) {
     renderPersonalCenter();
   }).catch(() => {});
   if (state.personalCenter.tab === "developer") void refreshDeveloperDiagnostics();
+    if (state.personalCenter.tab === "history") void refreshFocusHistory();
 }
 
 function closePersonalCenter() {
@@ -2714,7 +2847,7 @@ async function executeProfileDataAction() {
         await finishSession();
       } else {
         await api(`/api/focus/sessions/${encodeURIComponent(session.client_session_id)}`, {
-          method: "PATCH", body: JSON.stringify({ status: "interrupted", actualSeconds: Number(session.actual_seconds) || 0, pausedSeconds: 0 }),
+          method: "PATCH", body: JSON.stringify({ status: "interrupted", actualSeconds: Number(session.actual_seconds) || 0, pausedSeconds: Number(session.paused_seconds) || 0 }),
         });
       }
       await refreshDeveloperDiagnostics();
@@ -2738,7 +2871,7 @@ async function executeProfileDataAction() {
     return;
   }
   if (action === "clear-history") {
-    localStorage.removeItem(STORAGE_KEYS.history);
+    focusHistory.clear();
     renderPersonalCenter();
     showToast("专注记录已清空");
     return;
@@ -3998,3 +4131,2269 @@ async function occupySelectedSeat() {
       state.remainingSeconds = state.durationSeconds;
       state.elapsedSeconds = 0;
       state.sessionStartedAt = null;
+  state.pausedSeconds = 0; state.pauseStartedAt = null; state.pendingFocusStartId = null; state.offlineStartAvailable = false;
+      state.cloudFocusClientId = null;
+      state.isRunning = false;
+      state.sessionPhase = "focus";
+      state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
+      state.restRemainingSeconds = state.restDurationSeconds;
+      state.restStartedAt = null;
+      state.restCustomOpen = false;
+      state.nextFocusMode = 25;
+      state.sessionResult = null;
+      lastTick = null;
+      localStorage.removeItem(STORAGE_KEYS.activeSession);
+    }
+    state.sessionPanelOpen = false;
+    state.focusImageChoice = PUBLIC_CONFIG.minimalMvp ? sceneDefaultFocusView(targetSeatId) : preferences.rememberLastFocusView ? preferences.lastFocusView : "window";
+    if (!preferences.rememberLastSound) {
+      const defaults = defaultPreferences();
+      state.sounds = { ...defaults.sounds };
+      state.musicTrack = defaults.musicTrack;
+      state.soundVolumes = { ...defaults.soundVolumes };
+    }
+    if (PUBLIC_CONFIG.minimalMvp) {
+      clearImmersiveAutoEnter();
+      state.view = "room";
+      persistActiveSession(true);
+      renderRoom();
+      if (typeof runMinimalSeatTransition === "function") {
+        try { await runMinimalSeatTransition(targetSeatId); } catch (_) { /* The confirmed seat still enters focus if the visual transition fails. */ }
+      }
+      state.isTransitioning = false;
+      state.view = "focus";
+      renderFocus();
+      if (!state.localRoom) void syncCafeState({ refreshMarkers: false });
+    } else {
+      state.isTransitioning = false;
+      beginImmersiveAutoEnter();
+      renderRoom();
+    }
+    return;
+  } catch (error) {
+    state.isTransitioning = false;
+    clearImmersiveAutoEnter();
+    if (error.status === 409) {
+      showToast(error.message === "seat_taken" ? "刚刚有人先坐下了，请换一个位置" : "这个座位的预留已过期，请重试");
+    } else {
+      showToast("座位连接暂时不稳定，请再试一次");
+    }
+    renderRoom();
+    if (!state.localRoom) void syncCafeState();
+    return;
+  }
+  state.isTransitioning = false;
+}
+
+function renderFocus() {
+  if (PUBLIC_CONFIG.minimalMvp) return renderMinimalFocus();
+  window.clearInterval(roomSyncTimer);
+  roomSyncTimer = null;
+  const scene = scenes[state.sceneId];
+  const room = scene.rooms.find((item) => item.id === state.roomId) || scene.rooms[0];
+  const focusImage = selectedFocusImage(scene);
+  const resting = state.sessionPhase === "rest";
+  app.innerHTML = `
+    <section class="view focus ${resting ? "is-resting" : ""}">
+      <img class="scene-image" data-focus-scene-image src="${focusImage}" alt="坐在${room.name}${state.selectedSeat + 1}号座位看到的沉浸式工作视角" />
+      ${resting ? '<div class="rest-scene-veil" aria-hidden="true"></div>' : ""}
+      <header class="focus-header" aria-label="沉浸专注导航">
+        <button class="focus-exit-button" type="button" data-action="return-room-view" aria-label="返回房间">
+          <span aria-hidden="true">←</span><strong>返回房间</strong>
+        </button>
+        <div class="focus-header-actions">
+          ${resting ? `<div class="rest-next-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg><span>下一轮 · ${state.nextFocusMode} 分钟</span></div>` : ""}
+          <button class="focus-profile-button" type="button" data-action="profile" aria-label="打开个人中心" title="个人中心">${profileAvatarMarkup()}</button>
+        </div>
+      </header>
+      ${resting ? renderRestStage() : renderSessionHud("focus")}
+    </section>`;
+  persistActiveSession();
+  if (state.isRunning || resting) startTicker();
+  if (scene.id === "cafe") {
+    window.clearInterval(heartbeatTimer);
+    heartbeatTimer = window.setInterval(sendHeartbeat, 15000);
+    sendHeartbeat();
+  }
+  scheduleHudFade();
+}
+
+function scheduleHudFade() {
+  window.clearTimeout(hudIdleTimer);
+  document.body.classList.remove("hud-idle");
+  if (!preferences.hudAutoHide || state.view !== "focus" || state.sessionPanelOpen || state.sessionPhase === "rest" || state.personalCenter.open) return;
+  hudIdleTimer = window.setTimeout(() => {
+    if (state.view === "focus" && !state.sessionPanelOpen) document.body.classList.add("hud-idle");
+  }, 5000);
+}
+
+function selectedFocusImage(scene = scenes[state.sceneId]) {
+  if (PUBLIC_CONFIG.minimalMvp) {
+    const views = focusSceneDefinition(scene.id)?.focusViews;
+    if (views?.length) return (views.find(view => view.id === state.focusImageChoice) || views[0]).image;
+  }
+  if (scene.id !== "cafe") return scene.image;
+  const focusImages = {
+    window: `${ASSET_BASE}20261013-cafe-window-real-focus-view.webp`,
+    bar: `${ASSET_BASE}20261013-cafe-bar-real-focus-view.webp`,
+    clearing: `${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.webp`,
+    lounge: `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.webp`,
+    mist: `${ASSET_BASE}20261110-cafe-misty-morning-focus-view.webp`,
+    snow: `${ASSET_BASE}20261110-cafe-first-snow-focus-view.webp`,
+  };
+  return focusImages[state.focusImageChoice] || focusImages.window;
+}
+
+function renderSessionHud(context = "focus") {
+  const timerLabel = state.timerMode === 0 ? "自由正计时" : `${state.timerMode} 分钟倒计时`;
+  const timerHasStarted = Boolean(state.sessionStartedAt);
+  const timerActionLabel = state.isRunning ? "暂停" : timerHasStarted ? "继续" : "开始";
+  const roomViewLabel = context === "room" ? "沉浸" : "房间";
+  const allSoundsMuted = !state.sounds.ambient && !state.sounds.white && !state.sounds.music;
+  return `
+    <aside class="session-hud session-hud-${context} ${state.sessionPanelOpen ? "is-open" : ""}" aria-label="专注计时与设置">
+      ${state.sessionPanelOpen ? `
+        <section class="session-control-panel" role="dialog" aria-modal="false" aria-labelledby="focus-settings-title">
+          <header><div><strong id="focus-settings-title">专注设置</strong><small>${timerHasStarted ? "本次计时进行中" : "选择专注方式，然后开始"}</small></div><button type="button" data-action="toggle-session-panel" aria-label="关闭设置">×</button></header>
+          <div class="session-setting-group">
+            <span>计时选项</span>
+            <div class="session-choice-row">
+              ${modeButton(25, "25 分钟")}
+              ${modeButton(50, "50 分钟")}
+              ${modeButton(0, "自由正计时")}
+            </div>
+          </div>
+          <div class="session-setting-group">
+            <span>声音设置</span>
+            <div class="environment-sound-grid" aria-label="声音设置">
+              ${soundButton("mute", "⊘", "无声音", allSoundsMuted)}
+              ${Object.entries(FOCUS_MUSIC_TRACKS).map(([key, track], index) => soundButton(key, String(index + 1).padStart(2, "0"), track.name)).join("")}
+              ${soundButton("ambient", "♫", "咖啡馆")}
+              ${soundButton("white", "≈", "白噪音")}
+            </div>
+          </div>
+          <div class="session-setting-group">
+            <span>场景设置</span>
+            <div class="focus-scene-grid" aria-label="专注场景设置">
+              ${focusViewButton("window", "窗边视角", `${ASSET_BASE}20261013-cafe-window-real-focus-view.webp`)}
+              ${focusViewButton("bar", "吧台一角", `${ASSET_BASE}20261013-cafe-bar-real-focus-view.webp`)}
+              ${focusViewButton("clearing", "雨后初晴", `${ASSET_BASE}20261028-cafe-rain-clearing-focus-view.webp`)}
+              ${focusViewButton("lounge", "安静角落", `${ASSET_BASE}20261013-cafe-sofa-real-focus-view.webp`)}
+              ${focusViewButton("mist", "薄雾清晨", `${ASSET_BASE}20261110-cafe-misty-morning-focus-view.webp`)}
+              ${focusViewButton("snow", "初雪傍晚", `${ASSET_BASE}20261110-cafe-first-snow-focus-view.webp`)}
+            </div>
+          </div>
+        </section>` : ""}
+      <div class="focus-control-cluster">
+        <div class="immersive-timer" role="timer" tabindex="0" aria-label="当前计时 ${formatTime()}，悬停或聚焦显示快捷操作" aria-live="off">
+          <strong data-session-clock>${formatTime()}</strong>
+          <small>${timerLabel}</small>
+        </div>
+        <nav class="focus-control-dock" aria-label="专注快捷操作">
+        <button class="focus-dock-button ${state.isRunning ? "is-active" : ""}" type="button" data-action="toggle-timer" aria-label="${timerActionLabel}">
+          <span class="focus-dock-icon" aria-hidden="true">${state.isRunning ? `<svg viewBox="0 0 24 24"><path d="M9 7v10M15 7v10"/></svg>` : `<svg viewBox="0 0 24 24"><path d="m9 7 8 5-8 5z"/></svg>`}</span><small>${timerActionLabel}</small>
+        </button>
+        <button class="focus-dock-button ${state.sessionPanelOpen ? "is-active" : ""}" type="button" data-action="toggle-session-panel" aria-label="专注设置" aria-expanded="${state.sessionPanelOpen}">
+          <span class="focus-dock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4 1a7 7 0 0 0-2.1-1.2L14 3h-4l-.4 2.7a7 7 0 0 0-2.1 1.2l-2.4-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 2.1 1.2L10 21h4l.4-2.7a7 7 0 0 0 2.1-1.2l2.4 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2Z"/></svg></span><small>设置</small>
+        </button>
+        <button class="focus-dock-button" type="button" data-action="toggle-room-view" aria-label="${context === "room" ? "返回沉浸视角" : "返回房间视角"}">
+          <span class="focus-dock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10.5V20h11v-9.5"/><path d="M9.5 20v-5h5v5"/></svg></span><small>${roomViewLabel}</small>
+        </button>
+        <button class="focus-dock-button is-danger" type="button" data-action="finish-session" aria-label="结束专注">
+          <span class="focus-dock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 8h8v8H8z"/></svg></span><small>结束</small>
+        </button>
+        </nav>
+      </div>
+    </aside>`;
+}
+
+function renderRestStage() {
+  const restMinutes = Math.max(1, Math.round(state.restDurationSeconds / 60));
+  const hasPresetDuration = REST_PRESET_MINUTES.includes(restMinutes) && !state.restCustomOpen;
+  return `
+    <section class="rest-stage" role="dialog" aria-modal="false" aria-labelledby="rest-stage-title">
+      <article class="rest-card">
+        <div class="rest-bell" aria-hidden="true">
+          <span class="rest-bell-wave rest-bell-wave-left"></span>
+          <svg viewBox="0 0 24 24"><path d="M7.5 10.3a4.5 4.5 0 0 1 9 0c0 5.2 2.1 5.5 2.1 5.5H5.4s2.1-.3 2.1-5.5Z"/><path d="M10 18a2.2 2.2 0 0 0 4 0"/></svg>
+          <span class="rest-bell-wave rest-bell-wave-right"></span>
+        </div>
+        <div class="rest-complete-pill">叮 · 本轮专注已完成</div>
+        <h1 id="rest-stage-title">起来走一走吧</h1>
+        <p class="rest-description">喝口水、伸展一下，${restMinutes} 分钟后再回来。</p>
+        <div class="rest-divider" aria-hidden="true"><span></span></div>
+        <div class="rest-clock">
+          <strong data-rest-clock>${formatRestTime()}</strong>
+          <small>休息倒计时</small>
+        </div>
+        <section class="rest-duration-setting" aria-labelledby="rest-duration-title">
+          <h2 id="rest-duration-title">休息时长</h2>
+          <div class="rest-duration-options">
+            ${REST_PRESET_MINUTES.map((minutes) => `<button type="button" class="rest-duration-button ${hasPresetDuration && restMinutes === minutes ? "active" : ""}" data-rest-minutes="${minutes}" aria-pressed="${hasPresetDuration && restMinutes === minutes}">${minutes === 5 && hasPresetDuration ? '<span aria-hidden="true">✓</span>' : ""}${minutes} 分钟</button>`).join("")}
+            <button type="button" class="rest-duration-button ${state.restCustomOpen || !REST_PRESET_MINUTES.includes(restMinutes) ? "active" : ""}" data-rest-minutes="custom" aria-pressed="${state.restCustomOpen || !REST_PRESET_MINUTES.includes(restMinutes)}">自定义</button>
+          </div>
+          ${state.restCustomOpen ? `<div class="rest-custom-duration"><label for="rest-custom-minutes">输入休息时间</label><div><input id="rest-custom-minutes" data-rest-custom-input type="number" min="1" max="60" step="1" value="${restMinutes}" inputmode="numeric" /><span>分钟</span><button type="button" data-action="apply-custom-rest">应用</button></div></div>` : ""}
+          <div class="rest-auto-next"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a7 7 0 1 0 1 7"/><path d="m18 4 .2 4-4-.2"/></svg><span>休息结束后自动开始下一轮 ${state.nextFocusMode} 分钟专注</span></div>
+        </section>
+        <footer class="rest-actions">
+          <button type="button" class="rest-skip-button" data-action="skip-rest">跳过休息</button>
+          <button type="button" class="rest-continue-button" data-action="continue-rest">继续休息</button>
+        </footer>
+      </article>
+    </section>`;
+}
+
+function formatRestTime() {
+  const total = Math.max(0, state.restRemainingSeconds);
+  const minutes = Math.floor(total / 60);
+  const seconds = Math.floor(total % 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function modeButton(value, label) {
+  return `<button class="mode-button ${state.timerMode === value ? "active" : ""}" data-mode="${value}">${label}</button>`;
+}
+
+function focusViewButton(value, label, image) {
+  return `<button type="button" class="focus-view-button ${state.focusImageChoice === value ? "active" : ""}" data-focus-view="${value}" aria-pressed="${state.focusImageChoice === value}"><img src="${image}" alt="" /><small>${label}</small></button>`;
+}
+
+function soundButton(key, icon, label, forcedActive = null) {
+  const isMusicTrack = Boolean(FOCUS_MUSIC_TRACKS[key]);
+  const isActive = forcedActive ?? (isMusicTrack ? state.sounds.music && state.musicTrack === key : Boolean(state.sounds[key]));
+  const image = SOUND_OPTION_ART[key] || SOUND_OPTION_ART.ambient;
+  return `<button type="button" class="environment-sound-button ${isMusicTrack ? "is-music-track" : ""} ${key === "mute" ? "is-muted-option" : ""} ${isActive ? "active" : ""}" data-sound="${key}" aria-pressed="${isActive}"><span class="sound-option-thumbnail" aria-hidden="true"><img src="${image}" alt="" /><i>${icon}</i></span><small>${label}</small></button>`;
+}
+
+function renderSummary() {
+  if (PUBLIC_CONFIG.minimalMvp) return renderMinimalSummary();
+  const scene = scenes[state.sceneId];
+  const result = state.sessionResult || buildSessionResult("ended_early");
+  const minutes = Math.floor(result.elapsedSeconds / 60);
+  const seconds = result.elapsedSeconds % 60;
+  const history = readHistory().filter((item) => item.elapsedSeconds > 0);
+  const sessions = history.length;
+  const streak = getFocusStreak(history);
+  const summaryCopy = getSummaryCopy(result.status);
+  const durationLabel = minutes > 0 ? `${String(minutes).padStart(2, "0")} 分钟` : `${String(seconds).padStart(2, "0")} 秒`;
+  app.innerHTML = `
+    <section class="view summary">
+      <img class="summary-island-background" src="${islandImage}" alt="" />
+      ${streak > 0 ? `<div class="summary-streak-badge" aria-label="连续专注 ${streak} 天"><span aria-hidden="true">♦</span>连续专注 <strong>${String(streak).padStart(2, "0")}</strong> 天</div>` : ""}
+      <article class="summary-card">
+        <div class="summary-symbol ${result.status === "not_started" ? "quiet" : ""}">${summaryCopy.symbol}</div>
+        <p class="eyebrow">${summaryCopy.eyebrow}</p>
+        <h1>${summaryCopy.title}</h1>
+        <p class="summary-description">${summaryCopy.description.replace("{scene}", scene.name)}</p>
+        <div class="summary-divider" aria-hidden="true"><span></span></div>
+        <div class="summary-stats">
+          <div class="summary-stat"><span class="summary-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg></span><div><strong>${durationLabel}</strong><span>本次专注</span></div></div>
+          <div class="summary-stat"><span class="summary-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 9h11v5a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V9Z"/><path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16M8 5c0 1 1 1 1 2M12 5c0 1 1 1 1 2"/></svg></span><div><strong>${scene.name}</strong><span>停留场景</span></div></div>
+          <div class="summary-stat"><span class="summary-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m8.5 12 2.2 2.2 4.8-5"/></svg></span><div><strong>${sessions} 次</strong><span>累计完成</span></div></div>
+        </div>
+        <div class="feedback-title">这次专注时的状态如何？</div>
+        <div class="feedback-options">
+          ${[["no", "没有"], ["some", "有一点"], ["yes", "很明显"]].map(([value, label]) => `<button class="feedback-button ${state.feedback === value ? "selected" : ""}" data-feedback="${value}" aria-label="${label}" aria-pressed="${state.feedback === value}">${feedbackFaceIcon(value)}<span>${label}</span></button>`).join("")}
+        </div>
+        <div class="summary-actions">
+          <button class="text-button" data-action="return-island"><span aria-hidden="true">⚑</span>回到海岛</button>
+          <button class="secondary-button" data-action="return-room">返回房间</button>
+          <button class="primary-button" data-action="retry-session">再来一次 <span aria-hidden="true">→</span></button>
+        </div>
+      </article>
+    </section>`;
+}
+
+function feedbackFaceIcon(value) {
+  const mouth = value === "yes" ? '<path d="M8.5 13.5c1.8 2 5.2 2 7 0"/>' : value === "some" ? '<path d="M9 14c1.7 1.2 4.3 1.2 6 0"/>' : '<path d="M9 15h6"/>';
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="9" cy="10" r=".7" class="face-eye"/><circle cx="15" cy="10" r=".7" class="face-eye"/>${mouth}</svg>`;
+}
+
+function getFocusStreak(history) {
+  const activeDays = new Set(history.map((item) => new Date(item.endedAt || item.startedAt || 0)).filter((date) => !Number.isNaN(date.getTime())).map((date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`));
+  if (!activeDays.size) return 0;
+  const cursor = new Date();
+  const dayKey = (date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  if (!activeDays.has(dayKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (activeDays.has(dayKey(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+function getSummaryCopy(status) {
+  if (status === "completed") {
+    return {
+      symbol: "✓",
+      eyebrow: "目标完成",
+      title: "这一段专注，完成了",
+      description: "你在{scene}守住了计划中的时间。休息一下，准备好时再回来。",
+    };
+  }
+  if (status === "free_completed") {
+    return {
+      symbol: "✓",
+      eyebrow: "自由专注完成",
+      title: "辛苦了，欢迎回来",
+      description: "你在{scene}完成了一段自由专注，每一分钟都已经被记录。",
+    };
+  }
+  if (status === "not_started") {
+    return {
+      symbol: "·",
+      eyebrow: "还没有开始计时",
+      title: "没关系，座位还在",
+      description: "这次还没有形成专注记录。你可以返回{scene}重新开始。",
+    };
+  }
+  return {
+    symbol: "↗",
+    eyebrow: "本次先到这里",
+    title: "已经专注了一会儿",
+    description: "你在{scene}停留的时间已经保存。提前结束也不等于没有收获。",
+  };
+}
+
+function formatTime() {
+  if (state.timerMode === -1) return "专注中";
+  const total = state.timerMode === 0 ? state.elapsedSeconds : state.remainingSeconds;
+  const minutes = Math.floor(total / 60);
+  const seconds = Math.floor(total % 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+async function setTimerMode(mode) {
+  if (!PUBLIC_CONFIG.minimalMvp && (mode === 0 || mode === 50) && !["subscription", "lifetime", "admin", "offline_grace"].includes(state.accessStatus?.entitlementType)) {
+    const access = await getAccessStatus({ refresh: true }).catch(() => null);
+    if (!access || !["subscription", "lifetime", "admin", "offline_grace"].includes(access.entitlementType)) {
+      openPaywall("paid_timer_mode_required");
+      return;
+    }
+  }
+  if (state.isRunning) syncTimerFromClock();
+  state.sessionPhase = "focus";
+  state.timerMode = mode;
+  state.durationSeconds = Math.max(0, mode * 60);
+  state.remainingSeconds = state.durationSeconds;
+  state.elapsedSeconds = 0;
+  state.sessionStartedAt = null;
+  state.pausedSeconds = 0; state.pauseStartedAt = null; state.pendingFocusStartId = null; state.offlineStartAvailable = false;
+  state.isRunning = false;
+  state.sessionResult = null;
+  lastTick = null;
+  if (state.view === "room") renderRoom();
+  else renderFocus();
+}
+
+async function toggleTimer() {
+  if (state.isStartingFocus) return;
+  const timerHadStarted = Boolean(state.sessionStartedAt);
+  if (state.isRunning) {
+    syncTimerFromClock();
+    state.isRunning = false;
+    state.pauseStartedAt = Date.now();
+    stopTicker();
+    suspendAudio();
+    persistActiveSession(true);
+    if (state.cloudFocusClientId) { queueFocusUpdate(state.cloudFocusClientId, { status: "paused", actualSeconds: state.elapsedSeconds, pausedSeconds: currentPausedSeconds() }); void flushPendingFocusUpdates(); }
+    sendHeartbeat();
+  } else {
+    if (!timerHadStarted) {
+      state.isStartingFocus = true;
+      const button = document.querySelector('[data-action="toggle-timer"]');
+      if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); }
+      if (PUBLIC_CONFIG.minimalMvp) setMinimalPending("Starting your focus session…");
+      try { if (!await authorizeFocusStart()) return; }
+      finally {
+        state.isStartingFocus = false;
+        if (button) { button.disabled = false; button.removeAttribute("aria-busy"); }
+        if (PUBLIC_CONFIG.minimalMvp) setMinimalPending(null);
+      }
+    }
+    if (state.pauseStartedAt) state.pausedSeconds = (state.pausedSeconds || 0) + Math.max(0, Math.floor((Date.now() - state.pauseStartedAt) / 1000));
+    state.pauseStartedAt = null;
+    state.isRunning = true;
+    state.sessionStartedAt = state.sessionStartedAt || Date.now();
+    lastTick = Date.now();
+    startTicker();
+    updateAudio();
+    persistActiveSession(true);
+    if (timerHadStarted && state.cloudFocusClientId) { queueFocusUpdate(state.cloudFocusClientId, { status: "running", actualSeconds: state.elapsedSeconds, pausedSeconds: currentPausedSeconds() }); void flushPendingFocusUpdates(); }
+    sendHeartbeat();
+  }
+  if (!timerHadStarted && state.isRunning) state.sessionPanelOpen = false;
+  if (state.view === "focus") renderFocus();
+  else renderRoom();
+}
+
+function startTicker() {
+  if (ticker) return;
+  lastTick = lastTick || Date.now();
+  ticker = window.setInterval(() => {
+    if (syncTimerFromClock()) return;
+    document.querySelectorAll("[data-session-clock]").forEach((timerElement) => {
+      timerElement.textContent = formatTime();
+    });
+    document.querySelectorAll("[data-rest-clock]").forEach((timerElement) => {
+      timerElement.textContent = formatRestTime();
+    });
+    if (Date.now() - lastPersistAt >= 5000) persistActiveSession();
+  }, 1000);
+}
+
+function syncTimerFromClock({ finishOnComplete = true } = {}) {
+  if (state.sessionPhase === "rest") return syncRestTimerFromClock();
+  if (!state.isRunning || !lastTick) return false;
+  const now = Date.now();
+  const delta = Math.floor((now - lastTick) / 1000);
+  if (delta < 1) return false;
+  lastTick += delta * 1000;
+  const appliedDelta = state.timerMode > 0 ? Math.min(delta, state.remainingSeconds) : delta;
+  state.elapsedSeconds += appliedDelta;
+  if (state.timerMode > 0) {
+    state.remainingSeconds = Math.max(0, state.remainingSeconds - appliedDelta);
+    if (state.remainingSeconds === 0) {
+      if (finishOnComplete) finishSession("completed");
+      return true;
+    }
+  }
+  return false;
+}
+
+function syncRestTimerFromClock() {
+  if (!lastTick) return false;
+  const now = Date.now();
+  const delta = Math.floor((now - lastTick) / 1000);
+  if (delta < 1) return false;
+  lastTick += delta * 1000;
+  state.restRemainingSeconds = Math.max(0, state.restRemainingSeconds - delta);
+  if (state.restRemainingSeconds === 0) {
+    if (PUBLIC_CONFIG.minimalMvp) {
+      stopTicker(); state.sessionPhase = "focus"; state.restStartedAt = null;
+      localStorage.removeItem(STORAGE_KEYS.activeSession); state.view = "summary"; render();
+    } else startNextFocusSession();
+    return true;
+  }
+  return false;
+}
+
+function stopTicker() {
+  if (ticker) window.clearInterval(ticker);
+  ticker = null;
+}
+
+function stopTickerIfNeeded() {
+  if (!["focus", "room"].includes(state.view) && !state.awaitingImmersiveFocus) stopTicker();
+}
+
+function queueFocusUpdate(clientSessionId, payload) {
+  let pending;
+  try { pending = JSON.parse(localStorage.getItem("focusIslandPendingFocusUpdatesV1") || "[]"); }
+  catch (_) { pending = []; }
+  if (!Array.isArray(pending)) pending = [];
+  const previous = pending.find(item => item.clientSessionId === clientSessionId);
+  const terminal = status => ["completed", "ended_early", "interrupted"].includes(status);
+  if (previous && terminal(previous.payload?.status) && !terminal(payload.status)) return;
+  pending = pending.filter(item => item.clientSessionId !== clientSessionId);
+  pending.push({ clientSessionId, ownerUserId: onlineUserId, revision: crypto.randomUUID(), payload });
+  localStorage.setItem("focusIslandPendingFocusUpdatesV1", JSON.stringify(pending));
+}
+
+async function flushPendingFocusUpdates() {
+  if (pendingFocusUpdatePromise) return pendingFocusUpdatePromise;
+  pendingFocusUpdatePromise = (async () => {
+    for (;;) {
+      let pending;
+      try { pending = JSON.parse(localStorage.getItem("focusIslandPendingFocusUpdatesV1") || "[]"); }
+      catch (_) { return; }
+      if (!Array.isArray(pending)) return;
+      const item = pending.find(entry => entry.ownerUserId && entry.ownerUserId === onlineUserId);
+      if (!item) return;
+      try {
+        await api(`/api/focus/sessions/${encodeURIComponent(item.clientSessionId)}`, {
+          method: "PATCH", headers: { "X-Focus-User": item.ownerUserId }, body: JSON.stringify(item.payload), keepalive: true,
+        });
+      } catch (error) { if (error.status !== 404) return; }
+      // Remove only the version sent. A terminal update queued while this request
+      // was in flight must survive and be drained before this promise resolves.
+      const current = JSON.parse(localStorage.getItem("focusIslandPendingFocusUpdatesV1") || "[]");
+      localStorage.setItem("focusIslandPendingFocusUpdatesV1", JSON.stringify(current.filter(entry =>
+        entry.clientSessionId !== item.clientSessionId || JSON.stringify(entry) !== JSON.stringify(item))));
+    }
+  })().finally(() => { pendingFocusUpdatePromise = null; });
+  return pendingFocusUpdatePromise;
+}
+
+async function finishSession(forcedStatus = null) {
+  if (finishSessionPromise) return finishSessionPromise;
+  finishSessionPromise = finishSessionOnce(forcedStatus).finally(() => { finishSessionPromise = null; });
+  return finishSessionPromise;
+}
+
+async function finishSessionOnce(forcedStatus = null) {
+  const epoch=historyIdentityEpoch;
+  if (state.sessionPhase === "rest") {
+    state.restStartedAt = null;
+    state.restCustomOpen = false;
+    stopTicker();
+    localStorage.removeItem(STORAGE_KEYS.activeSession);
+    await releaseSeat();
+    if(epoch!==historyIdentityEpoch)return;
+    window.clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+    state.view = "summary";
+    render();
+    return;
+  }
+  if (state.isRunning && !forcedStatus && syncTimerFromClock({ finishOnComplete: false })) forcedStatus = "completed";
+  state.isRunning = false;
+  state.sessionPanelOpen = false;
+  clearImmersiveAutoEnter();
+  stopTicker();
+  stopAudio();
+  const status = forcedStatus || (state.elapsedSeconds === 0 ? "not_started" : state.timerMode <= 0 ? "free_completed" : "ended_early");
+  state.sessionResult = buildSessionResult(status);
+  if (state.elapsedSeconds > 0) saveSessionResult(state.sessionResult);
+  if (state.cloudFocusClientId) {
+    const cloudStatus = status === "completed" || status === "free_completed" ? "completed" : status === "not_started" ? "interrupted" : "ended_early";
+    queueFocusUpdate(state.cloudFocusClientId, { status: cloudStatus, actualSeconds: state.elapsedSeconds, pausedSeconds: currentPausedSeconds() });
+    await flushPendingFocusUpdates();
+  }
+  if(epoch!==historyIdentityEpoch)return;
+  if (!PUBLIC_CONFIG.minimalMvp && status === "completed" && [25, 50].includes(state.timerMode)) {
+    notifyFocusComplete();
+    beginRestStage(state.timerMode);
+    return;
+  }
+  localStorage.removeItem(STORAGE_KEYS.activeSession);
+  await releaseSeat();
+    if(epoch!==historyIdentityEpoch)return;
+  window.clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+  state.view = "summary";
+  render();
+}
+
+function beginRestStage(nextFocusMode) {
+  state.sessionPhase = "rest";
+  state.nextFocusMode = [25, 50].includes(nextFocusMode) ? nextFocusMode : 25;
+  state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
+  state.restRemainingSeconds = state.restDurationSeconds;
+  state.restStartedAt = Date.now();
+  state.restCustomOpen = false;
+  state.isRunning = false;
+  state.sessionPanelOpen = false;
+  lastTick = Date.now();
+  document.title = PUBLIC_CONFIG.minimalMvp ? "Take a break · Focus Isle" : "休息一下 · 专注岛";
+  persistActiveSession(true);
+  renderFocus();
+}
+
+function setRestDuration(minutes) {
+  const nextMinutes = Math.min(60, Math.max(1, Math.round(Number(minutes) || DEFAULT_REST_MINUTES)));
+  state.restDurationSeconds = nextMinutes * 60;
+  state.restRemainingSeconds = state.restDurationSeconds;
+  state.restStartedAt = Date.now();
+  state.restCustomOpen = false;
+  lastTick = Date.now();
+  persistActiveSession(true);
+  renderFocus();
+}
+
+async function startNextFocusSession() {
+  state.cloudFocusClientId = null;
+  stopTicker();
+  state.sessionPhase = "focus";
+  state.timerMode = [25, 50].includes(state.nextFocusMode) ? state.nextFocusMode : 25;
+  state.durationSeconds = state.timerMode * 60;
+  state.remainingSeconds = state.durationSeconds;
+  state.elapsedSeconds = 0;
+  state.sessionStartedAt = null;
+  state.pausedSeconds = 0; state.pauseStartedAt = null; state.pendingFocusStartId = null; state.offlineStartAvailable = false;
+  state.sessionResult = null;
+  state.restStartedAt = null;
+  state.restCustomOpen = false;
+  state.isRunning = false;
+  state.sessionPanelOpen = false;
+  lastTick = null;
+  document.title = "准备专注 · 专注岛";
+  renderFocus();
+  if (!await authorizeFocusStart()) {
+    persistActiveSession(true);
+    return;
+  }
+  state.sessionStartedAt = Date.now();
+  state.isRunning = true;
+  lastTick = state.sessionStartedAt;
+  document.title = "专注中 · 专注岛";
+  startTicker();
+  updateAudio();
+  persistActiveSession(true);
+  sendHeartbeat();
+  renderFocus();
+}
+
+function notifyFocusComplete() {
+  document.title = "专注完成 · 专注岛";
+  if (preferences.desktopNotifications && "Notification" in window && Notification.permission === "granted") {
+    new Notification("专注完成", { body: "这一段时间已经完成，休息一下吧。" });
+  }
+  if (!preferences.completionSound) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  const context = new AudioCtor();
+  const gain = context.createGain();
+  gain.gain.setValueAtTime(0.0001, context.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.04);
+  gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.7);
+  gain.connect(context.destination);
+  [523.25, 659.25].forEach((frequency, index) => {
+    const oscillator = context.createOscillator();
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    oscillator.connect(gain);
+    oscillator.start(context.currentTime + index * 0.12);
+    oscillator.stop(context.currentTime + 0.72);
+  });
+  window.setTimeout(() => context.close(), 900);
+}
+
+function currentPausedSeconds() {
+  return Math.max(0, Math.min(86400, (state.pausedSeconds || 0) + (state.pauseStartedAt ? Math.floor((Date.now() - state.pauseStartedAt) / 1000) : 0)));
+}
+
+function recoveredFocusSeconds(session) {
+  const actual = Number(session.actual_seconds) || 0;
+  if (session.status === 'paused') return actual;
+  const anchor = Date.parse(session.updated_at || session.started_at);
+  const since = Number.isFinite(anchor) ? Math.max(0,Math.floor((Date.now()-anchor)/1000)) : 0;
+  return session.updated_at ? actual + since : Math.max(actual, since - (Number(session.paused_seconds)||0));
+}
+
+function buildSessionResult(status) {
+  return {
+    ownerUserId: focusHistory.owner(),
+    id: `${state.sessionStartedAt || Date.now()}-${state.sceneId}-${state.roomId}`,
+    clientSessionId: state.cloudFocusClientId,
+    sceneId: state.sceneId,
+    roomId: state.roomId,
+    seat: state.selectedSeat,
+    timerMode: state.timerMode,
+    targetSeconds: state.durationSeconds,
+    elapsedSeconds: state.elapsedSeconds,
+    remainingSeconds: state.remainingSeconds,
+    startedAt: state.sessionStartedAt,
+    endedAt: Date.now(),
+    status,
+    sounds: { ...state.sounds },
+    musicTrack: state.musicTrack,
+    feedback: state.feedback,
+    pausedSeconds: currentPausedSeconds(),
+  };
+}
+
+function saveSessionResult(result) {
+  if(result.ownerUserId && result.ownerUserId!==focusHistory.owner())return;
+  focusHistory.put({ ...result, synced: false });
+  historyStatus = 'pending';
+  void importLocalHistory();
+}
+
+function readHistory() { return focusHistory.records(); }
+
+function persistActiveSession(force = false) {
+  if (!["focus", "room"].includes(state.view) || !state.sceneId || state.selectedSeat === null || !state.currentSeatId) return;
+  const now = Date.now();
+  if (!force && now - lastPersistAt < 1000) return;
+  localStorage.setItem(STORAGE_KEYS.activeSession, JSON.stringify({
+    ownerUserId: focusHistory.owner(),
+    pausedSeconds: state.pausedSeconds || 0,
+    pauseStartedAt: state.pauseStartedAt || null,
+    sceneId: state.sceneId,
+    roomId: state.roomId,
+    localRoom: state.localRoom,
+    offlineFocus: Boolean(state.offlineFocus),
+    selectedSeat: state.selectedSeat,
+    timerMode: state.timerMode,
+    durationSeconds: state.durationSeconds,
+    remainingSeconds: state.remainingSeconds,
+    elapsedSeconds: state.elapsedSeconds,
+    isRunning: state.isRunning,
+    sessionPhase: state.sessionPhase,
+    restDurationSeconds: state.restDurationSeconds,
+    restRemainingSeconds: state.restRemainingSeconds,
+    restStartedAt: state.restStartedAt,
+    nextFocusMode: state.nextFocusMode,
+    sessionStartedAt: state.sessionStartedAt,
+    cloudFocusClientId: state.cloudFocusClientId,
+    companions: state.companions,
+    focusImageChoice: state.focusImageChoice,
+    sounds: state.sounds,
+    musicTrack: state.musicTrack,
+    soundVolumes: state.soundVolumes,
+    savedAt: now,
+  }));
+  lastPersistAt = now;
+}
+
+function restoreActiveSession() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.activeSession) || "null");
+    if (!saved?.ownerUserId || saved.ownerUserId !== focusHistory.owner()) return;
+    const scene = saved ? scenes[saved.sceneId] : null;
+    if (!saved || !scene || !Number.isInteger(saved.selectedSeat) || saved.selectedSeat < 0 || saved.selectedSeat >= scene.seats.length) return;
+    if (PUBLIC_CONFIG.minimalMvp) {
+      const definition=focusSceneDefinition(saved.sceneId);
+      if(!definition?.enabled || (saved.localRoom ? saved.roomId!==`${saved.sceneId}-local` : !definition.onlineRooms.includes(saved.roomId))) return;
+    }
+    Object.assign(state, {
+      view: "focus",
+      sceneId: saved.sceneId,
+      roomId: saved.roomId,
+      localRoom: Boolean(saved.localRoom),
+      offlineFocus: Boolean(saved.offlineFocus),
+      selectedSeat: saved.selectedSeat,
+      currentSeatId: saved.selectedSeat + 1,
+      timerMode: saved.timerMode,
+      durationSeconds: saved.durationSeconds,
+      remainingSeconds: saved.remainingSeconds,
+      elapsedSeconds: saved.elapsedSeconds,
+      isRunning: Boolean(saved.isRunning),
+      sessionPhase: saved.sessionPhase === "rest" ? "rest" : "focus",
+      restDurationSeconds: Number(saved.restDurationSeconds) || DEFAULT_REST_MINUTES * 60,
+      restRemainingSeconds: Number(saved.restRemainingSeconds) || DEFAULT_REST_MINUTES * 60,
+      restStartedAt: saved.restStartedAt || null,
+      restCustomOpen: false,
+      nextFocusMode: [25, 50].includes(Number(saved.nextFocusMode)) ? Number(saved.nextFocusMode) : 25,
+      pausedSeconds: Number(saved.pausedSeconds) || 0,
+      pauseStartedAt: saved.pauseStartedAt || null,
+      sessionStartedAt: saved.sessionStartedAt,
+      cloudFocusClientId: saved.cloudFocusClientId || null,
+      companions: saved.companions || 6,
+      focusImageChoice: saved.focusImageChoice || "window",
+      sounds: { ...state.sounds, ...saved.sounds },
+      musicTrack: FOCUS_MUSIC_TRACKS[saved.musicTrack] ? saved.musicTrack : "rainy-notes",
+      soundVolumes: { ...state.soundVolumes, ...saved.soundVolumes },
+      sessionPanelOpen: false,
+    });
+    if (state.localRoom) {
+      state.localNpcRoster = createLocalNpcLeases({ excludeSeatIds: [saved.selectedSeat + 1] });
+      state.roomPresence = {
+        leases: [...state.localNpcRoster, {
+          roomId: PUBLIC_CONFIG.minimalMvp ? `${state.sceneId}-local` : "cafe-local",
+          seatId: saved.selectedSeat + 1,
+          sessionId: identity.sessionId,
+          guestId: identity.guestId,
+          displayName: identity.displayName,
+          avatarSkin: identity.avatarSkin,
+          memberType: "human",
+          state: "occupied",
+          activity: saved.sessionPhase === "rest" ? "休息中" : saved.isRunning ? "专注计时中" : "已入座",
+          focusStartedAt: saved.sessionStartedAt,
+        }],
+        serverNow: Date.now(),
+      };
+    } else {
+      state.localNpcRoster = createLocalNpcLeases({ excludeSeatIds: [saved.selectedSeat + 1] });
+    }
+    if (state.sessionPhase === "rest") {
+      const offlineSeconds = Math.max(0, Math.floor((Date.now() - saved.savedAt) / 1000));
+      state.restRemainingSeconds = Math.max(0, state.restRemainingSeconds - offlineSeconds);
+      if (state.restRemainingSeconds === 0) {
+        state.sessionPhase = "focus";
+        state.timerMode = state.nextFocusMode;
+        state.durationSeconds = state.timerMode * 60;
+        state.remainingSeconds = state.durationSeconds;
+        state.elapsedSeconds = 0;
+        state.sessionStartedAt = null;
+  state.pausedSeconds = 0; state.pauseStartedAt = null; state.pendingFocusStartId = null; state.offlineStartAvailable = false;
+        state.cloudFocusClientId = null;
+        state.sessionResult = null;
+        state.restStartedAt = null;
+        state.isRunning = false;
+      }
+      lastTick = Date.now();
+    } else if (state.isRunning) {
+      const offlineSeconds = Math.max(0, Math.floor((Date.now() - saved.savedAt) / 1000));
+      const appliedOfflineSeconds = state.timerMode > 0 ? Math.min(offlineSeconds, state.remainingSeconds) : offlineSeconds;
+      state.elapsedSeconds += appliedOfflineSeconds;
+      if (state.timerMode > 0) {
+        state.remainingSeconds = Math.max(0, state.remainingSeconds - appliedOfflineSeconds);
+        if (state.remainingSeconds === 0) {
+          state.isRunning = false;
+          if (state.cloudFocusClientId) {
+            queueFocusUpdate(state.cloudFocusClientId, { status: "completed", actualSeconds: state.elapsedSeconds, pausedSeconds: currentPausedSeconds() });
+          }
+          state.sessionResult = buildSessionResult("completed");
+          saveSessionResult(state.sessionResult);
+          state.sessionPhase = PUBLIC_CONFIG.minimalMvp ? "focus" : "rest";
+          if (PUBLIC_CONFIG.minimalMvp) { state.view = "summary"; localStorage.removeItem(STORAGE_KEYS.activeSession); void releaseSeat(); }
+          state.nextFocusMode = [25, 50].includes(state.timerMode) ? state.timerMode : 25;
+          state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
+          state.restRemainingSeconds = Math.max(1, state.restDurationSeconds - Math.max(0, offlineSeconds - appliedOfflineSeconds));
+          state.restStartedAt = Date.now();
+          lastTick = Date.now();
+        }
+      }
+    }
+  } catch (_) {
+    localStorage.removeItem(STORAGE_KEYS.activeSession);
+  }
+}
+
+function resetTimerState({ keepMode = true } = {}) {
+  state.isRunning = false;
+  clearImmersiveAutoEnter();
+  state.sessionPhase = "focus";
+  state.timerMode = keepMode ? state.timerMode : 25;
+  state.durationSeconds = Math.max(0, state.timerMode * 60);
+  state.remainingSeconds = state.durationSeconds;
+  state.elapsedSeconds = 0;
+  state.sessionStartedAt = null;
+  state.pausedSeconds = 0; state.pauseStartedAt = null; state.pendingFocusStartId = null; state.offlineStartAvailable = false;
+  state.cloudFocusClientId = null;
+  state.sessionResult = null;
+  state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
+  state.restRemainingSeconds = state.restDurationSeconds;
+  state.restStartedAt = null;
+  state.restCustomOpen = false;
+  state.nextFocusMode = [25, 50].includes(state.timerMode) ? state.timerMode : 25;
+  state.feedback = null;
+  lastTick = null;
+  localStorage.removeItem(STORAGE_KEYS.activeSession);
+}
+
+function retrySession() {
+  resetTimerState();
+  state.selectedSeat = null;
+  state.view = roomViewForScene();
+  render();
+}
+
+function returnRoom() {
+  resetTimerState();
+  state.selectedSeat = null;
+  state.view = roomViewForScene();
+  render();
+}
+
+function returnIsland() {
+  resetTimerState({ keepMode: false });
+  releaseSeat();
+  stopRoomPresence();
+  state.view = "island";
+  state.roomId = null;
+  state.selectedSeat = null;
+  render();
+}
+
+function isRoom3DInteractionEnvelope(message) {
+  return Boolean(message)
+    && typeof message === "object"
+    && message.contract_version === ROOM_3D_CONTRACT_VERSION
+    && ROOM_3D_EVENT_TYPES.has(message.event_type)
+    && typeof message.interaction_id === "string"
+    && message.interaction_id.length > 0
+    && typeof message.room_id === "string"
+    && typeof message.seat_id === "string"
+    && typeof message.look_id === "string"
+    && Number.isSafeInteger(message.lease_revision)
+    && Number.isSafeInteger(message.event_sequence)
+    && message.event_sequence >= 1
+    && typeof message.server_time === "number"
+    && message.payload
+    && typeof message.payload === "object";
+}
+
+function isCurrentRoom3DInteraction(message) {
+  if (!isRoom3DInteractionEnvelope(message) || !room3DInteraction) return false;
+  return message.interaction_id === room3DInteraction.interaction_id
+    && message.event_sequence > room3DInteraction.event_sequence
+    && message.lease_revision >= room3DInteraction.lease_revision;
+}
+
+function room3DResponse(source, eventType, payload = {}, { leaseRevision } = {}) {
+  return {
+    contract_version: ROOM_3D_CONTRACT_VERSION,
+    event_type: eventType,
+    interaction_id: source.interaction_id,
+    room_id: currentRoomApiId() || source.room_id,
+    seat_id: source.seat_id,
+    look_id: source.look_id,
+    lease_revision: leaseRevision ?? source.lease_revision,
+    event_sequence: source.event_sequence + 1,
+    server_time: Date.now(),
+    payload: { service_seat_id: ROOM_3D_SERVICE_SEAT_ID, ...payload },
+  };
+}
+
+function deliverRoom3DResponse(message) {
+  room3DInteraction = message;
+  localStorage.setItem(ROOM_3D_RESPONSE_STORAGE_KEY, JSON.stringify(message));
+  const frame = document.querySelector("[data-godot-room-frame]");
+  if (frame?.contentWindow) {
+    frame.contentWindow.postMessage(message, new URL(frame.src, window.location.href).origin);
+  }
+}
+
+function stopRoom3DLeaseHeartbeat() {
+  window.clearInterval(room3DLeaseHeartbeatTimer);
+  room3DLeaseHeartbeatTimer = null;
+}
+
+async function renewRoom3DLease() {
+  if (!room3DInteraction || state.localRoom) return;
+  try {
+    await api(`/api/sessions/${identity.sessionId}/heartbeat`, {
+      method: "POST",
+      body: JSON.stringify({ activity: "正在走向座位", focusing: false }),
+    });
+  } catch (_) {
+    stopRoom3DLeaseHeartbeat();
+  }
+}
+
+function startRoom3DLeaseHeartbeat() {
+  stopRoom3DLeaseHeartbeat();
+  room3DLeaseHeartbeatTimer = window.setInterval(renewRoom3DLease, ROOM_3D_LEASE_HEARTBEAT_MS);
+}
+
+async function releaseRoom3DLease() {
+  stopRoom3DLeaseHeartbeat();
+  room3DInteraction = null;
+  localStorage.removeItem(ROOM_3D_RESPONSE_STORAGE_KEY);
+  await releaseSeat({ force: true });
+}
+
+async function handleRoom3DTransaction(message) {
+  if (!isRoom3DInteractionEnvelope(message)) return;
+  const serviceSeatId = Number(message.payload?.service_seat_id);
+  if (serviceSeatId !== ROOM_3D_SERVICE_SEAT_ID) return;
+
+  if (message.event_type === "seat_intent") {
+    if (state.view !== "godot-room" || state.localRoom) {
+      deliverRoom3DResponse(room3DResponse(message, "seat_reservation_denied", { reason: "online_authority_unavailable" }));
+      return;
+    }
+    if (room3DInteraction && room3DInteraction.interaction_id !== message.interaction_id) {
+      await releaseRoom3DLease();
+    }
+    room3DInteraction = message;
+    try {
+      const result = await api(`/api/rooms/${currentRoomApiId()}/seats/${serviceSeatId}/reserve`, {
+        method: "POST",
+        body: JSON.stringify(identityBody()),
+      });
+      const granted = room3DResponse(message, "seat_reservation_granted", {
+        expires_at: result.expiresAt,
+      }, { leaseRevision: message.lease_revision + 1 });
+      deliverRoom3DResponse(granted);
+      startRoom3DLeaseHeartbeat();
+    } catch (error) {
+      deliverRoom3DResponse(room3DResponse(message, "seat_reservation_denied", {
+        reason: error.message || "reservation_failed",
+      }, { leaseRevision: message.lease_revision + 1 }));
+    }
+    return;
+  }
+
+  if (!isCurrentRoom3DInteraction(message)) return;
+  room3DInteraction = message;
+
+  if (message.event_type === "seat_sequence_started") return;
+
+  if (message.event_type === "seat_contact_completed") {
+    try {
+      const result = await api(`/api/sessions/${identity.sessionId}/occupy`, {
+        method: "POST",
+        body: JSON.stringify({ roomId: currentRoomApiId(), seatId: serviceSeatId }),
+      });
+      state.currentSeatId = serviceSeatId;
+      state.selectedSeat = serviceSeatId - 1;
+      const confirmed = room3DResponse(message, "seat_occupation_confirmed", {
+        expires_at: result.expiresAt,
+      });
+      deliverRoom3DResponse(confirmed);
+      stopRoom3DLeaseHeartbeat();
+      window.clearInterval(heartbeatTimer);
+      heartbeatTimer = window.setInterval(sendHeartbeat, 15000);
+    } catch (error) {
+      const failed = room3DResponse(message, "seat_occupation_failed", {
+        reason: error.message || "occupation_failed",
+      });
+      await releaseRoom3DLease();
+      deliverRoom3DResponse(failed);
+    }
+    return;
+  }
+
+  if (message.event_type === "focus_autostart_requested") {
+    try {
+      state.timerMode = 25;
+      state.durationSeconds = 25 * 60;
+      state.remainingSeconds = 25 * 60;
+      state.elapsedSeconds = 0;
+      state.sessionPhase = "focus";
+      state.sessionStartedAt = Date.now();
+      state.isRunning = true;
+      lastTick = state.sessionStartedAt;
+      await api(`/api/sessions/${identity.sessionId}/heartbeat`, {
+        method: "POST",
+        body: JSON.stringify({ activity: "专注计时中", focusing: true }),
+      });
+      deliverRoom3DResponse(room3DResponse(message, "focus_autostart_confirmed", {
+        focus_started_at: state.sessionStartedAt,
+      }));
+    } catch (error) {
+      state.isRunning = false;
+      state.sessionStartedAt = null;
+  state.pausedSeconds = 0; state.pauseStartedAt = null; state.pendingFocusStartId = null; state.offlineStartAvailable = false;
+      deliverRoom3DResponse(room3DResponse(message, "focus_autostart_failed", {
+        reason: error.message || "focus_start_failed",
+      }));
+    }
+    return;
+  }
+
+  if (["seat_sequence_failed", "seat_release_requested"].includes(message.event_type)) {
+    await releaseRoom3DLease();
+  }
+}
+
+window.addEventListener("message", (event) => {
+  const frame = document.querySelector("[data-godot-room-frame]");
+  if (!frame || event.source !== frame.contentWindow) return;
+  if (event.origin !== new URL(frame.src, window.location.href).origin) return;
+  const message = event.data;
+  if (!message || typeof message !== "object") return;
+
+  if (isRoom3DInteractionEnvelope(message)) {
+    void handleRoom3DTransaction(message);
+    return;
+  }
+
+  if (message.type === "focus-island-godot-ready") {
+    if (godotRoomReadyTimer) window.clearTimeout(godotRoomReadyTimer);
+    godotRoomReadyTimer = null;
+    document.querySelector("[data-godot-room-loading]")?.classList.add("is-hidden");
+    return;
+  }
+
+  if (message.type === "focus-island-room-exit") {
+    state.view = "island";
+    state.roomId = null;
+    state.selectedSeat = null;
+    render();
+    return;
+  }
+
+  if (message.type !== "focus-island-room-focus") return;
+  const context = message.payload || {};
+  const seatMatch = String(context.seat_id || "").match(/(\d+)$/);
+  const seatNumber = Number(context.service_seat_id) || (seatMatch ? Number(seatMatch[1]) : ROOM_3D_SERVICE_SEAT_ID);
+  state.sceneId = "cafe";
+  state.roomId = state.roomId || "cafe-rain";
+  state.selectedSeat = Math.max(0, Math.min(scenes.cafe.seats.length - 1, seatNumber - 1));
+  state.timerMode = 25;
+  state.durationSeconds = 25 * 60;
+  state.remainingSeconds = 25 * 60;
+  state.elapsedSeconds = 0;
+  state.sessionStartedAt = state.sessionStartedAt || Date.now();
+  state.sessionResult = null;
+  state.sessionPhase = "focus";
+  state.restDurationSeconds = DEFAULT_REST_MINUTES * 60;
+  state.restRemainingSeconds = state.restDurationSeconds;
+  state.restStartedAt = null;
+  state.restCustomOpen = false;
+  state.nextFocusMode = 25;
+  state.sessionPanelOpen = false;
+  state.focusImageChoice = "seat";
+  state.isRunning = true;
+  lastTick = Date.now();
+  state.view = "focus";
+  render();
+});
+
+function initAudio() {
+  if (audioContext) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  audioContext = new AudioCtor();
+  const bufferSize = audioContext.sampleRate * 2;
+  const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  let last = 0;
+  for (let index = 0; index < bufferSize; index += 1) {
+    const white = Math.random() * 2 - 1;
+    last = (last + 0.018 * white) / 1.018;
+    data[index] = last * 3.4;
+  }
+  noiseSource = audioContext.createBufferSource();
+  noiseSource.buffer = buffer;
+  noiseSource.loop = true;
+  noiseFilter = audioContext.createBiquadFilter();
+  noiseFilter.type = "lowpass";
+  noiseFilter.frequency.value = scenes[state.sceneId]?.filter || 600;
+  noiseGain = audioContext.createGain();
+  noiseGain.gain.value = 0;
+  noiseSource.connect(noiseFilter).connect(noiseGain).connect(audioContext.destination);
+  noiseSource.start();
+
+  const whiteBuffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+  const whiteData = whiteBuffer.getChannelData(0);
+  for (let index = 0; index < bufferSize; index += 1) whiteData[index] = Math.random() * 2 - 1;
+  whiteNoiseSource = audioContext.createBufferSource();
+  whiteNoiseSource.buffer = whiteBuffer;
+  whiteNoiseSource.loop = true;
+  whiteNoiseGain = audioContext.createGain();
+  whiteNoiseGain.gain.value = 0;
+  whiteNoiseSource.connect(whiteNoiseGain).connect(audioContext.destination);
+  whiteNoiseSource.start();
+
+}
+
+function updateAudio() {
+  initAudio();
+  if (audioContext && noiseGain) {
+    audioContext.resume();
+    noiseGain.gain.setTargetAtTime(state.sounds.ambient && !(PUBLIC_CONFIG.minimalMvp && focusSceneDefinition()?.ambientAsset) ? CAFE_AMBIENT_GAIN * state.soundVolumes.ambient / 100 : 0, audioContext.currentTime, 0.5);
+    whiteNoiseGain?.gain.setTargetAtTime(state.sounds.white ? 0.03 * state.soundVolumes.white / 100 : 0, audioContext.currentTime, 0.5);
+    if (noiseFilter) noiseFilter.frequency.setTargetAtTime(scenes[state.sceneId].filter, audioContext.currentTime, 0.6);
+  }
+  updateMusicAudio();
+  if (PUBLIC_CONFIG.minimalMvp) void syncSceneAmbience();
+}
+
+function updateMusicAudio() {
+  const track = FOCUS_MUSIC_TRACKS[state.musicTrack];
+  if (!state.sounds.music || !state.isRunning || !track) {
+    musicAudio?.pause();
+    return;
+  }
+  if (!musicAudio || loadedMusicTrack !== state.musicTrack) {
+    musicAudio?.pause();
+    musicAudio = new Audio(track.src);
+    musicAudio.loop = true;
+    musicAudio.preload = "metadata";
+    loadedMusicTrack = state.musicTrack;
+  }
+  musicAudio.volume = Math.min(0.9, Math.max(0, state.soundVolumes.music / 100 * MUSIC_VOLUME_BOOST));
+  musicAudio.play().catch(() => {});
+}
+
+function muteAllAudioImmediately() {
+  if (PUBLIC_CONFIG.minimalMvp) silenceSceneAmbience();
+  if (audioContext) {
+    const now = audioContext.currentTime;
+    [noiseGain, whiteNoiseGain].filter(Boolean).forEach((gainNode) => {
+      gainNode.gain.cancelScheduledValues(now);
+      gainNode.gain.setValueAtTime(0, now);
+    });
+  }
+  musicAudio?.pause();
+}
+
+function suspendAudio() {
+  if (PUBLIC_CONFIG.minimalMvp && typeof silenceSceneAmbience === "function") silenceSceneAmbience();
+  if (audioContext && noiseGain) {
+    noiseGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.25);
+    whiteNoiseGain?.gain.setTargetAtTime(0, audioContext.currentTime, 0.25);
+  }
+  musicAudio?.pause();
+}
+
+function stopAudio() {
+  if (noiseSource) {
+    try { noiseSource.stop(); } catch (_) { /* already stopped */ }
+  }
+  if (whiteNoiseSource) {
+    try { whiteNoiseSource.stop(); } catch (_) { /* already stopped */ }
+  }
+  musicAudio?.pause();
+  if (musicAudio) musicAudio.src = "";
+  if (audioContext) audioContext.close();
+  audioContext = null;
+  noiseSource = null;
+  noiseGain = null;
+  noiseFilter = null;
+  whiteNoiseSource = null;
+  whiteNoiseGain = null;
+  musicAudio = null;
+  loadedMusicTrack = null;
+}
+
+function showToast(message) {
+  let toast = document.querySelector(".toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.className = "toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  requestAnimationFrame(() => toast.classList.add("show"));
+  window.setTimeout(() => toast.classList.remove("show"), 1800);
+}
+
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (_) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const success = document.execCommand("copy");
+    textarea.remove();
+    return success;
+  }
+}
+
+document.addEventListener("click", async (event) => {
+  const clickedOutsideFocusSettings = !PUBLIC_CONFIG.minimalMvp && state.view === "focus"
+    && state.sessionPanelOpen
+    && !event.target.closest(".session-control-panel")
+    && !event.target.closest("[data-action]");
+  if (clickedOutsideFocusSettings) {
+    state.sessionPanelOpen = false;
+    renderFocus();
+    return;
+  }
+
+  const sceneButton = event.target.closest("[data-scene]");
+  if (sceneButton) {
+    state.libraryCurrentSeatId = null;
+    state.sceneId = sceneButton.dataset.scene;
+    state.roomId = null;
+    state.roomPreviewId = null;
+    if (state.sceneId === "cafe") enterCafeRoom();
+    else showToast("这个场景即将开放");
+    return;
+  }
+
+  const roomPreviewButton = event.target.closest("[data-preview-room]");
+  if (roomPreviewButton) {
+    state.roomPreviewId = roomPreviewButton.dataset.previewRoom;
+    renderRooms();
+    return;
+  }
+
+  const roomButton = event.target.closest("[data-room]");
+  if (roomButton) {
+    state.roomId = roomButton.dataset.room;
+    state.selectedSeat = null;
+    state.view = "room";
+    render();
+    return;
+  }
+
+  const seatMarkerElement = event.target.closest("[data-cafe-seat-marker-object]");
+  if (seatMarkerElement && state.isDeveloper && state.cafeDebugMode.enabled) {
+    state.cafeSceneEditor.activeObjectId = seatMarkerElement.dataset.cafeSeatMarkerObject;
+    renderRoom();
+    return;
+  }
+
+  const librarySeatMarkerElement = event.target.closest("[data-library-seat-marker-object]");
+  if (librarySeatMarkerElement && state.isDeveloper && state.libraryDebugMode.enabled) {
+    state.librarySceneEditor.activeObjectId = librarySeatMarkerElement.dataset.librarySeatMarkerObject;
+    renderRoom();
+    return;
+  }
+
+  const seatButton = event.target.closest("[data-seat]");
+  if (seatButton) {
+    if (state.staticSeatCalibration.enabled && seatButton.matches("[data-static-seat-marker]")) return;
+    state.selectedSeat = Number(seatButton.dataset.seat);
+    if (sharedFocusScene()) occupySelectedSeat();
+    else renderRoom();
+    return;
+  }
+
+  const modeButtonElement = event.target.closest("[data-mode]");
+  if (modeButtonElement) {
+    setTimerMode(Number(modeButtonElement.dataset.mode));
+    return;
+  }
+
+  const restDurationButton = event.target.closest("[data-rest-minutes]");
+  if (restDurationButton) {
+    const value = restDurationButton.dataset.restMinutes;
+    if (value === "custom") {
+      state.restCustomOpen = true;
+      renderFocus();
+      window.setTimeout(() => document.querySelector("[data-rest-custom-input]")?.focus(), 0);
+    } else {
+      setRestDuration(Number(value));
+    }
+    return;
+  }
+
+  const soundButtonElement = event.target.closest("[data-sound]");
+  if (soundButtonElement) {
+    const key = soundButtonElement.dataset.sound;
+    Object.keys(state.sounds).forEach((soundKey) => { state.sounds[soundKey] = false; });
+    if (FOCUS_MUSIC_TRACKS[key]) {
+      state.sounds.music = true;
+      state.musicTrack = key;
+    } else if (key !== "mute") {
+      state.sounds[key] = true;
+    }
+    if (key === "mute") muteAllAudioImmediately();
+    else if (state.isRunning) updateAudio();
+    saveSoundPreferencesFromState();
+    persistActiveSession(true);
+    document.querySelectorAll("[data-sound]").forEach((button) => {
+      const buttonKey = button.dataset.sound;
+      const isMusicTrack = Boolean(FOCUS_MUSIC_TRACKS[buttonKey]);
+      const active = buttonKey === "mute"
+        ? !state.sounds.ambient && !state.sounds.white && !state.sounds.music
+        : isMusicTrack
+          ? state.sounds.music && state.musicTrack === buttonKey
+          : Boolean(state.sounds[buttonKey]);
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    return;
+  }
+
+  const focusViewButtonElement = event.target.closest("[data-focus-view]");
+  if (focusViewButtonElement) {
+    state.focusImageChoice = focusViewButtonElement.dataset.focusView;
+    if (preferences.rememberLastFocusView) {
+      preferences.lastFocusView = state.focusImageChoice;
+      savePreferences();
+    }
+    if (state.view === "focus") {
+      const focusImageElement = document.querySelector("[data-focus-scene-image]");
+      if (focusImageElement) focusImageElement.src = selectedFocusImage();
+      document.querySelectorAll("[data-focus-view]").forEach((button) => {
+        const active = button.dataset.focusView === state.focusImageChoice;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+      persistActiveSession(true);
+    } else {
+      renderRoom();
+    }
+    return;
+  }
+
+  const feedbackButton = event.target.closest("[data-feedback]");
+  if (feedbackButton) {
+    state.feedback = feedbackButton.dataset.feedback;
+    if (state.sessionResult && state.sessionResult.elapsedSeconds > 0) {
+      state.sessionResult.feedback = state.feedback;
+      saveSessionResult(state.sessionResult);
+    }
+    document.querySelectorAll("[data-feedback]").forEach((button) => {
+      const selected = button === feedbackButton;
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+    showToast("谢谢，你的感受已经记下了");
+    return;
+  }
+
+  const profileTabButton = event.target.closest("[data-profile-tab]");
+  if (profileTabButton) {
+    if (profileTabButton.dataset.profileTab === "developer" && !state.isDeveloper) return;
+    state.personalCenter.tab = profileTabButton.dataset.profileTab;
+    state.personalCenter.confirmAction = null;
+    renderPersonalCenter();
+    if (state.personalCenter.tab === "developer") void refreshDeveloperDiagnostics();
+    if (state.personalCenter.tab === "history") void refreshFocusHistory();
+    return;
+  }
+
+  const billingButton = event.target.closest("[data-billing-plan]");
+  if (billingButton) {
+    billingButton.disabled = true;
+    billingButton.classList.add("is-loading");
+    api("/api/billing/checkout", { method: "POST", body: JSON.stringify({ plan: billingButton.dataset.billingPlan }) })
+      .then(({ checkoutUrl }) => { window.location.assign(checkoutUrl); })
+      .catch((error) => {
+        billingButton.disabled = false;
+        billingButton.classList.remove("is-loading");
+        if (error.status === 401 || error.status === 403) openAuthGate(error.message);
+        else if (error.message === "founder_lifetime_unavailable") showToast("创始终身版当前不可购买");
+        else if (error.message === "billing_price_mismatch") showToast("价格校验未通过，已安全阻止打开结账页");
+        else if (error.message === "billing_plan_not_configured") showToast("该方案尚未绑定 Stripe Price");
+        else showToast("暂时无法打开结账页");
+      });
+    return;
+  }
+
+  const billingPortalButton = event.target.closest('[data-action="open-billing-portal"]');
+  if (billingPortalButton) {
+    billingPortalButton.disabled = true;
+    api("/api/billing/portal", { method: "POST", body: "{}" })
+      .then(({ portalUrl }) => { window.location.assign(portalUrl); })
+      .catch(() => {
+        billingPortalButton.disabled = false;
+        showToast("暂时无法打开 Stripe 账单管理");
+      });
+    return;
+  }
+
+  const profileMonthButton = event.target.closest("[data-profile-month-delta]");
+  if (profileMonthButton) {
+    const [year, month] = state.personalCenter.monthKey.split("-").map(Number);
+    const next = new Date(Date.UTC(year, month - 1 + Number(profileMonthButton.dataset.profileMonthDelta), 1));
+    state.personalCenter.monthKey = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+    state.personalCenter.selectedDate = `${state.personalCenter.monthKey}-01`;
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileDateButton = event.target.closest("[data-profile-date]");
+  if (profileDateButton) {
+    state.personalCenter.selectedDate = profileDateButton.dataset.profileDate;
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileTimerButton = event.target.closest("[data-preference-timer]");
+  if (profileTimerButton) {
+    preferences.defaultTimerMode = Number(profileTimerButton.dataset.preferenceTimer);
+    savePreferences();
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileLanguageButton = event.target.closest("[data-profile-language]");
+  if (profileLanguageButton) {
+    const language = profileLanguageButton.dataset.profileLanguage === "zh-CN" ? "zh-CN" : "en";
+    if (preferences.language === language) return;
+    preferences.language = language;
+    savePreferences();
+    window.FocusI18n?.setLanguage(language);
+    render();
+    if (state.personalCenter.open) renderPersonalCenter();
+    return;
+  }
+
+  const preferenceToggle = event.target.closest("[data-preference-toggle]");
+  if (preferenceToggle) {
+    const key = preferenceToggle.dataset.preferenceToggle;
+    const nextValue = !Boolean(preferences[key]);
+    if (key === "desktopNotifications" && nextValue && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().then((permission) => {
+        preferences.desktopNotifications = permission === "granted";
+        savePreferences();
+        renderPersonalCenter();
+      }).catch(() => showToast("暂时无法申请通知权限"));
+      return;
+    }
+    preferences[key] = nextValue;
+    savePreferences();
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileSoundToggle = event.target.closest("[data-profile-sound-toggle]");
+  if (profileSoundToggle) {
+    const key = profileSoundToggle.dataset.profileSoundToggle;
+    state.sounds[key] = !state.sounds[key];
+    saveSoundPreferencesFromState();
+    if (state.isRunning) updateAudio();
+    persistActiveSession(true);
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileMusicButton = event.target.closest("[data-profile-music]");
+  if (profileMusicButton) {
+    state.musicTrack = profileMusicButton.dataset.profileMusic;
+    state.sounds.music = true;
+    saveSoundPreferencesFromState();
+    if (state.isRunning) updateAudio();
+    persistActiveSession(true);
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileAvatarButton = event.target.closest("[data-profile-avatar]");
+  if (profileAvatarButton) {
+    identity.avatarSkin = Number(profileAvatarButton.dataset.profileAvatar);
+    persistIdentity();
+    renderPersonalCenter();
+    return;
+  }
+
+  const profileConfirmButton = event.target.closest("[data-confirm-profile]");
+  if (profileConfirmButton) {
+    if (profileConfirmButton.dataset.confirmProfile === "developer-end-focus") {
+      confirmDeveloperSessionEnd();
+      return;
+    }
+    state.personalCenter.confirmAction = profileConfirmButton.dataset.confirmProfile;
+    renderPersonalCenter();
+    return;
+  }
+
+  const sceneObjectElement = event.target.closest("[data-cafe-scene-object]");
+  if (sceneObjectElement && state.isDeveloper && state.cafeDebugMode.enabled) {
+    state.cafeSceneEditor.activeObjectId = sceneObjectElement.dataset.cafeSceneObject;
+    renderRoom();
+    return;
+  }
+
+  const libraryObjectElement = event.target.closest("[data-library-scene-object]");
+  if (libraryObjectElement && state.isDeveloper && state.libraryDebugMode.enabled) {
+    state.librarySceneEditor.activeObjectId = libraryObjectElement.dataset.librarySceneObject;
+    renderRoom();
+    return;
+  }
+
+  const actionElement = event.target.closest("[data-action]");
+  if (!actionElement) return;
+  const action = actionElement.dataset.action;
+  const developerAction = /developer-|(?:cafe|library)-(?:debug|scene|sprite)|static-seat|publish-(?:cafe|library)|select-(?:cafe|library)|nudge-(?:cafe|library)|flip-(?:cafe|library)|duplicate-(?:cafe|library)|delete-(?:cafe|library)|reset-(?:cafe|library)|copy-(?:cafe|library)|release-cafe-seat/.test(action);
+  if (developerAction && !state.isDeveloper) return;
+  if (action === "continue-previous-focus" || action === "replace-previous-focus") {
+    void resolvePreviousFocus(action === "replace-previous-focus");
+    return;
+  }
+  if (action === "developer-refresh-diagnostics") { void refreshDeveloperDiagnostics(); return; }
+  if (action === "developer-enter-cafe") {
+    if (PUBLIC_CONFIG.minimalMvp) { if(!state.isDeveloper)return;closePersonalCenter();await enterMinimalScene("cafe");return; }
+    if (state.currentSeatId) return;
+    closePersonalCenter();
+    state.sceneId = "cafe";
+    state.roomId = null;
+    state.roomPreviewId = null;
+    state.selectedSeat = null;
+    await enterCafeRoom();
+    return;
+  }
+  if (action === "developer-recover-focus") { closePersonalCenter(); void openFocusRecovery(); return; }
+  if (action === "developer-reset-static") {
+    state.cafeDebugMode.enabled = false;
+    state.cafeSpriteTuning.enabled = false;
+    state.libraryDebugMode.enabled = false;
+    state.staticSeatCalibration.enabled = false;
+    resetStaticSeatMarkerPositions();
+    localStorage.setItem(CAFE_ROOM_RENDERER_STORAGE_KEY, CAFE_ROOM_RENDERER_STATIC);
+    const url = new URL(window.location.href);
+    url.searchParams.delete(CAFE_ROOM_RENDERER_QUERY_KEY);
+    url.searchParams.delete(CAFE_ROOM_3D_SRC_QUERY_KEY);
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    if (state.view === "godot-room") state.view = "room";
+    closePersonalCenter();
+    render();
+    return;
+  }
+  if (action === "confirm-leave-focus") {
+    closeAccessOverlay();
+    await finishSession();
+    resetTimerState();
+    state.view = "island";
+    state.selectedSeat = null;
+    state.roomId = null;
+    state.localRoom = false;
+    render();
+    return;
+  }
+
+  if (action === "profile") {
+    openPersonalCenter();
+    return;
+  }
+  if (action === "close-personal-center" || action === "return-active-focus") {
+    closePersonalCenter();
+    return;
+  }
+  if (action === "profile-start-focus") {
+    closePersonalCenter();
+    state.view = "island";
+    render();
+    return;
+  }
+  if (action === "resume-focus-session") {
+    closePersonalCenter();
+    restoreActiveSession();
+    render();
+    return;
+  }
+  if (action === "save-profile-identity") {
+    const input = document.querySelector("[data-profile-name]");
+    const value = String(input?.value || "").trim();
+    if (!value || value.length > 16 || /[\u0000-\u001f\u007f]/.test(value)) {
+      showToast("昵称需为 1–16 个有效字符");
+      input?.focus();
+      return;
+    }
+    identity.displayName = value;
+    persistIdentity();
+    renderPersonalCenter();
+    showToast("昵称已保存");
+    return;
+  }
+  if (action === "open-cafe-developer-editor") {
+    showToast("请使用当前静态 MVP 开发者工具");
+    return;
+  }
+  if (action === "open-static-seat-calibration") {
+    if (!state.isDeveloper || state.view !== "room" || !sharedFocusScene()) return;
+    closePersonalCenter();
+    if (PUBLIC_CONFIG.minimalMvp) { minimalUi.editing=true; renderMinimalRoom(); return; }
+    state.cafeDebugMode.enabled = false;
+    state.cafeSpriteTuning.enabled = false;
+    state.staticSeatCalibration.enabled = true;
+    clearImmersiveAutoEnter();
+    renderStaticCafeRoom();
+    return;
+  }
+  if (action === "cancel-profile-confirm") {
+    state.developerEndSession = null;
+    state.personalCenter.confirmAction = null;
+    renderPersonalCenter();
+    return;
+  }
+  if (action === "execute-profile-confirm") {
+    executeProfileDataAction();
+    return;
+  }
+
+  if (action === "open-sign-in") {
+    state.authMode = "sign-in";
+    openAuthGate("", "enter-island");
+    return;
+  }
+
+  if (action === "enter-island") {
+    window.scrollTo({ top: 0, behavior: "auto" });
+    getAccessStatus({ refresh: true }).then((access) => {
+      if (!access.authenticated || !access.canEnterProduct) {
+        openAuthGate(access.paywallReason, "enter-island");
+        return;
+      }
+      state.view = "island";
+      render();
+      importLocalHistory();
+    }).catch((error) => openAuthGate(error.message || "access_service_unavailable", "enter-island"));
+  }
+  if (action === "close-access-overlay") { if(state.accessOverlay === "focus-recovery" && state.authPending)return;closeAccessOverlay(); }
+  if (action === "toggle-auth-mode") {
+    state.authMode = state.authMode === "sign-up" ? "sign-in" : "sign-up";
+    state.authError = "";
+    renderAccessOverlay();
+  }
+  if (action === "auth-sign-in-from-paywall") {
+    state.authMode = "sign-in";
+    state.accessOverlay = "auth";
+    state.authError = "";
+    renderAccessOverlay();
+  }
+  if (action === "reset-password") {
+    const email = String(document.querySelector('[data-auth-form] input[name="email"]')?.value || state.authEmail).trim();
+    if (!email) { showToast("请先填写邮箱"); return; }
+    turnstileToken().then((captchaToken) => api("/api/auth/password/reset", { method: "POST", body: JSON.stringify({ email, captchaToken }) }))
+      .then(() => showToast("如果账号存在，重置邮件已经发送"))
+      .catch(() => showToast("暂时无法发送重置邮件"));
+  }
+  if (action === "scroll-story") {
+    document.querySelector("#story")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  if (action === "back-island") {
+    if (isActiveFocusSession()) {
+      state.accessOverlay = "leave-focus";
+      renderAccessOverlay();
+      return;
+    }
+    if (state.currentSeatId) await releaseSeat();
+    stopRoomPresence();
+    state.view = "island";
+    state.roomId = null;
+    state.localRoom = false;
+    state.selectedSeat = null;
+    state.roomPreviewId = null;
+    render();
+  }
+  if (action === "back-rooms") {
+    state.isTransitioning = false;
+    clearImmersiveAutoEnter();
+    releaseSeat();
+    stopRoomPresence();
+    state.view = "rooms";
+    state.selectedSeat = null;
+    state.libraryCurrentSeatId = null;
+    render();
+  }
+  if (action === "sit-down" && state.selectedSeat !== null) {
+    occupySelectedSeat();
+  }
+  if (action === "enter-preview-room") {
+    state.roomId = state.roomPreviewId || scenes[state.sceneId].rooms[0].id;
+    state.selectedSeat = null;
+    state.view = roomViewForScene();
+    render();
+  }
+  if (action === "enter-immersive-focus") enterImmersiveFocus();
+  if (action === "enter-library-focus") {
+    state.view = "focus";
+    render();
+  }
+  if (action === "toggle-session-panel") {
+    state.sessionPanelOpen = !state.sessionPanelOpen;
+    if (state.view === "focus") renderFocus();
+    else renderRoom();
+  }
+  if (action === "toggle-timer") toggleTimer();
+  if (action === "apply-custom-rest") {
+    const customInput = document.querySelector("[data-rest-custom-input]");
+    setRestDuration(customInput?.value);
+  }
+  if (action === "skip-rest") startNextFocusSession();
+  if (action === "continue-rest") {
+    state.restCustomOpen = false;
+    renderFocus();
+    showToast(`${Math.max(1, Math.ceil(state.restRemainingSeconds / 60))} 分钟后提醒你开始下一轮专注`);
+  }
+  if (action === "return-room-view") {
+    if (state.isRunning) syncTimerFromClock();
+    state.sessionPanelOpen = false;
+    state.view = "room";
+    renderRoom();
+  }
+  if (action === "toggle-room-view") {
+    if (state.isRunning) syncTimerFromClock();
+    state.sessionPanelOpen = false;
+    state.view = state.view === "focus" ? "room" : "focus";
+    render();
+  }
+  if (action === "finish-session") finishSession();
+  if (action === "retry-session") retrySession();
+  if (action === "return-room") returnRoom();
+  if (action === "return-island") returnIsland();
+  if (action === "toggle-static-seat-calibration") {
+    if (!state.isDeveloper) return;
+    state.staticSeatCalibration.enabled = !state.staticSeatCalibration.enabled;
+    if (state.staticSeatCalibration.enabled) clearImmersiveAutoEnter();
+    renderStaticCafeRoom();
+  }
+  if (action === "reset-static-seat-markers") {
+    if (!state.isDeveloper) return;
+    resetStaticSeatMarkerPositions();
+    renderStaticCafeRoom();
+    showToast("座位编号已恢复默认位置");
+  }
+  if (action === "toggle-cafe-debug-mode") {
+    if (!state.isDeveloper) return;
+    state.cafeDebugMode.enabled = false;
+    state.cafeSpriteTuning.enabled = false;
+    openPersonalCenter({ tab: "developer" });
+    return;
+  }
+  if (action === "toggle-library-debug-mode") {
+    if (!state.isDeveloper) return;
+    state.libraryDebugMode.enabled = false;
+    openPersonalCenter({ tab: "developer" });
+    return;
+  }
+  if (action === "publish-cafe-scene-layout") {
+    publishCafeSceneLayout();
+    showToast("当前位置已固定，普通模式将使用这套布局");
+  }
+  if (action === "select-cafe-scene-object") {
+    const objectId = actionElement.dataset.cafeObjectOption;
+    if (cafeEditorObjectById(objectId)) {
+      state.cafeSceneEditor.activeObjectId = objectId;
+      renderRoom();
+    }
+  }
+  if (action === "nudge-cafe-scene-object") {
+    const objectId = state.cafeSceneEditor.activeObjectId;
+    const field = actionElement.dataset.objectField;
+    const delta = Number(actionElement.dataset.objectDelta || 0);
+    const current = cafeSceneObjectConfig(objectId);
+    updateCafeSceneObject(objectId, { [field]: Number(current[field]) + delta });
+  }
+  if (action === "flip-cafe-scene-object") {
+    const objectId = state.cafeSceneEditor.activeObjectId;
+    const current = cafeSceneObjectConfig(objectId);
+    updateCafeSceneObject(objectId, { flipX: !current.flipX });
+  }
+  if (action === "toggle-cafe-scene-object-visible") {
+    const objectId = state.cafeSceneEditor.activeObjectId;
+    const current = cafeSceneObjectConfig(objectId);
+    updateCafeSceneObject(objectId, { visible: !current.visible });
+  }
+  if (action === "duplicate-cafe-scene-object") {
+    const copyId = duplicateCafeSceneObject(state.cafeSceneEditor.activeObjectId);
+    if (copyId) {
+      renderRoom();
+      showToast("已复制当前物件，可以直接拖动副本");
+    }
+  }
+  if (action === "delete-cafe-scene-object") {
+    if (deleteCafeSceneObject(state.cafeSceneEditor.activeObjectId)) {
+      renderRoom();
+      showToast("已删除当前物件");
+    }
+  }
+  if (action === "reset-cafe-scene-object") {
+    resetCafeSceneObject(state.cafeSceneEditor.activeObjectId);
+    showToast("已恢复当前物件默认参数");
+  }
+  if (action === "release-cafe-seat-now") {
+    releaseSeat({ force: true }).then(() => {
+      state.selectedSeat = null;
+      syncCafeState();
+      renderRoom();
+      showToast("已释放当前浏览器的座位占用");
+    });
+  }
+  if (action === "copy-cafe-scene-objects") {
+    const json = JSON.stringify(allCafeSceneObjectConfigs(), null, 2);
+    copyTextToClipboard(json).then((success) => {
+      showToast(success ? "全部场景物件 JSON 已复制" : "复制失败，请手动记录参数");
+    });
+  }
+  if (action === "publish-library-scene-layout") {
+    publishLibrarySceneLayout();
+    showToast("学院区当前位置已固定，普通模式将使用这套布局");
+  }
+  if (action === "select-library-scene-object") {
+    const objectId = actionElement.dataset.libraryObjectOption;
+    if (libraryEditorObjectById(objectId)) {
+      state.librarySceneEditor.activeObjectId = objectId;
+      renderRoom();
+    }
+  }
+  if (action === "nudge-library-scene-object") {
+    const objectId = state.librarySceneEditor.activeObjectId;
+    const field = actionElement.dataset.objectField;
+    const delta = Number(actionElement.dataset.objectDelta || 0);
+    const current = librarySceneObjectConfig(objectId);
+    updateLibrarySceneObject(objectId, { [field]: Number(current[field]) + delta });
+  }
+  if (action === "flip-library-scene-object") {
+    const objectId = state.librarySceneEditor.activeObjectId;
+    const current = librarySceneObjectConfig(objectId);
+    updateLibrarySceneObject(objectId, { flipX: !current.flipX });
+  }
+  if (action === "toggle-library-scene-object-visible") {
+    const objectId = state.librarySceneEditor.activeObjectId;
+    const current = librarySceneObjectConfig(objectId);
+    updateLibrarySceneObject(objectId, { visible: !current.visible });
+  }
+  if (action === "duplicate-library-scene-object") {
+    if (duplicateLibrarySceneObject(state.librarySceneEditor.activeObjectId)) {
+      renderRoom();
+      showToast("已复制当前学院区物件");
+    }
+  }
+  if (action === "delete-library-scene-object") {
+    if (deleteLibrarySceneObject(state.librarySceneEditor.activeObjectId)) {
+      renderRoom();
+      showToast("已删除当前学院区物件");
+    }
+  }
+  if (action === "reset-library-scene-object") {
+    resetLibrarySceneObject(state.librarySceneEditor.activeObjectId);
+    showToast("已恢复当前物件默认参数");
+  }
+  if (action === "copy-library-scene-objects") {
+    copyTextToClipboard(JSON.stringify(allLibrarySceneObjectConfigs(), null, 2)).then((success) => {
+      showToast(success ? "学院区全部物件 JSON 已复制" : "复制失败，请手动记录参数");
+    });
+  }
+  if (action === "nudge-cafe-sprite") {
+    const seatId = state.cafeSpriteTuning.activeSeatId;
+    const field = actionElement.dataset.tuneField;
+    const delta = Number(actionElement.dataset.tuneDelta || 0);
+    const current = cafeSpriteTuningForSeat(seatId);
+    updateCafeSpriteTuning(seatId, { [field]: Number(current[field]) + delta });
+  }
+  if (action === "flip-cafe-sprite") {
+    const seatId = state.cafeSpriteTuning.activeSeatId;
+    const current = cafeSpriteTuningForSeat(seatId);
+    updateCafeSpriteTuning(seatId, { flipX: !current.flipX });
+  }
+  if (action === "reset-cafe-sprite-tuning") {
+    resetCafeSpriteTuning(state.cafeSpriteTuning.activeSeatId);
+    showToast("已恢复默认角色参数");
+  }
+  if (action === "copy-cafe-sprite-tuning") {
+    const seatId = state.cafeSpriteTuning.activeSeatId;
+    const json = JSON.stringify({ [seatId]: cafeSpriteTuningForSeat(seatId) }, null, 2);
+    copyTextToClipboard(json).then((success) => {
+      showToast(success ? "角色参数 JSON 已复制" : "复制失败，请手动记录参数");
+    });
+  }
+  if (action === "locked-room") showToast("首期先把临窗雨声做完整，另外两个房间会沿用同一套引擎");
+  if (action === "locked") showToast("这个区域还在建设中，内测后会根据投票决定优先开放顺序");
+});
+
+document.addEventListener("input", (event) => {
+  const profileVolumeInput = event.target.closest?.("[data-profile-volume]");
+  if (profileVolumeInput) {
+    const key = profileVolumeInput.dataset.profileVolume;
+    state.soundVolumes[key] = clampVolume(profileVolumeInput.value, state.soundVolumes[key]);
+    preferences.soundVolumes = { ...state.soundVolumes };
+    savePreferences();
+    document.querySelector(`[data-profile-volume-value="${key}"]`)?.replaceChildren(`${state.soundVolumes[key]}%`);
+    if (state.isRunning) updateAudio();
+    persistActiveSession(true);
+    return;
+  }
+  const libraryObjectInput = event.target.closest("[data-library-object-input]");
+  if (libraryObjectInput) {
+    if (!state.isDeveloper) return;
+    const field = libraryObjectInput.dataset.libraryObjectInput;
+    updateLibrarySceneObject(state.librarySceneEditor.activeObjectId, { [field]: Number(libraryObjectInput.value) });
+    return;
+  }
+  const objectInput = event.target.closest("[data-object-input]");
+  if (objectInput) {
+    if (!state.isDeveloper) return;
+    const field = objectInput.dataset.objectInput;
+    updateCafeSceneObject(state.cafeSceneEditor.activeObjectId, { [field]: Number(objectInput.value) });
+    return;
+  }
+  const input = event.target.closest("[data-tune-input]");
+  if (!input) return;
+  if (!state.isDeveloper) return;
+  const field = input.dataset.tuneInput;
+  updateCafeSpriteTuning(state.cafeSpriteTuning.activeSeatId, { [field]: Number(input.value) });
+});
+
+document.addEventListener("input", (event) => {
+  const volumeInput = event.target.closest?.("[data-sound-volume]");
+  if (!volumeInput) return;
+  const key = volumeInput.dataset.soundVolume;
+  state.soundVolumes[key] = Number(volumeInput.value);
+  saveSoundPreferencesFromState();
+  if (state.isRunning) updateAudio();
+  persistActiveSession(true);
+});
+
+document.addEventListener("change", (event) => {
+  const profileFilter = event.target.closest?.("[data-profile-filter]");
+  if (!profileFilter) return;
+  state.personalCenter.filters[profileFilter.dataset.profileFilter] = profileFilter.value;
+  renderPersonalCenter();
+});
+
+document.addEventListener("pointerdown", (event) => {
+  const staticMarkerElement = event.target.closest?.("[data-static-seat-marker]");
+  if (staticMarkerElement && state.isDeveloper && state.staticSeatCalibration.enabled && state.view === "room" && state.sceneId === "cafe") {
+    if (event.button !== undefined && event.button !== 0) return;
+    const stageElement = staticMarkerElement.closest(".seat-layer");
+    const seatId = Number(staticMarkerElement.dataset.staticSeatMarker);
+    const slot = staticSeatSlots.find((item) => item.seat_id === seatId);
+    if (!stageElement || !slot) return;
+    const pointer = cafeScenePointerPosition(event, stageElement);
+    const [left, top] = staticSeatMarkerPosition(slot);
+    staticSeatMarkerDrag = {
+      seatId,
+      pointerId: event.pointerId,
+      offsetLeft: pointer.left - left,
+      offsetTop: pointer.top - top,
+      element: staticMarkerElement,
+    };
+    staticMarkerElement.classList.add("is-dragging");
+    staticMarkerElement.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+    return;
+  }
+  const cafeEditorActive = state.isDeveloper && state.sceneId === "cafe" && state.cafeDebugMode.enabled;
+  const libraryEditorActive = state.isDeveloper && state.sceneId === "library" && state.libraryDebugMode.enabled;
+  if ((!cafeEditorActive && !libraryEditorActive) || state.view !== "room") return;
+  if (event.button !== undefined && event.button !== 0) return;
+  const objectElement = event.target.closest("[data-cafe-scene-object], [data-cafe-seat-marker-object], [data-library-scene-object], [data-library-seat-marker-object]");
+  if (!objectElement) return;
+  const stageElement = objectElement.closest(".seat-layer");
+  if (!stageElement) return;
+  const objectId = objectElement.dataset.cafeSceneObject || objectElement.dataset.cafeSeatMarkerObject || objectElement.dataset.librarySceneObject || objectElement.dataset.librarySeatMarkerObject;
+  const config = libraryEditorActive ? librarySceneObjectConfig(objectId) : cafeSceneObjectConfig(objectId);
+  const pointer = cafeScenePointerPosition(event, stageElement);
+  if (libraryEditorActive) {
+    state.librarySceneEditor.activeObjectId = objectId;
+    applyLibrarySceneObjectToDom(objectId);
+  } else {
+    state.cafeSceneEditor.activeObjectId = objectId;
+    applyCafeSceneObjectToDom(objectId);
+  }
+  cafeSceneObjectDrag = {
+    objectId,
+    sceneId: state.sceneId,
+    pointerId: event.pointerId,
+    offsetLeft: pointer.left - config.left,
+    offsetTop: pointer.top - config.top,
+    element: objectElement,
+  };
+  objectElement.classList.add("is-dragging");
+  document.body.classList.add("is-cafe-object-dragging");
+  objectElement.setPointerCapture?.(event.pointerId);
+  event.preventDefault();
+});
+
+document.addEventListener("pointermove", (event) => {
+  if (staticSeatMarkerDrag) {
+    if (event.pointerId !== staticSeatMarkerDrag.pointerId) return;
+    const stageElement = document.querySelector(".static-seat-room .seat-layer");
+    if (!stageElement) return;
+    const pointer = cafeScenePointerPosition(event, stageElement);
+    const position = {
+      left: pointer.left - staticSeatMarkerDrag.offsetLeft,
+      top: pointer.top - staticSeatMarkerDrag.offsetTop,
+    };
+    updateStaticSeatMarkerPosition(staticSeatMarkerDrag.seatId, position);
+    staticSeatMarkerDrag.element.style.left = `${state.staticSeatCalibration.positions[staticSeatMarkerDrag.seatId].left}%`;
+    staticSeatMarkerDrag.element.style.top = `${state.staticSeatCalibration.positions[staticSeatMarkerDrag.seatId].top}%`;
+    event.preventDefault();
+    return;
+  }
+  if (!cafeSceneObjectDrag) return;
+  if (event.pointerId !== cafeSceneObjectDrag.pointerId) return;
+  const stageElement = document.querySelector(".room.is-debug-layout .seat-layer");
+  if (!stageElement) return;
+  const pointer = cafeScenePointerPosition(event, stageElement);
+  const updateObject = cafeSceneObjectDrag.sceneId === "library" ? updateLibrarySceneObject : updateCafeSceneObject;
+  updateObject(cafeSceneObjectDrag.objectId, {
+    left: clampScenePercent(pointer.left - cafeSceneObjectDrag.offsetLeft),
+    top: clampScenePercent(pointer.top - cafeSceneObjectDrag.offsetTop),
+  });
+  event.preventDefault();
+});
+
+function endCafeSceneObjectDrag(event) {
+  if (staticSeatMarkerDrag && (event?.pointerId === undefined || event.pointerId === staticSeatMarkerDrag.pointerId)) {
+    staticSeatMarkerDrag.element?.classList.remove("is-dragging");
+    staticSeatMarkerDrag = null;
+  }
+  if (!cafeSceneObjectDrag) return;
+  if (event?.pointerId !== undefined && event.pointerId !== cafeSceneObjectDrag.pointerId) return;
+  cafeSceneObjectDrag.element?.classList.remove("is-dragging");
+  document.body.classList.remove("is-cafe-object-dragging");
+  cafeSceneObjectDrag = null;
+}
+
+document.addEventListener("pointerup", endCafeSceneObjectDrag);
+document.addEventListener("pointercancel", endCafeSceneObjectDrag);
+
+document.addEventListener("keydown", (event) => {
+  if (state.personalCenter.open) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (state.personalCenter.confirmAction) {
+        state.personalCenter.confirmAction = null;
+        renderPersonalCenter();
+      } else {
+        closePersonalCenter();
+      }
+    }
+    return;
+  }
+  if (state.view !== "room" || !["cafe", "library"].includes(state.sceneId)) return;
+  if (!state.isDeveloper) return;
+  const libraryEditorActive = state.sceneId === "library" && state.libraryDebugMode.enabled;
+  if (!libraryEditorActive && !state.cafeSpriteTuning.enabled && !state.cafeDebugMode.enabled) return;
+  const deltas = {
+    ArrowLeft: { left: -1 },
+    ArrowRight: { left: 1 },
+    ArrowUp: { top: -1 },
+    ArrowDown: { top: 1 },
+  };
+  const direction = deltas[event.key];
+  if (!direction) return;
+  const activeTag = document.activeElement?.tagName;
+  if (activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT") return;
+  event.preventDefault();
+  const step = event.shiftKey ? 1 : 0.2;
+  if (libraryEditorActive) {
+    const objectId = state.librarySceneEditor.activeObjectId;
+    const current = librarySceneObjectConfig(objectId);
+    updateLibrarySceneObject(objectId, {
+      left: current.left + (direction.left || 0) * step,
+      top: current.top + (direction.top || 0) * step,
+    });
+    return;
+  }
+  if (state.cafeDebugMode.enabled) {
+    const objectId = state.cafeSceneEditor.activeObjectId;
+    const current = cafeSceneObjectConfig(objectId);
+    updateCafeSceneObject(objectId, {
+      left: current.left + (direction.left || 0) * step,
+      top: current.top + (direction.top || 0) * step,
+    });
+    return;
+  }
+  const seatId = state.cafeSpriteTuning.activeSeatId;
+  const current = cafeSpriteTuningForSeat(seatId);
+  updateCafeSpriteTuning(seatId, {
+    left: current.left + (direction.left || 0) * step,
+    top: current.top + (direction.top || 0) * step,
+  });
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) void recoverCafeSeat("visibility");
+  if (!["focus", "room"].includes(state.view) || (!state.isRunning && state.sessionPhase !== "rest")) return;
+  if (syncTimerFromClock()) return;
+  persistActiveSession(true);
+  if (!document.hidden) {
+    document.querySelectorAll("[data-session-clock]").forEach((timerElement) => { timerElement.textContent = formatTime(); });
+    document.querySelectorAll("[data-rest-clock]").forEach((timerElement) => { timerElement.textContent = formatRestTime(); });
+  }
+});
+
+window.addEventListener("pageshow", () => { void recoverCafeSeat("pageshow"); });
+window.addEventListener("online", () => { void flushPendingFocusUpdates(); void refreshFocusHistory(); void recoverCafeSeat("online"); });
+window.addEventListener('storage', event => {
+  if (event.key !== 'focusIdentityChangedV2') return;
+  historyIdentityEpoch += 1;
+  persistActiveSession(true); seatReleaseRevision+=1; stopTicker(); stopRoomPresence(); clearImmersiveAutoEnter(); stopAudio(); state.isRunning = false; historyRevision += 1;
+  onlineIdentityPromise = null; onlineUserId = null; focusHistory.select(null);
+  // Preserve the previous identity's saved data; never submit it as the new user.
+  state.view = 'island'; state.currentSeatId = null; state.selectedSeat = null;
+  state.cloudFocusClientId = null; state.sessionStartedAt = null;
+  accountCenter.loaded = false; accountCenter.data = null;accountCenter.draft=null;accountCenter.error='';accountCenter.notice='';accountCenter.recovery=false;state.isDeveloper=false;state.accessStatus=null;identity.avatarUrl=null;identity.avatarSource='builtin';identity.displayName='Guest';identity.avatarSkin=0;persistIdentity();state.personalCenter.open = false;
+  render(); void initializeHistoryIdentity();
+});
+
+window.addEventListener("pagehide", () => {
+  if (["focus", "room"].includes(state.view) && (state.isRunning || state.sessionPhase === "rest")) syncTimerFromClock();
+  persistActiveSession(true);
+});
+window.addEventListener("beforeunload", () => {
+  persistActiveSession(true);
+  stopAudio();
+});
+
+window.addEventListener("focus-island:room-change", (event) => {
+  if (event.detail?.roomId === currentRoomApiId()) void syncCafeState();
+});
+window.addEventListener("focus-island:realtime-ready", (event) => {
+  if (event.detail?.roomId === currentRoomApiId()) void syncCafeState();
+});
+window.addEventListener("focus-island:realtime-offline", () => {
+  const syncLabel = document.querySelector(".room-sync-label");
+  if (syncLabel) syncLabel.textContent = "实时连接中断，已启用快照校准";
+});
+
+document.addEventListener("submit", async (event) => {
+  const accountForm = event.target.closest('[data-account-form="password"]');
+  if (accountForm) {
+    event.preventDefault();
+    const values = new FormData(accountForm);
+    const currentPassword = String(values.get("currentPassword") || "");
+    const password = String(values.get("password") || "");
+    const confirmPassword = String(values.get("confirmPassword") || "");
+    if (password !== confirmPassword) {
+      showToast("两次输入的新密码不一致");
+      accountForm.querySelector('[name="confirmPassword"]')?.focus();
+      return;
+    }
+    const submitButton = accountForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    submitButton.textContent = "正在修改…";
+    try {
+      await api("/api/auth/password/update", { method: "POST", body: JSON.stringify({ currentPassword, password }) });
+      accountForm.reset();
+      showToast("密码已修改，请妥善保存新密码");
+    } catch (error) {
+      showToast(authErrorCopy(error.message));
+    } finally {
+      submitButton.disabled = false;
+      submitButton.textContent = "确认修改密码";
+    }
+    return;
+  }
+  const form = event.target.closest("[data-auth-form]");
+  if (!form) return;
+  event.preventDefault();
+  if (state.authPending) return;
+  state.authPending = true;
+  state.authError = "";
+  renderAccessOverlay();
+  const values = new FormData(form);
+  const flow = form.dataset.authForm;
+  try {
+    if (flow === "sign-up") {
+      const email = String(values.get("email") || "").trim();
+      const password = String(values.get("password") || "");
+      const confirmPassword = String(values.get("confirmPassword") || "");
+      if (password !== confirmPassword) throw new Error("password_mismatch");
+      state.authEmail = email;
+      const captchaToken = await turnstileToken();
+      const result = await api("/api/auth/sign-up", { method: "POST", body: JSON.stringify({ email, password, confirmPassword, captchaToken }) });
+      await completeAuthenticatedFlow(result);
+    } else if (flow === "sign-in") {
+      const email = String(values.get("email") || "").trim();
+      state.authEmail = email;
+      const captchaToken = await turnstileToken();
+      const result = await api("/api/auth/sign-in", { method: "POST", body: JSON.stringify({ email, password: String(values.get("password") || ""), captchaToken }) });
+      const mergeToken = sessionStorage.getItem(STORAGE_KEYS.pendingMergeToken);
+      if (mergeToken) {
+        await api("/api/auth/merge/complete", { method: "POST", body: JSON.stringify({ mergeToken }) });
+        sessionStorage.removeItem(STORAGE_KEYS.pendingMergeToken);
+      }
+      await completeAuthenticatedFlow(result);
+    }
+  } catch (error) {
+    state.authError = error.message;
+    if (error.message === "email_already_registered") {
+      try {
+        const prepared = await api("/api/auth/merge/prepare", { method: "POST", body: "{}" });
+        sessionStorage.setItem(STORAGE_KEYS.pendingMergeToken, prepared.mergeToken);
+      } catch (_) { /* Fresh users have nothing to merge. */ }
+      state.authMode = "sign-in";
+      state.accessOverlay = "auth";
+    }
+  } finally {
+    state.authPending = false;
+    renderAccessOverlay();
+  }
+});
+
+document.addEventListener("pointermove", () => scheduleHudFade(), { passive: true });
+document.addEventListener("keydown", () => scheduleHudFade());
+
+if (PUBLIC_CONFIG.minimalMvp) {
+  preferences.language = "en";
+  window.FocusI18n?.setLanguage("en");
+}
+initializeSharedScenes();
+applyPreferencesToState();
+render();
+void initializeHistoryIdentity();
+prepareLifetimeInviteFromUrl();
+
+const billingReturnState = new URLSearchParams(window.location.search).get("billing");
+if (billingReturnState === "confirming") {
+  openPaywall("payment_confirmation_pending");
+  const poll = window.setInterval(async () => {
+    const access = await getAccessStatus({ refresh: true }).catch(() => null);
+    if (access && ["subscription", "lifetime", "admin"].includes(access.entitlementType)) {
+      window.clearInterval(poll);
+      closeAccessOverlay();
+      window.history.replaceState({}, "", window.location.pathname);
+      showToast("付款已确认，专注权限已解锁");
+    }
+  }, 2000);
+  window.setTimeout(() => window.clearInterval(poll), 60_000);
+} else if (billingReturnState === "canceled") {
+  window.history.replaceState({}, "", window.location.pathname);
+  showToast("已取消结账，没有产生扣款");
+}
+
+if (PUBLIC_CONFIG.minimalMvp) {
+  const accountQuery = new URLSearchParams(location.search);
+  if (['profile','reset-password'].includes(accountQuery.get('account'))) localStorage.setItem('focusIdentityChangedV2', crypto.randomUUID());
+  if (accountQuery.get('account') === 'reset-password') accountCenter.recovery = true;
+  if (accountQuery.has('account') || accountQuery.has('account-error')) {
+    accountCenter.error = accountQuery.has('account-error') ? accountMessage(accountQuery.get('account-error')) : '';
+    openPersonalCenter({tab:accountCenter.recovery ? 'security' : 'account'});
+    history.replaceState(null,'',location.pathname);
+  }
+}
+

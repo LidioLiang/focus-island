@@ -195,7 +195,7 @@ function renderMinimalRoom() {
 function minimalTimerMarkup() {
   const resting = state.sessionPhase === "rest";
   const label = state.isRunning ? "Pause" : state.sessionStartedAt ? "Resume" : "Start";
-  return `<aside class="focus-widget ${minimalUi.timerMenu || !state.sessionStartedAt ? "show-menu" : ""}" aria-label="Focus timer"><nav class="timer-actions" id="minimal-timer-actions" aria-label="Timer actions">${resting ? `<button type="button" data-minimal="end-break">${minimalIcon("end")}<span>End break</span></button>` : `<button type="button" data-action="toggle-timer" aria-label="${label}">${minimalIcon(state.isRunning ? "pause" : "play")}<span>${label}</span></button><button type="button" data-minimal="restart">${minimalIcon("restart")}<span>Restart</span></button><button type="button" data-minimal="end">${minimalIcon("end")}<span>End session</span></button>`}</nav><button type="button" class="time-readout immersive-timer" data-minimal="timer-menu" aria-label="${resting ? "Break timer" : "Focus timer"}; show controls" aria-expanded="${minimalUi.timerMenu}" aria-controls="minimal-timer-actions"><span ${resting ? "data-rest-clock" : "data-session-clock"}>${resting ? formatRestTime() : formatTime()}</span></button></aside>`;
+  return `<aside class="focus-widget ${minimalUi.timerMenu || !state.sessionStartedAt ? "show-menu" : ""}" aria-label="Focus timer"><nav class="timer-actions" id="minimal-timer-actions" aria-label="Timer actions">${resting ? `<button type="button" data-minimal="end-break">${minimalIcon("end")}<span>End break</span></button>` : `<button type="button" data-action="toggle-timer" aria-label="${label}">${minimalIcon(state.isRunning ? "pause" : "play")}<span>${label}</span></button>${state.offlineStartAvailable?`<button type="button" data-minimal="start-local"><span>Continue locally</span></button>`:""}<button type="button" data-minimal="restart">${minimalIcon("restart")}<span>Restart</span></button><button type="button" data-minimal="end">${minimalIcon("end")}<span>End session</span></button>`}</nav><button type="button" class="time-readout immersive-timer" data-minimal="timer-menu" aria-label="${resting ? "Break timer" : "Focus timer"}; show controls" aria-expanded="${minimalUi.timerMenu}" aria-controls="minimal-timer-actions"><span ${resting ? "data-rest-clock" : "data-session-clock"}>${resting ? formatRestTime() : formatTime()}</span></button></aside>`;
 }
 
 function renderMinimalFocus() {
@@ -276,16 +276,18 @@ function minimalMoveMarker(x,y){
 }
 
 async function minimalFinishAction(){
+  const epoch=historyIdentityEpoch;
   if(minimalUi.busy)return;minimalUi.busy=true;minimalRenderConfirm();const action=minimalUi.confirm;
   try{
     if(action==='restart'){
       if(state.isRunning)syncTimerFromClock({finishOnComplete:false});
       state.isRunning=false;stopTicker();suspendAudio();
       if(state.elapsedSeconds>0)saveSessionResult(buildSessionResult('ended_early'));
-      if(state.cloudFocusClientId){queueFocusUpdate(state.cloudFocusClientId,{status:'ended_early',actualSeconds:state.elapsedSeconds,pausedSeconds:0});await flushPendingFocusUpdates();}
+      if(state.cloudFocusClientId){queueFocusUpdate(state.cloudFocusClientId,{status:'ended_early',actualSeconds:state.elapsedSeconds,pausedSeconds:currentPausedSeconds()});await flushPendingFocusUpdates();}
+      if(epoch!==historyIdentityEpoch)return;
       resetTimerState();minimalUi.confirm=null;minimalUi.busy=false;await toggleTimer();
     }else{
-      minimalUi.confirm=null;await finishSession();if(action==='leave'){resetTimerState();state.view='island';state.sceneId=null;render();}
+      minimalUi.confirm=null;await finishSession();if(epoch!==historyIdentityEpoch)return;if(action==='leave'){resetTimerState();state.view='island';state.sceneId=null;render();}
     }
   }catch(_){showToast('Your session could not be updated. Please try again.');}
   finally{minimalUi.busy=false;minimalRenderConfirm();}
@@ -308,6 +310,19 @@ document.addEventListener('click',async event=>{
   if(action==='close-panel'){minimalSetPanel(null);return;}
   if(action==='back-room'){state.view='room';render();return;}
   if(action==='back-island'){if(state.isTransitioning){showToast('Your seat is being prepared. One moment…');return;}if(isActiveFocusSession()){minimalUi.confirm='leave';minimalRenderConfirm();}else{await releaseSeat();resetTimerState();state.view='island';state.sceneId=null;render();}return;}
+  if(action==='start-local'){
+    if(!state.offlineStartAvailable || state.isRunning || state.sessionStartedAt)return;
+    stopRoomPresence();
+    const releaseUrl='/api/sessions/'+encodeURIComponent(identity.sessionId)+'/release';
+    void fetch(releaseUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',keepalive:true}).catch(()=>{});
+    // Preserve an ambiguous start ID: if the server committed before the network
+    // failed, the eventual terminal update reconciles that same cloud session.
+    state.cloudFocusClientId=state.pendingFocusStartId || null;
+    state.pendingFocusStartId=null;state.offlineStartAvailable=false;
+    state.localRoom=true;state.offlineFocus=true;state.roomId=state.sceneId+'-local';
+    state.roomPresence={leases:[],serverNow:Date.now()};state.localNpcRoster=[];
+    await toggleTimer();return;
+  }
   if(action==='focus-view'){state.view='focus';render();return;}
   if(action==='timer-menu'){minimalUi.timerMenu=!minimalUi.timerMenu;document.querySelector('.focus-widget')?.classList.toggle('show-menu',minimalUi.timerMenu);node.setAttribute('aria-expanded',String(minimalUi.timerMenu));return;}
   if(action==='restart'||action==='end'){minimalUi.confirm=action;minimalRenderConfirm();return;}
@@ -380,3 +395,4 @@ window.addEventListener('offline',()=>{if(window.__FOCUS_ISLAND_CONFIG__?.minima
 window.addEventListener("resize",()=>{if(window.__FOCUS_ISLAND_CONFIG__?.minimalMvp && document.querySelector(".minimal-layout-tools"))minimalPositionLayoutPanel();});
 
 window.addEventListener("resize", () => { if (PUBLIC_CONFIG.minimalMvp && state.sceneId === "forest" && state.view === "room") refreshMinimalSeats(); });
+

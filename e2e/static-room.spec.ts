@@ -94,6 +94,7 @@ test("the cafe opens with only real occupants and an upright portrait appears ab
 });
 
 test("an expired background lease silently recovers or moves seats without resetting focus time", async ({ page }) => {
+  await page.route("**/api/auth/session", r=>r.fulfill({json:{authenticated:true,anonymous:true,userId:"room-test-user"}}));
   const sessionId = "7d813b27-a6a8-46b8-9d31-5f9df8c1907e";
   const startedAt = Date.now() - 42 * 60_000;
   let resumePayload: Record<string, unknown> | null = null;
@@ -105,7 +106,9 @@ test("an expired background lease silently recovers or moves seats without reset
       displayName: "Quiet Otter",
       avatarSkin: 1,
     }));
+    localStorage.setItem("focusIslandHistoryGuestV2", "local:test-guest");
     localStorage.setItem("focusIslandActiveSessionV1", JSON.stringify({
+      ownerUserId: "room-test-user",
       sceneId: "cafe",
       roomId: "cafe-01",
       localRoom: false,

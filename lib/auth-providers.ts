@@ -10,5 +10,5 @@ export async function enabledProviders() {
   return Object.fromEntries([...SOCIAL_PROVIDERS, "email"].map(provider => [provider, data.external?.[provider] === true])) as Record<SocialProvider | "email", boolean>;
 }
 export function appOrigin(request: Request) {
-  return new URL(process.env.NEXT_PUBLIC_APP_URL || request.url).origin;
+  return new URL(request.url).origin;
 }
