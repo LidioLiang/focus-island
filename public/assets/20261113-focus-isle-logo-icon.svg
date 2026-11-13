@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="title desc">
   <title id="title">Focus Isle</title>
-  <desc id="desc">FI monogram with a quiet island horizon and rising sun.</desc>
-  <rect width="160" height="160" rx="34" fill="#F3EEE3"/>
-  <path d="M34 98V36h64M34 67h44M110 36v62" fill="none" stroke="#123C3A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M27 104c24-2 40-12 53-26 13 14 29 24 53 26-16 8-34 12-53 12s-37-4-53-12Z" fill="#123C3A"/>
-  <path d="M38 128c15-6 30-6 45 0s30 6 45 0" fill="none" stroke="#123C3A" stroke-width="5" stroke-linecap="round" opacity=".55"/>
-  <circle cx="86" cy="45" r="11" fill="#D69450"/>
+  <desc id="desc">A quiet arched window, horizon lines and a small rising sun.</desc>
+  <rect width="160" height="160" rx="34" fill="#DDECF3"/>
+  <path d="M28 126V73C28 40 48 21 80 21s52 19 52 52v53" fill="none" stroke="#1D3340" stroke-width="6" stroke-linecap="round"/>
+  <path d="M28 73h104" fill="none" stroke="#1D3340" stroke-width="5" stroke-linecap="round"/>
+  <path d="M28 101h60M28 126h104" fill="none" stroke="#87AABD" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="92" cy="72" r="11" fill="#D4924A"/>
 </svg>
