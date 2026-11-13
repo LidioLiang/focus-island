@@ -18,71 +18,71 @@
         "seat_id": 1,
         "avatar_anchor": [
           28.5,
-          33
+          33.7
         ],
         "hit_area": [
-          28.11,
-          52.0723
+          28.5,
+          33.7
         ],
         "desk_zone_id": "bar"
       },
       {
         "seat_id": 2,
         "avatar_anchor": [
-          39.3,
+          39.2,
           30
         ],
         "hit_area": [
-          39.1746,
-          47.5027
+          39.2,
+          30
         ],
         "desk_zone_id": "bar"
       },
       {
         "seat_id": 3,
         "avatar_anchor": [
-          68.5,
-          35
+          65.8,
+          29.5
         ],
         "hit_area": [
-          59.7,
-          50.6908
+          65.8,
+          29.5
         ],
         "desk_zone_id": "window"
       },
       {
         "seat_id": 4,
         "avatar_anchor": [
-          84,
-          43
+          81,
+          37.4
         ],
         "hit_area": [
-          83.433,
-          56.8544
+          81,
+          37.4
         ],
         "desk_zone_id": "window"
       },
       {
         "seat_id": 5,
         "avatar_anchor": [
-          16,
-          53
+          14.1,
+          47.4
         ],
         "hit_area": [
-          15.5502,
-          75.983
+          14.1,
+          47.4
         ],
         "desk_zone_id": "lounge"
       },
       {
         "seat_id": 6,
         "avatar_anchor": [
-          67,
-          63
+          63.1,
+          56.2
         ],
         "hit_area": [
-          66.0885,
-          83.9532
+          63.1,
+          56.2
         ],
         "desk_zone_id": "lounge"
       }

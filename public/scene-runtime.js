@@ -12,6 +12,8 @@ function sceneUsesCompactLayout() {
   return width < 700;
 }
 function sceneLayoutStorageKey() {
+  // Keep old independent café positions intact, but do not apply them to unified markers.
+  if (state.sceneId === 'cafe') return MINIMAL_LAYOUT_KEY + ':cafe:unified';
   const key = state.sceneId && state.sceneId !== 'cafe' ? MINIMAL_LAYOUT_KEY + ':' + state.sceneId : MINIMAL_LAYOUT_KEY;
   return sceneUsesCompactLayout() ? key + ':compact' : key;
 }
