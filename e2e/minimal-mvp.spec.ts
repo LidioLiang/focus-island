@@ -54,9 +54,9 @@ test('developer moves the café avatar and seat button together and persists the
  await page.locator('[data-minimal="layout"]').click();await expect(page.getByRole('region',{name:'Developer seat layout'})).toBeVisible();
  const avatar=page.locator('[data-layout-target="avatar"][data-layout-seat="1"]');const seat=page.locator('[data-layout-target="button"][data-layout-seat="1"]');
  await expect(seat).toHaveCount(0);await avatar.focus();await avatar.press('ArrowRight');
- const moved=await avatar.getAttribute('style');
+ const moved=await avatar.evaluate(e=>({left:e.style.left,top:e.style.top}));
  await page.locator('[data-layout-kind="button"]').click();await expect(avatar).toHaveCount(0);
- expect(await seat.getAttribute('style')).toBe(moved);
+ expect(await seat.evaluate(e=>({left:e.style.left,top:e.style.top}))).toEqual(moved);
  await page.locator('[data-minimal="save-layout"]').click();
  const value=await page.evaluate(()=>JSON.parse(localStorage.getItem('focusIslandMinimalSeatLayoutV1:cafe:unified')||'null'));
  expect(value['1'].avatar[0]).toBe(28.7);expect(value['1'].button).toEqual(value['1'].avatar);
