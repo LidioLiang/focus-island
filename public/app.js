@@ -3242,8 +3242,7 @@ Object.assign(LANDING_COPY["zh-CN"], LANDING_DETAIL_COPY["zh-CN"]);
 const LANDING_FINAL_TEMPLATE = `
 <header class="site-nav" data-nav>
   <a class="brand" href="#top" aria-label="Focus Isle">
-    <img src="/assets/20261031-focus-isle-logo-icon.svg" alt="" width="39" height="39" />
-    <span>Focus Isle</span>
+    <img class="brand-logo" src="/assets/20261113-focus-isle-logo-primary.svg" alt="Focus Isle" width="160" height="40" />
   </a>
   <nav class="nav-links" aria-label="Landing page navigation">
     <a href="#how" data-i18n="navHow">How it works</a>
@@ -3389,7 +3388,7 @@ const LANDING_FINAL_TEMPLATE = `
   </section>
 </main>
 
-<footer class="footer"><div class="section-shell"><div><a class="brand" href="#top"><img src="/assets/20261031-focus-isle-logo-icon.svg" alt="" width="39" height="39" />Focus Isle</a><p data-i18n="footerBody">Immersive focus spaces for deep work, quiet study, and calmer beginnings.</p></div><div class="footer-links"><a href="#how" data-i18n="navHow">How it works</a><a href="#experience" data-i18n="navWhy">Experience</a><a href="#worlds" data-i18n="navWorlds">Worlds</a><a href="#pricing" data-i18n="navPricing">Pricing</a><a href="/privacy" data-i18n="privacy">Privacy</a><a href="/terms" data-i18n="terms">Terms</a></div></div></footer>
+<footer class="footer"><div class="section-shell"><div><a class="brand" href="#top"><img src="/assets/20261113-focus-isle-logo-icon.svg" alt="" width="39" height="39" />Focus Isle</a><p data-i18n="footerBody">Immersive focus spaces for deep work, quiet study, and calmer beginnings.</p></div><div class="footer-links"><a href="#how" data-i18n="navHow">How it works</a><a href="#experience" data-i18n="navWhy">Experience</a><a href="#worlds" data-i18n="navWorlds">Worlds</a><a href="#pricing" data-i18n="navPricing">Pricing</a><a href="/privacy" data-i18n="privacy">Privacy</a><a href="/terms" data-i18n="terms">Terms</a></div></div></footer>
 <p class="sr-only" aria-live="polite" data-live></p>
 `;
 
