@@ -120,7 +120,7 @@ async function runMinimalSeatTransition(seatId) {
   image.decode?.().catch(() => {});
   await new Promise(resolve => window.setTimeout(resolve, MINIMAL_SEAT_SETTLE_MS));
 
-  const world = document.querySelector('.minimal-root[data-view="room"] .world');
+  const world = document.querySelector('.minimal-root.static-seat-room .world');
   if (!world) { setMinimalPending(''); return; }
   const preview = document.createElement('div');
   preview.className = 'minimal-seat-crossfade';

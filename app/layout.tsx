@@ -48,7 +48,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <Script src="/locales/en.js?v=13" strategy="beforeInteractive" />
         <Script src="/account-center.js?v=2" strategy="beforeInteractive" />
         <Script src="/scene-runtime.js?v=2" strategy="beforeInteractive" />
-        <Script src="/minimal-mvp.js?v=9" strategy="beforeInteractive" />
+        <Script src="/minimal-mvp.js?v=10" strategy="beforeInteractive" />
         <Script src="/i18n.js?v=12" strategy="afterInteractive" />
       </body>
     </html>
