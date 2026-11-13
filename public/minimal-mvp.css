@@ -218,6 +218,13 @@ body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
 /* Pending server work must be visible before the first network response. */
 .minimal-pending { position:absolute; z-index:65; left:50%; bottom:28px; transform:translateX(-50%); max-width:calc(100% - 32px); padding:12px 20px; border-radius:24px; background:rgba(244,249,252,.96); color:#344a5b; box-shadow:0 4px 24px #182e4322; font-size:14px; pointer-events:none; }
 .minimal-pending[hidden] { display:none; }
+.minimal-seat-crossfade {
+ position:absolute; inset:0; z-index:60; opacity:0; pointer-events:none;
+ transition:opacity .6s cubic-bezier(.22,.75,.25,1);
+}
+.minimal-seat-crossfade.is-visible { opacity:1; }
+.minimal-seat-crossfade img { display:block; width:100%; height:100%; object-fit:cover; }
+.minimal-root[data-reduced=true] .minimal-seat-crossfade { transition:none; }
 .map-pin:disabled { cursor:progress; opacity:.65; }
 .timer-actions button:disabled { cursor:progress; opacity:.6; }
 

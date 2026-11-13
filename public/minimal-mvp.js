@@ -110,6 +110,28 @@ function acceptMinimalSeatConfirmation(confirmation, seatId) {
   };
 }
 
+const MINIMAL_SEAT_SETTLE_MS = 1900;
+const MINIMAL_SEAT_CROSSFADE_MS = 600;
+
+async function runMinimalSeatTransition(seatId) {
+  setMinimalPending(`Seat ${seatId} is ready. Settling in…`);
+  const image = new Image();
+  image.src = selectedFocusImage();
+  image.decode?.().catch(() => {});
+  await new Promise(resolve => window.setTimeout(resolve, MINIMAL_SEAT_SETTLE_MS));
+
+  const world = document.querySelector('.minimal-root[data-view="room"] .world');
+  if (!world) { setMinimalPending(''); return; }
+  const preview = document.createElement('div');
+  preview.className = 'minimal-seat-crossfade';
+  preview.setAttribute('aria-hidden', 'true');
+  preview.innerHTML = `<img src="${selectedFocusImage()}" alt="">`;
+  world.append(preview);
+  requestAnimationFrame(() => preview.classList.add('is-visible'));
+  await new Promise(resolve => window.setTimeout(resolve, MINIMAL_SEAT_CROSSFADE_MS));
+  setMinimalPending('');
+}
+
 const MINIMAL_ISLAND_IMAGE = "/assets/20261111-island-detail-landscape.webp";
 const MINIMAL_ISLAND_WIDE = "/assets/20261111-island-detail-wide.webp";
 const MINIMAL_ISLAND_PORTRAIT = "/assets/20261111-island-expanded-portrait.webp";
@@ -160,7 +182,7 @@ function refreshMinimalSeats() {
 
 function renderMinimalRoom() {
   if (!minimalPresenceExpiryTimer) minimalPresenceExpiryTimer = window.setInterval(() => { if(state.view === "room") refreshMinimalSeats(); }, 2000);
-  minimalShell("room", `${minimalBackdrop(scenes[state.sceneId].image)}<div class="room-stage" style="--scene-width:${focusSceneDefinition()?.designSize[0] || 1672};--scene-height:${focusSceneDefinition()?.designSize[1] || 941}"><img class="scene-image" src="${scenes[state.sceneId].image}" alt="${escapeHtml(sceneLabel())}, six-seat room"><div class="seat-layer"><div class="static-occupants">${minimalAvatarMarkup()}</div><div class="seat-markers">${minimalButtonMarkup()}</div></div></div>${state.localRoom ? '<span class="minimal-room-mode">Solo room</span>' : '<span class="minimal-room-mode minimal-presence-status" role="status" hidden></span>'}${state.currentSeatId ? '<button type="button" class="minimal-return" data-minimal="focus-view">Return to focus</button>' : '<div class="room-hint">Choose a seat. Make yourself comfortable.</div>'}${minimalUi.editing && state.isDeveloper ? minimalLayoutTools() : ""}`);
+  minimalShell("room", `${minimalBackdrop(scenes[state.sceneId].image)}<div class="room-stage" style="--scene-width:${focusSceneDefinition()?.designSize[0] || 1672};--scene-height:${focusSceneDefinition()?.designSize[1] || 941}"><img class="scene-image" src="${scenes[state.sceneId].image}" alt="${escapeHtml(sceneLabel())}, six-seat room"><div class="seat-layer"><div class="static-occupants">${minimalAvatarMarkup()}</div><div class="seat-markers">${minimalButtonMarkup()}</div></div></div>${state.localRoom ? '<span class="minimal-room-mode">Solo room</span>' : '<span class="minimal-room-mode minimal-presence-status" role="status" hidden></span>'}${state.currentSeatId ? state.isTransitioning ? '' : '<button type="button" class="minimal-return" data-minimal="focus-view">Return to focus</button>' : '<div class="room-hint">Choose a seat. Make yourself comfortable.</div>'}${minimalUi.editing && state.isDeveloper ? minimalLayoutTools() : ""}`);
   // Seed render keys so the first presence response does not detach a pressed button.
   for (const [selector, markup] of [[".static-occupants", minimalAvatarMarkup()], [".seat-markers", minimalButtonMarkup()]]) {
     document.querySelector(selector).dataset.renderKey = markup;

@@ -4010,7 +4010,6 @@ async function occupySelectedSeat() {
       lastTick = null;
       localStorage.removeItem(STORAGE_KEYS.activeSession);
     }
-    state.isTransitioning = false;
     state.sessionPanelOpen = false;
     state.focusImageChoice = PUBLIC_CONFIG.minimalMvp ? sceneDefaultFocusView(targetSeatId) : preferences.rememberLastFocusView ? preferences.lastFocusView : "window";
     if (!preferences.rememberLastSound) {
@@ -4021,11 +4020,18 @@ async function occupySelectedSeat() {
     }
     if (PUBLIC_CONFIG.minimalMvp) {
       clearImmersiveAutoEnter();
-      state.view = "focus";
+      state.view = "room";
       persistActiveSession(true);
+      renderRoom();
+      if (typeof runMinimalSeatTransition === "function") {
+        try { await runMinimalSeatTransition(targetSeatId); } catch (_) { /* The confirmed seat still enters focus if the visual transition fails. */ }
+      }
+      state.isTransitioning = false;
+      state.view = "focus";
       renderFocus();
       if (!state.localRoom) void syncCafeState({ refreshMarkers: false });
     } else {
+      state.isTransitioning = false;
       beginImmersiveAutoEnter();
       renderRoom();
     }
