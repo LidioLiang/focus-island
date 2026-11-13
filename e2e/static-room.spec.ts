@@ -105,7 +105,9 @@ test("an expired background lease silently recovers or moves seats without reset
       displayName: "Quiet Otter",
       avatarSkin: 1,
     }));
+    localStorage.setItem("focusIslandHistoryGuestV2", "local:test-guest");
     localStorage.setItem("focusIslandActiveSessionV1", JSON.stringify({
+      ownerUserId: "room-test-user",
       sceneId: "cafe",
       roomId: "cafe-01",
       localRoom: false,

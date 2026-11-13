@@ -13,7 +13,7 @@ test("English localization initializes after hydration and before the applicatio
   assert.match(layoutSource, /vendor\/i18next\.min\.js/);
   assert.match(layoutSource, /locales\/en\.js/);
   assert.match(layoutSource, /i18n\.js/);
-  assert.match(pageSource, /app\.js\?v=55/);
+  assert.match(pageSource, /app\.js\?v=56/);
   assert.match(layoutSource, /styles\.css\?v=39/);
   assert.match(source, /language: "en"/);
   assert.match(i18nRuntime, /focusIslandPreferencesV1/);
@@ -356,3 +356,4 @@ test("focus completion plays a two-tone chime", () => {
   assert.match(completionSound, /659\.25/);
   assert.match(completionSound, /createOscillator\(\)/);
 });
+

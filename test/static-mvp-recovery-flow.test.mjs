@@ -23,9 +23,10 @@ function harness(functions, overrides = {}) {
       sessionStartedAt: null, authPending: false, personalCenter: {}, focusRecovery: null },
     localStorage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
     PUBLIC_CONFIG: { minimalMvp: false }, crypto: { randomUUID }, Date, encodeURIComponent,
-    onlineUserId: "user-a", focusAuthorizationPromise: null, pendingFocusUpdatePromise: null,
+    historyRevision: 0, onlineUserId: "user-a", focusAuthorizationPromise: null, pendingFocusUpdatePromise: null,
     onlineIdentityPromise: null, accessStatusFetchedAt: 0, lastTick: null,
     seatReleaseRevision: 0, identity: { sessionId: "current-seat-session" },
+    ensureOnlineIdentity: async () => ({}), setHistoryIdentity() {}, refreshFocusHistory() {},
     showToast() {}, clearImmersiveAutoEnter() {}, renderAccessOverlay() {}, persistActiveSession() {},
     closePersonalCenter() {}, render() {}, startTicker() {}, updateAudio() {},
     closeAccessOverlay() { context.state.accessOverlay = null; context.state.focusRecovery = null; },
@@ -33,7 +34,7 @@ function harness(functions, overrides = {}) {
     openAuthGate() { context.state.accessOverlay = "auth"; },
     ...overrides,
   });
-  vm.runInContext(appFunctions(functions), context);
+  vm.runInContext(appFunctions([...new Set([...functions, "recoveredFocusSeconds", "currentPausedSeconds"])]), context);
   return context;
 }
 

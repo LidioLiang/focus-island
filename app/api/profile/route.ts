@@ -3,11 +3,12 @@ import { authenticatedSupabase, json } from "@/lib/presence";
 import { readProfile, providerPhotos } from "@/lib/profile";
 import { rateLimited } from "@/lib/security";
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await authenticatedSupabase();
   if (!auth) return json({ error: "authentication_required" }, { status: 401 });
+  if (request.headers.get("X-Focus-User") !== auth.user.id) return json({ error: "identity_changed" }, { status: 409 });
   try {
-    return json({ profile: await readProfile(auth.supabase, auth.user), anonymous: auth.user.is_anonymous === true, email: auth.user.email || null, providers: auth.user.identities?.map(i => i.provider) || [], providerPhotos: providerPhotos(auth.user) }, { headers: { "Cache-Control": "no-store" } });
+    return json({ userId: auth.user.id, profile: await readProfile(auth.supabase, auth.user), anonymous: auth.user.is_anonymous === true, email: auth.user.email || null, providers: auth.user.identities?.map(i => i.provider) || [], providerPhotos: providerPhotos(auth.user) }, { headers: { "Cache-Control": "no-store" } });
   } catch { return json({ error: "profile_unavailable" }, { status: 503 }); }
 }
 
@@ -18,6 +19,7 @@ export async function PATCH(request: Request) {
   if (!parsed.success) return json({ error: "invalid_profile" }, { status: 400 });
   const auth = await authenticatedSupabase();
   if (!auth) return json({ error: "authentication_required" }, { status: 401 });
+  if (request.headers.get("X-Focus-User") !== auth.user.id) return json({ error: "identity_changed" }, { status: 409 });
   try {
     const current = await readProfile(auth.supabase, auth.user);
     const input = parsed.data;
@@ -25,6 +27,6 @@ export async function PATCH(request: Request) {
     if (input.avatarSource !== "builtin" && !url) return json({ error: "avatar_unavailable" }, { status: 400 });
     const { error } = await auth.supabase.rpc("set_my_profile", { p_display_name: input.displayName, p_avatar_skin: input.avatarSkin, p_avatar_url: url, p_avatar_source: input.avatarSource });
     if (error) return json({ error: "profile_save_failed" }, { status: 503 });
-    return json({ profile: await readProfile(auth.supabase, auth.user) }, { headers: { "Cache-Control": "no-store" } });
+    return json({ userId: auth.user.id, profile: await readProfile(auth.supabase, auth.user) }, { headers: { "Cache-Control": "no-store" } });
   } catch { return json({ error: "profile_unavailable" }, { status: 503 }); }
 }

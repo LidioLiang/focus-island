@@ -14,6 +14,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (id.length < 8 || id.length > 160) return json({ error: "invalid_focus_session" }, { status: 400 });
   const auth = await authenticatedSupabase();
   if (!auth) return json({ error: "authentication_required" }, { status: 401 });
+  if (request.headers.get("X-Focus-User") !== auth.user.id) return json({ error: "identity_changed" }, { status: 409, headers: { "Cache-Control": "no-store" } });
   const { data, error } = await auth.supabase.rpc("update_my_focus_session", {
     p_client_session_id: id,
     p_status: parsed.data.status,
