@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 160" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180" role="img" aria-labelledby="title desc">
   <title id="title">Focus Isle</title>
-  <desc id="desc">A refined FI monogram shaped by a quiet island horizon and rising sun.</desc>
-  <g transform="translate(18 18)">
-    <path d="M12 102V23h86M12 63h60M111 23v79" fill="none" stroke="#F7F1E5" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M6 108c27-2 45-15 61-31 16 16 34 29 61 31-18 8-39 12-61 12s-43-4-61-12Z" fill="#F7F1E5"/>
-    <path d="M18 132c18-7 36-7 54 0s36 7 54 0" fill="none" stroke="#F7F1E5" stroke-width="6" stroke-linecap="round" opacity=".55"/>
-    <circle cx="82" cy="38" r="12" fill="#E0A05C"/>
+  <desc id="desc">A quiet arched window, horizon lines and a small rising sun.</desc>
+  <g transform="translate(24 20)" fill="none" stroke="#E6F1F5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 128V70C8 31 37 7 82 7s74 24 74 63v58" stroke-width="5.2"/>
+    <path d="M8 74h148" stroke-width="4.3"/>
+    <path d="M8 104h87M8 128h148" stroke="#87AABD" stroke-width="2.3" opacity=".85"/>
+    <circle cx="101" cy="71" r="13" fill="#DFA05A" stroke="none"/>
   </g>
-  <text x="180" y="100" fill="#F7F1E5" font-family="Iowan Old Style, Baskerville, Georgia, serif" font-size="64" font-weight="500" letter-spacing="-2.2">Focus Isle</text>
+  <text x="218" y="106" fill="#E6F1F5" font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="62" font-weight="350" letter-spacing="1.5">Focus Isle</text>
 </svg>
