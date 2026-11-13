@@ -209,6 +209,23 @@ body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
 .minimal-root .room-stage{width:min(100%,calc(100dvh * var(--scene-width,1672) / var(--scene-height,941)));aspect-ratio:var(--scene-width,1672)/var(--scene-height,941)}
 
 /* Forest controls remain distinct on narrow screens while the full six-seat art stays visible. */
+/* Café selection becomes the portrait in place; the stem stays quiet beneath it. */
+.minimal-root[data-view=cafe] .avatar-marker,
+.minimal-root[data-view=cafe] .seat-button { width:44px; height:44px; box-sizing:border-box; }
+.minimal-root[data-view=cafe] .seat-stem {
+ position:absolute; left:50%; top:calc(100% + 2px); width:1px; height:14px;
+ transform:translateX(-50%); background:rgba(248,253,255,.38);
+ pointer-events:none;
+}
+.minimal-root[data-view=cafe] .seat-caption {
+ top:50%; left:calc(100% + 9px); transform:translateY(-50%);
+}
+@media(max-width:650px) {
+ .minimal-root[data-view=cafe] .seat-stem { height:9px; }
+ .minimal-root[data-view=cafe] .seat-caption {
+  top:auto; bottom:calc(100% + 5px); left:50%; transform:translateX(-50%);
+ }
+}
 @media(max-width:600px){
  .minimal-root[data-view=forest] .seat-caption{font-size:10px;padding:2px 5px;top:calc(100% + 3px)}
 }
@@ -284,3 +301,4 @@ body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
  .minimal-root[data-view=island] .island-canvas { width:max(100vw,calc(100dvh * 1586 / 992)); aspect-ratio:1586/992; top:40%; transform:translate(-50%,-40%); }
  .minimal-root[data-view=island] .map-pin { left:var(--wide-x); top:var(--wide-y); }
 }
+

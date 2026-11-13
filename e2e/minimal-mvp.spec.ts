@@ -49,20 +49,46 @@ test('confirmed seat pauses in the room before softly entering the immersive des
  expect(Date.now()-started).toBeGreaterThanOrEqual(2300);
 });
 
-test('developer can move an upright avatar without moving its seat button and persist it',async({page})=>{
+test('developer moves the café avatar and seat button together and persists the shared anchor',async({page})=>{
  await mockRooms(page,true);await page.goto('/');await page.locator('[data-panel="settings"]').click();
  await page.locator('[data-minimal="layout"]').click();await expect(page.getByRole('region',{name:'Developer seat layout'})).toBeVisible();
  const avatar=page.locator('[data-layout-target="avatar"][data-layout-seat="1"]');const seat=page.locator('[data-layout-target="button"][data-layout-seat="1"]');
- const before=await seat.getAttribute('style');await avatar.focus();await avatar.press('ArrowRight');
- await page.locator('[data-minimal="save-layout"]').click();expect(await seat.getAttribute('style')).toBe(before);
- const value=await page.evaluate(()=>JSON.parse(localStorage.getItem('focusIslandMinimalSeatLayoutV1')||'null'));
- expect(value['1'].avatar[0]).toBe(28.7);expect(value['1'].button[0]).toBe(28.11);
+ await expect(seat).toHaveCount(0);await avatar.focus();await avatar.press('ArrowRight');
+ const moved=await avatar.getAttribute('style');
+ await page.locator('[data-layout-kind="button"]').click();await expect(avatar).toHaveCount(0);
+ expect(await seat.getAttribute('style')).toBe(moved);
+ await page.locator('[data-minimal="save-layout"]').click();
+ const value=await page.evaluate(()=>JSON.parse(localStorage.getItem('focusIslandMinimalSeatLayoutV1:cafe:unified')||'null'));
+ expect(value['1'].avatar[0]).toBe(28.7);expect(value['1'].button).toEqual(value['1'].avatar);
  await page.reload();await page.locator('[data-panel="settings"]').click();await page.locator('[data-minimal="layout"]').click();
  await expect(page.locator('[data-layout-x]')).toHaveValue('28.7');
  await expect(avatar).toBeVisible();await expect(avatar).toHaveCSS('border-radius','50%');
  const shape=await avatar.evaluate(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return {width:r.width,height:r.height,radius:s.borderRadius};});
  expect(shape.width).toBeGreaterThan(0);expect(shape.width).toBe(shape.height);
 });
+
+for (const viewport of [{width:1920,height:1080},{width:390,height:844},{width:844,height:390}]) {
+ test(`café selection replaces the marker in place at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
+  await page.setViewportSize(viewport);await mockRooms(page);
+  // Legacy developer layouts must not split the new marker back into two positions.
+  await page.addInitScript(()=>localStorage.setItem('focusIslandMinimalSeatLayoutV1',JSON.stringify(Object.fromEntries([1,2,3,4,5,6].map(id=>[id,{avatar:[10,10],button:[90,90]}])))));
+  await page.goto('/');await page.locator('[data-place="cafe"]').click();
+  const markers=page.locator('.seat-button');await expect(markers).toHaveCount(6);
+  for (const marker of await markers.all()) {
+   const geometry=await marker.evaluate(el=>{const r=el.getBoundingClientRect(),stem=getComputedStyle(el.querySelector('.seat-stem')!);return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')===el,stemWidth:stem.width,stemColor:stem.backgroundColor};});
+   expect(geometry.hit).toBe(true);expect(geometry.x).toBeGreaterThanOrEqual(0);expect(geometry.y).toBeGreaterThanOrEqual(0);expect(geometry.right).toBeLessThanOrEqual(viewport.width);expect(geometry.bottom).toBeLessThanOrEqual(viewport.height);
+   expect(geometry.stemWidth).toBe('1px');expect(geometry.stemColor).toBe('rgba(248, 253, 255, 0.38)');
+  }
+  await page.screenshot({path:testInfo.outputPath('cafe-empty-markers.png')});
+  const button=page.locator('.seat-button[data-seat-id="3"]'),before=(await button.boundingBox())!;
+  await button.click();const avatar=page.locator('.avatar-marker.is-mine[data-seat-id="3"]');await expect(avatar).toBeVisible();
+  const after=(await avatar.boundingBox())!;
+  for (const key of ['x','y','width','height'] as const) expect(Math.abs(after[key]-before[key])).toBeLessThan(.6);
+  await expect(button).toHaveCount(0);await expect(avatar.locator('.seat-stem')).toHaveCount(1);
+  await page.screenshot({path:testInfo.outputPath('cafe-selected-marker.png')});
+  await expect(page.locator('[data-session-clock]')).toHaveText('25:00');
+ });
+}
 
 test('island settings work before a room and reduce motion disables marker animation',async({page})=>{
  await mockRooms(page);await page.goto('/');await page.locator('[data-panel="settings"]').click();
