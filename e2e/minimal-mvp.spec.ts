@@ -36,6 +36,19 @@ test('guest can focus twice with no account, no fake companions, and only three 
  expect(new Set(starts).size).toBe(2);await expect(page.locator('[data-auth-form],.paywall-dialog')).toHaveCount(0);expect(errors).toEqual([]);
 });
 
+test('confirmed seat pauses in the room before softly entering the immersive desk',async({page})=>{
+ await mockRooms(page);await page.goto('/');await page.locator('[data-place="cafe"]').click();
+ const started=Date.now();await page.locator('button.seat.available').first().click();
+ await expect(page.locator('.avatar-marker.is-mine')).toBeVisible();
+ await expect(page.getByRole('status').filter({hasText:'Seat 1 is ready. Settling in'})).toBeVisible();
+ await expect(page.locator('[data-minimal="focus-view"]')).toHaveCount(0);
+ await expect(page.locator('[data-session-clock]')).toHaveCount(0);
+ await page.waitForTimeout(1500);await expect(page.locator('[data-session-clock]')).toHaveCount(0);
+ await expect(page.locator('.minimal-seat-crossfade')).toHaveClass(/is-visible/,{timeout:1500});
+ await expect(page.locator('[data-session-clock]')).toHaveText('25:00',{timeout:2000});
+ expect(Date.now()-started).toBeGreaterThanOrEqual(2300);
+});
+
 test('developer can move an upright avatar without moving its seat button and persist it',async({page})=>{
  await mockRooms(page,true);await page.goto('/');await page.locator('[data-panel="settings"]').click();
  await page.locator('[data-minimal="layout"]').click();await expect(page.getByRole('region',{name:'Developer seat layout'})).toBeVisible();
