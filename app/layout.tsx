@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: "Choose a quiet café seat, set a 25 or 50 minute timer, and focus with calming soundscapes and gentle company.",
   keywords: ["focus timer", "immersive focus", "deep work", "pomodoro timer", "virtual café", "ambient sounds"],
   alternates: { canonical: "/" },
-  icons: { icon: "/assets/20261031-focus-isle-logo-icon.svg" },
+  icons: { icon: "/assets/20261113-focus-isle-logo-icon.svg" },
   openGraph: {
     type: "website",
     siteName: "Focus Isle",
