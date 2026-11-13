@@ -253,3 +253,12 @@ test('island artwork fills portrait, desktop and ultrawide screens without blur 
  await page.getByRole('button',{name:'Back to island',exact:true}).click();await expect(page.locator('.island-panorama')).toBeVisible();
 });
 
+
+test('a failed online start offers local focus and preserves the ambiguous session ID',async({page})=>{
+ await mockRooms(page);let attempted='';
+ await page.route('**/api/focus/sessions/start',r=>{attempted=r.request().postDataJSON().clientSessionId;return r.fulfill({status:503,json:{error:'focus_start_failed'}});});
+ await page.goto('/');await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();await page.getByRole('button',{name:'Start',exact:true}).click();
+ await page.getByRole('button',{name:'Continue locally'}).click();await expect(page.getByRole('button',{name:'Pause',exact:true})).toBeVisible();
+ const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('focusIslandActiveSessionV1') || 'null'));
+ expect(saved.offlineFocus).toBe(true);expect(saved.ownerUserId).toBe('guest-test');expect(saved.cloudFocusClientId).toBe(attempted);expect(saved.roomId).toBe('cafe-local');
+});

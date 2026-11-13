@@ -130,7 +130,7 @@ document.addEventListener('click',async event=>{
   accountCenter.busy=true;renderAccountCenter();
   try {
     if(hasActiveSeatSession()) throw new Error('active_session_exists');
-    if(action==='oauth') {const source=await api('/api/auth/session');if(source.authenticated&&source.anonymous)sessionStorage.setItem('focusHistoryMergeSource',source.userId);else sessionStorage.removeItem('focusHistoryMergeSource');const result=await api('/api/auth/oauth',{method:'POST',body:JSON.stringify({provider:button.dataset.provider})});location.assign(result.url);}
+    if(action==='oauth') {await ensureOnlineIdentity();const source=await api('/api/auth/session');if(source.authenticated&&source.anonymous)sessionStorage.setItem('focusHistoryMergeSource',source.userId);else sessionStorage.removeItem('focusHistoryMergeSource');const result=await api('/api/auth/oauth',{method:'POST',body:JSON.stringify({provider:button.dataset.provider})});location.assign(result.url);}
     if(action==='sign-out') {await api('/api/auth/sign-out',{method:'POST',body:'{}'});onlineIdentityPromise=null;clearSignedInHistory();localStorage.removeItem(STORAGE_KEYS.activeSession);identity.displayName='Guest';identity.avatarSkin=0;state.isDeveloper=false;state.accessStatus=null;accountCenter.loaded=false;accountCenter.data=null;accountCenter.draft=null;identity.avatarUrl=null;identity.avatarSource='builtin';identity.sessionId=crypto.randomUUID();persistIdentity();await loadAccountCenter({refresh:true});accountCenter.notice='You’re signed out. You can keep focusing as a guest.';}
   }catch(error){accountCenter.error=accountMessage(error.message);}finally{accountCenter.busy=false;if(state.personalCenter.open)renderAccountCenter();}
 },true);

@@ -23,7 +23,7 @@ test('Forest six seats, independent near views, refresh recovery, and cross-scen
  for(const viewport of [{width:1920,height:1080},{width:390,height:844},{width:844,height:390}]){
   await page.setViewportSize(viewport);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   const bg=(await page.locator('.scene-atmosphere').boundingBox())!;expect(bg.width).toBe(viewport.width);expect(bg.height).toBe(viewport.height);
-  expect((await page.locator('.seat-button').first().boundingBox())!.width).toBeGreaterThanOrEqual(44);
+  await expect.poll(async()=> (await page.locator('.seat-button').first().boundingBox())?.width || 0).toBeGreaterThanOrEqual(44);
  }
  await page.setViewportSize({width:1280,height:820});await page.screenshot({path:info.outputPath('forest-room.png')});
  await page.getByRole('button',{name:'Choose seat 3',exact:true}).click();await expect(page.locator('[data-focus-scene-image]')).toHaveAttribute('src',/forest-deep-focus/);

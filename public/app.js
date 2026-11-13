@@ -367,6 +367,7 @@ function clearSignedInHistory() {
   historyNextOffset = 0; historyHasMore = true;
   sessionStorage.removeItem('focusHistoryMergeSource');
   localStorage.setItem('focusIdentityChangedV2', crypto.randomUUID());
+  render();
 }
 
 async function refreshFocusHistory({ more = false } = {}) {
@@ -6387,6 +6388,7 @@ if (billingReturnState === "confirming") {
 
 if (PUBLIC_CONFIG.minimalMvp) {
   const accountQuery = new URLSearchParams(location.search);
+  if (['profile','reset-password'].includes(accountQuery.get('account'))) localStorage.setItem('focusIdentityChangedV2', crypto.randomUUID());
   if (accountQuery.get('account') === 'reset-password') accountCenter.recovery = true;
   if (accountQuery.has('account') || accountQuery.has('account-error')) {
     accountCenter.error = accountQuery.has('account-error') ? accountMessage(accountQuery.get('account-error')) : '';
