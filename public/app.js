@@ -331,6 +331,7 @@ let onlineUserId = null;
 let historyAnonymous = true;
 let historySyncPromise = null;
 let historyRevision = 0;
+let historyIdentityEpoch = 0;
 let historyStatus = 'local';
 let historyNextOffset = 0;
 let historyHasMore = true;
@@ -350,6 +351,14 @@ function setHistoryIdentity(session, { sourceOwner = null } = {}) {
 }
 
 function clearSignedInHistory() {
+  // Freeze any recovered session under its existing owner before switching scope.
+  persistActiveSession(true);stopTicker();stopRoomPresence();stopAudio();clearImmersiveAutoEnter();
+  seatReleaseRevision+=1;state.isRunning=false;state.cloudFocusClientId=null;state.sessionStartedAt=null;
+  state.currentSeatId=null;state.selectedSeat=null;state.roomId=null;state.sceneId=null;
+  state.pendingFocusStartId=null;state.offlineStartAvailable=false;state.offlineFocus=false;
+  state.elapsedSeconds=0;state.sessionResult=null;state.sessionPhase='focus';state.view='island';
+  localStorage.removeItem(STORAGE_KEYS.activeSession);
+  historyIdentityEpoch += 1;
   historyRevision += 1;
   onlineUserId = null; historyAnonymous = true; onlineIdentityPromise = null;
   state.isDeveloper=false;state.accessStatus=null;accountCenter.data=null;accountCenter.loaded=false;accountCenter.draft=null;
@@ -397,7 +406,7 @@ async function initializeHistoryIdentity() {
       focusHistory.transfer(mergeSource, session.userId);
       sessionStorage.removeItem('focusHistoryMergeSource');
     }
-    if (state.view === 'island') { restoreActiveSession(); render(); }
+    if (state.view === 'island' && !accountCenter.recovery) { restoreActiveSession(); render(); if(state.isRunning)startTicker();void recoverCafeSeat('identity-ready'); }
     if (session.authenticated) void refreshFocusHistory();
   } catch { if(historyRevision!==revision)return; historyStatus = 'local'; if (state.view === 'island') { restoreActiveSession(); render(); } }
 }
@@ -654,10 +663,10 @@ async function turnstileToken() {
 
 async function ensureOnlineIdentity() {
   if (!onlineIdentityPromise) {
-    const revision = historyRevision, sourceOwner=focusHistory.owner();
+    const revision = historyRevision, epoch=historyIdentityEpoch, sourceOwner=focusHistory.owner();
     const task = (async () => {
       const session = await api('/api/auth/session');
-      if(revision!==historyRevision)throw new Error('identity_changed');
+      if(epoch!==historyIdentityEpoch || (revision!==historyRevision && !(session.authenticated && onlineUserId===session.userId)))throw new Error('identity_changed');
       if (session.authenticated) {
         applyAccountProfile(session.profile);setHistoryIdentity(session);
         state.isDeveloper=session.developer===true;return session;
@@ -680,10 +689,12 @@ async function ensureOnlineIdentity() {
 
 async function getAccessStatus({ refresh = false } = {}) {
   if (state.accessStatus && !refresh) return state.accessStatus;
+  const epoch=historyIdentityEpoch;
   if (!accessStatusPromise) accessStatusPromise = (async () => {
     const response = await fetch("/api/access/status", { cache: "no-store" });
     const status = await response.json().catch(() => ({ authenticated: false, paywallReason: "access_service_unavailable" }));
     if (!response.ok) throw Object.assign(new Error(status.paywallReason || "access_service_unavailable"), { status: response.status });
+    if(epoch!==historyIdentityEpoch)throw new Error('identity_changed');
     state.accessStatus = status;
     state.isDeveloper = status.developer === true;
     accessStatusFetchedAt = Date.now();
@@ -884,6 +895,8 @@ async function importLocalHistory() {
 }
 
 async function completeAuthenticatedFlow(result) {
+  historyIdentityEpoch += 1;
+  const epoch=historyIdentityEpoch;
   if (PUBLIC_CONFIG.minimalMvp && onlineUserId !== result.userId) {
     resetTimerState(); identity.sessionId = crypto.randomUUID(); persistIdentity();
     state.currentSeatId = null; state.selectedSeat = null; state.roomId = null;
@@ -896,7 +909,9 @@ async function completeAuthenticatedFlow(result) {
   state.accessStatus = result.access || null;
   accessStatusFetchedAt = result.access ? Date.now() : 0;
   await claimPendingLifetimeInvite();
+  if(epoch!==historyIdentityEpoch)return;
   if (!state.accessStatus) await getAccessStatus({ refresh: true });
+  if(epoch!==historyIdentityEpoch)return;
   const continuation = state.authContinuation;
   closeAccessOverlay();
   // History import and signed-grace refresh must not block the first screen.
@@ -1096,6 +1111,7 @@ function cafeSeatOccupancyLeases() {
 }
 
 async function enterCafeRoom() {
+  const epoch=historyIdentityEpoch;
   if (state.isAllocatingRoom) return;
   state.isAllocatingRoom = true;
   const allocationScene = state.sceneId || "cafe";
@@ -1104,6 +1120,7 @@ async function enterCafeRoom() {
   let access = null;
   try {
     await ensureOnlineIdentity();
+    if(epoch!==historyIdentityEpoch)return;
     if (!PUBLIC_CONFIG.minimalMvp) {
     access = await getAccessStatus({ refresh: Date.now() - accessStatusFetchedAt > 15000 });
     if (!access.authenticated) {
@@ -1119,12 +1136,13 @@ async function enterCafeRoom() {
       method: "POST",
       body: JSON.stringify(identityBody()),
     });
-    if (state.sceneId !== allocationScene) return;
+    if (epoch!==historyIdentityEpoch || state.sceneId !== allocationScene) return;
     if (allocation.access) { state.accessStatus = allocation.access; accessStatusFetchedAt = Date.now(); }
     state.roomId = allocation.roomId;
     state.localRoom = allocation.mode === "local";
     if (PUBLIC_CONFIG.minimalMvp) { state.offlineFocus = false; state.presenceUnavailable = false; }
   } catch (error) {
+    if(epoch!==historyIdentityEpoch || error.message==='identity_changed')return;
     if (PUBLIC_CONFIG.minimalMvp && (!error.status || error.status >= 500)) {
       state.roomId = PUBLIC_CONFIG.minimalMvp ? `${state.sceneId}-local` : "cafe-local";
       state.localRoom = true;
@@ -4614,13 +4632,14 @@ async function finishSession(forcedStatus = null) {
 }
 
 async function finishSessionOnce(forcedStatus = null) {
-  const revision=historyRevision;
+  const epoch=historyIdentityEpoch;
   if (state.sessionPhase === "rest") {
     state.restStartedAt = null;
     state.restCustomOpen = false;
     stopTicker();
     localStorage.removeItem(STORAGE_KEYS.activeSession);
     await releaseSeat();
+    if(epoch!==historyIdentityEpoch)return;
     window.clearInterval(heartbeatTimer);
     heartbeatTimer = null;
     state.view = "summary";
@@ -4641,7 +4660,7 @@ async function finishSessionOnce(forcedStatus = null) {
     queueFocusUpdate(state.cloudFocusClientId, { status: cloudStatus, actualSeconds: state.elapsedSeconds, pausedSeconds: currentPausedSeconds() });
     await flushPendingFocusUpdates();
   }
-  if(revision!==historyRevision)return;
+  if(epoch!==historyIdentityEpoch)return;
   if (!PUBLIC_CONFIG.minimalMvp && status === "completed" && [25, 50].includes(state.timerMode)) {
     notifyFocusComplete();
     beginRestStage(state.timerMode);
@@ -4649,6 +4668,7 @@ async function finishSessionOnce(forcedStatus = null) {
   }
   localStorage.removeItem(STORAGE_KEYS.activeSession);
   await releaseSeat();
+    if(epoch!==historyIdentityEpoch)return;
   window.clearInterval(heartbeatTimer);
   heartbeatTimer = null;
   state.view = "summary";
@@ -6229,6 +6249,7 @@ window.addEventListener("pageshow", () => { void recoverCafeSeat("pageshow"); })
 window.addEventListener("online", () => { void flushPendingFocusUpdates(); void refreshFocusHistory(); void recoverCafeSeat("online"); });
 window.addEventListener('storage', event => {
   if (event.key !== 'focusIdentityChangedV2') return;
+  historyIdentityEpoch += 1;
   persistActiveSession(true); seatReleaseRevision+=1; stopTicker(); stopRoomPresence(); clearImmersiveAutoEnter(); stopAudio(); state.isRunning = false; historyRevision += 1;
   onlineIdentityPromise = null; onlineUserId = null; focusHistory.select(null);
   // Preserve the previous identity's saved data; never submit it as the new user.

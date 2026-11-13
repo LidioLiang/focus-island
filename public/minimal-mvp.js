@@ -276,6 +276,7 @@ function minimalMoveMarker(x,y){
 }
 
 async function minimalFinishAction(){
+  const epoch=historyIdentityEpoch;
   if(minimalUi.busy)return;minimalUi.busy=true;minimalRenderConfirm();const action=minimalUi.confirm;
   try{
     if(action==='restart'){
@@ -283,9 +284,10 @@ async function minimalFinishAction(){
       state.isRunning=false;stopTicker();suspendAudio();
       if(state.elapsedSeconds>0)saveSessionResult(buildSessionResult('ended_early'));
       if(state.cloudFocusClientId){queueFocusUpdate(state.cloudFocusClientId,{status:'ended_early',actualSeconds:state.elapsedSeconds,pausedSeconds:currentPausedSeconds()});await flushPendingFocusUpdates();}
+      if(epoch!==historyIdentityEpoch)return;
       resetTimerState();minimalUi.confirm=null;minimalUi.busy=false;await toggleTimer();
     }else{
-      minimalUi.confirm=null;await finishSession();if(action==='leave'){resetTimerState();state.view='island';state.sceneId=null;render();}
+      minimalUi.confirm=null;await finishSession();if(epoch!==historyIdentityEpoch)return;if(action==='leave'){resetTimerState();state.view='island';state.sceneId=null;render();}
     }
   }catch(_){showToast('Your session could not be updated. Please try again.');}
   finally{minimalUi.busy=false;minimalRenderConfirm();}

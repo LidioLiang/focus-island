@@ -23,7 +23,7 @@ function harness(functions, overrides = {}) {
       sessionStartedAt: null, authPending: false, personalCenter: {}, focusRecovery: null },
     localStorage: { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
     PUBLIC_CONFIG: { minimalMvp: false }, crypto: { randomUUID }, Date, encodeURIComponent,
-    historyRevision: 0, onlineUserId: "user-a", focusAuthorizationPromise: null, pendingFocusUpdatePromise: null,
+    historyRevision: 0, historyIdentityEpoch:0, onlineUserId: "user-a", focusAuthorizationPromise: null, pendingFocusUpdatePromise: null,
     onlineIdentityPromise: null, accessStatusFetchedAt: 0, lastTick: null,
     seatReleaseRevision: 0, identity: { sessionId: "current-seat-session" },
     ensureOnlineIdentity: async () => ({}), setHistoryIdentity() {}, refreshFocusHistory() {},

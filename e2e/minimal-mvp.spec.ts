@@ -230,6 +230,7 @@ test('island artwork fills portrait, desktop and ultrawide screens without blur 
   await page.setViewportSize({width,height});
   const art=page.locator('.island-panorama');
   await expect(art).toBeVisible();await expect.poll(()=>art.evaluate((e:HTMLImageElement)=>e.complete&&e.naturalWidth>0)).toBe(true);
+  await expect.poll(()=>art.evaluate((e:HTMLImageElement)=>e.currentSrc)).toContain(height>width?'expanded-portrait.webp':width/height>=2?'detail-wide.webp':'detail-landscape.webp');
   const image=await art.evaluate((e:HTMLImageElement)=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,filter:getComputedStyle(e).filter,src:e.currentSrc,width:r.width,naturalWidth:e.naturalWidth};});
   expect(image.x).toBeLessThanOrEqual(1);expect(image.y).toBeLessThanOrEqual(1);
   expect(image.right).toBeGreaterThanOrEqual(width-1);expect(image.bottom).toBeGreaterThanOrEqual(height-1);
@@ -251,3 +252,4 @@ test('island artwork fills portrait, desktop and ultrawide screens without blur 
  await page.locator('[data-place="cafe"]').click();await expect(page.locator('button.seat.available')).toHaveCount(6);
  await page.getByRole('button',{name:'Back to island',exact:true}).click();await expect(page.locator('.island-panorama')).toBeVisible();
 });
+

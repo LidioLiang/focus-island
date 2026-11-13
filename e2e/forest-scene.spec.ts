@@ -1,9 +1,9 @@
 import {test,expect,type Page} from '@playwright/test';
 async function mocks(page:Page,developer=false,solo=false){
- let scene='cafe',room='cafe-01',seat=0,user:Record<string,unknown>={};const starts:Record<string,unknown>[]=[],updates:Record<string,unknown>[]=[];
+ let authenticated=developer;let scene='cafe',room='cafe-01',seat=0,user:Record<string,unknown>={};const starts:Record<string,unknown>[]=[],updates:Record<string,unknown>[]=[];
  const access={authenticated:true,accountType:'anonymous',canEnterProduct:true,canStartFocus:true,entitlementType:'none',developer};
- await page.route('**/api/auth/session',r=>r.fulfill({json:{authenticated:developer,anonymous:!developer,userId:'forest-review-guest',developer}}));
- await page.route('**/api/auth/anonymous',r=>r.fulfill({json:{ok:true,userId:'forest-review-guest',anonymous:true,developer,access}}));
+ await page.route('**/api/auth/session',r=>r.fulfill({json:{authenticated,anonymous:!developer,userId:'forest-review-guest',developer}}));
+ await page.route('**/api/auth/anonymous',r=>{authenticated=true;return r.fulfill({json:{ok:true,userId:'forest-review-guest',anonymous:true,developer,access}});});
  await page.route('**/api/access/status',r=>r.fulfill({json:access}));
  await page.route('**/api/scenes/*/allocate',r=>{scene=r.request().url().split('/scenes/')[1].split('/')[0];room=scene+(solo?'-local':'-01');seat=0;return r.fulfill({json:{mode:solo?'local':'online',roomId:room}});});
  await page.route('**/api/rooms/*/state',r=>r.fulfill({json:{serverNow:Date.now(),leases:seat?[{...user,roomId:room,seatId:seat,memberType:'human',state:'occupied',activity:'Seated'}]:[]}}));
