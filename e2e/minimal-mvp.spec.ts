@@ -1,14 +1,14 @@
 import {expect,test,type Page} from '@playwright/test';
 
 async function mockRooms(page:Page,developer=false){
- let user:Record<string,unknown>={};let seat=0;const starts:string[]=[];const patches:Record<string,unknown>[]=[];
+ let user:Record<string,unknown>={};let seat=0,scene='cafe',room='cafe-01';const starts:string[]=[];const patches:Record<string,unknown>[]=[];
  const access={authenticated:true,accountType:'anonymous',canEnterProduct:true,canStartFocus:true,entitlementType:'none',developer};
  await page.route('**/api/auth/session',r=>r.fulfill({json:{authenticated:developer,anonymous:!developer,userId:'guest-test',developer}}));
  await page.route('**/api/auth/anonymous',r=>r.fulfill({json:{ok:true,userId:'guest-test',anonymous:true,developer:false,access}}));
  await page.route('**/api/access/status',r=>r.fulfill({json:access}));
- await page.route('**/api/scenes/cafe/allocate',r=>r.fulfill({json:{roomId:'cafe-01',mode:'online'}}));
- await page.route('**/api/rooms/cafe-01/state',r=>r.fulfill({json:{serverNow:Date.now(),leases:seat?[{...user,roomId:'cafe-01',seatId:seat,memberType:'human',state:'occupied',activity:'Seated'}]:[]}}));
- await page.route('**/api/rooms/cafe-01/seats/*/reserve',r=>{user=r.request().postDataJSON();return r.fulfill({json:{ok:true}});});
+ await page.route('**/api/scenes/*/allocate',r=>{scene=r.request().url().split('/scenes/')[1].split('/')[0];room=scene+'-01';seat=0;return r.fulfill({json:{roomId:room,mode:'online'}});});
+ await page.route('**/api/rooms/*/state',r=>r.fulfill({json:{serverNow:Date.now(),leases:seat?[{...user,roomId:room,seatId:seat,memberType:'human',state:'occupied',activity:'Seated'}]:[]}}));
+ await page.route('**/api/rooms/*/seats/*/reserve',r=>{user=r.request().postDataJSON();return r.fulfill({json:{ok:true}});});
  await page.route('**/api/sessions/*/occupy',r=>{seat=r.request().postDataJSON().seatId;return r.fulfill({json:{ok:true}});});
  await page.route('**/api/sessions/*/heartbeat',r=>r.fulfill({json:{ok:true}}));
  await page.route('**/api/sessions/*/release',r=>{seat=0;return r.fulfill({json:{ok:true}});});
