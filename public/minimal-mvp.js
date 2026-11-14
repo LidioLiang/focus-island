@@ -34,8 +34,8 @@ function validMinimalLayout(value) {
 }
 
 function minimalSeatPosition(slot, target) {
-  // Café states share one anchor, including developer adjustments.
-  if (state.sceneId === "cafe") target = "avatar";
+  // Café and library states share one anchor, including developer adjustments.
+  if (state.sceneId === "cafe" || state.sceneId === "library") target = "avatar";
   if (!minimalUi.layout || minimalUi.layoutScene !== (state.sceneId || "cafe") || minimalUi.layoutKey !== sceneLayoutStorageKey()) {
     minimalUi.layoutScene = state.sceneId || "cafe";
     minimalUi.layoutKey = sceneLayoutStorageKey();
@@ -147,7 +147,7 @@ function renderMinimalIsland() {
 
 function minimalAvatarMarkup() {
   return sceneSeatSlots().map(slot => {
-    if (state.sceneId === "cafe" && minimalUi.editing && state.isDeveloper && minimalUi.target === "button") return "";
+    if ((state.sceneId === "cafe" || state.sceneId === "library") && minimalUi.editing && state.isDeveloper && minimalUi.target === "button") return "";
     let lease = leaseForSeat(slot.seat_id - 1);
     if (lease && lease.sessionId !== identity.sessionId && !state.localRoom &&
       (state.presenceUnavailable || (state.presenceFetchedAt && Date.now()-state.presenceFetchedAt>90000) || (lease.expiresAt && Number(lease.expiresAt)<=Date.now()))) lease = null;
@@ -159,18 +159,18 @@ function minimalAvatarMarkup() {
     const label = ghost ? "Layout sample" : mine ? "You" : lease.memberType === "npc" ? "Islander" : focusing ? "Focusing" : "Seated";
     const [x,y] = minimalSeatPosition(slot, "avatar");
     const edit = minimalUi.editing && state.isDeveloper;
-    return `<button type="button" class="avatar-marker ${focusing ? "rippling" : ""} ${ghost ? "ghost" : ""} ${mine ? "is-mine" : ""}" data-minimal="${edit ? "select-marker" : "avatar-info"}" ${edit ? `data-layout-target="avatar" data-layout-seat="${slot.seat_id}"` : ""} data-seat-id="${slot.seat_id}" style="left:${x}%;top:${y}%" aria-label="Seat ${slot.seat_id}: ${escapeHtml((mine?identity.displayName:lease?.displayName || label)+" · "+label)}">${state.sceneId === "cafe" ? '<span class="seat-stem" aria-hidden="true"></span>' : ""}<img src="${escapeHtml(accountAvatar(mine ? identity : {avatarSkin:lease?.avatarSkin,avatarUrl:lease?.avatarUrl}))}" alt=""><span class="seat-caption">${label}</span></button>`;
+    return `<button type="button" class="avatar-marker ${focusing ? "rippling" : ""} ${ghost ? "ghost" : ""} ${mine ? "is-mine" : ""}" data-minimal="${edit ? "select-marker" : "avatar-info"}" ${edit ? `data-layout-target="avatar" data-layout-seat="${slot.seat_id}"` : ""} data-seat-id="${slot.seat_id}" style="left:${x}%;top:${y}%" aria-label="Seat ${slot.seat_id}: ${escapeHtml((mine?identity.displayName:lease?.displayName || label)+" · "+label)}">${state.sceneId === "cafe" || state.sceneId === "library" ? '<span class="seat-stem" aria-hidden="true"></span>' : ""}<img src="${escapeHtml(accountAvatar(mine ? identity : {avatarSkin:lease?.avatarSkin,avatarUrl:lease?.avatarUrl}))}" alt=""><span class="seat-caption">${label}</span></button>`;
   }).join("");
 }
 
 function minimalButtonMarkup() {
   return sceneSeatSlots().map(slot => {
-    if (state.sceneId === "cafe" && minimalUi.editing && state.isDeveloper && minimalUi.target === "avatar") return "";
+    if ((state.sceneId === "cafe" || state.sceneId === "library") && minimalUi.editing && state.isDeveloper && minimalUi.target === "avatar") return "";
     const lease = leaseForSeat(slot.seat_id - 1);
     const edit = minimalUi.editing && state.isDeveloper;
     if (lease && !edit) return "";
     const [x,y] = minimalSeatPosition(slot, "button");
-    return `<button type="button" class="seat-button seat ${lease ? "occupied" : "available"}" ${edit ? `data-minimal="select-marker" data-layout-target="button" data-layout-seat="${slot.seat_id}"` : `data-seat="${slot.seat_id - 1}"`} data-seat-id="${slot.seat_id}" style="left:${x}%;top:${y}%" ${(state.isTransitioning || state.presenceUnavailable) && !edit ? "disabled" : ""} aria-label="${edit ? "Position seat button" : "Choose seat"} ${slot.seat_id}">${state.sceneId === "cafe" ? '<span class="seat-stem" aria-hidden="true"></span>' : ""}${minimalIcon("plus")}</button>`;
+    return `<button type="button" class="seat-button seat ${lease ? "occupied" : "available"}" ${edit ? `data-minimal="select-marker" data-layout-target="button" data-layout-seat="${slot.seat_id}"` : `data-seat="${slot.seat_id - 1}"`} data-seat-id="${slot.seat_id}" style="left:${x}%;top:${y}%" ${(state.isTransitioning || state.presenceUnavailable) && !edit ? "disabled" : ""} aria-label="${edit ? "Position seat button" : "Choose seat"} ${slot.seat_id}">${state.sceneId === "cafe" || state.sceneId === "library" ? '<span class="seat-stem" aria-hidden="true"></span>' : ""}${minimalIcon("plus")}</button>`;
   }).join("");
 }
 
@@ -250,7 +250,7 @@ function minimalRenderConfirm(){
   layer.querySelector('button')?.focus();
 }
 
-function minimalLayoutTools(){return `<section class="minimal-layout-tools ${minimalUi.layoutCollapsed ? "is-collapsed" : ""}" aria-label="Developer seat layout"><header data-layout-panel-handle tabindex="0" aria-label="Move layout panel"><strong>${minimalIcon('move')}Developer layout</strong><div><button type="button" data-minimal="collapse-layout" aria-label="${minimalUi.layoutCollapsed ? 'Expand' : 'Collapse'} layout tools" aria-expanded="${!minimalUi.layoutCollapsed}">${minimalIcon(minimalUi.layoutCollapsed ? 'plus' : 'minus')}</button><button type="button" data-minimal="layout" aria-label="Close layout tools">${minimalIcon('close')}</button></div></header><div class="minimal-layout-body"><div class="minimal-layout-row"><label>Seat<select data-layout-select aria-label="Layout seat">${sceneSeatSlots().map(s=>`<option value="${s.seat_id}" ${s.seat_id===minimalUi.seat?'selected':''}>${s.seat_id}</option>`).join('')}</select></label><div class="segmented"><button type="button" data-layout-kind="avatar" aria-pressed="${minimalUi.target==='avatar'}">Avatar</button><button type="button" data-layout-kind="button" aria-pressed="${minimalUi.target==='button'}">Seat button</button></div><label>X<input type="number" data-layout-x step=".1" min="0" max="100" aria-label="Horizontal position"></label><label>Y<input type="number" data-layout-y step=".1" min="0" max="100" aria-label="Vertical position"></label></div><div class="minimal-layout-row"><button type="button" data-minimal="save-layout">Save layout</button><button type="button" data-minimal="export-layout">Export layout</button><button type="button" data-minimal="reset-layout">Reset layout</button></div><small>Drag this panel to move it. Drag markers or use arrow keys. Save applies on this browser. Café avatar and seat button move together. Forest keeps separate desktop and compact layouts.</small></div></section>`;}
+function minimalLayoutTools(){return `<section class="minimal-layout-tools ${minimalUi.layoutCollapsed ? "is-collapsed" : ""}" aria-label="Developer seat layout"><header data-layout-panel-handle tabindex="0" aria-label="Move layout panel"><strong>${minimalIcon('move')}Developer layout</strong><div><button type="button" data-minimal="collapse-layout" aria-label="${minimalUi.layoutCollapsed ? 'Expand' : 'Collapse'} layout tools" aria-expanded="${!minimalUi.layoutCollapsed}">${minimalIcon(minimalUi.layoutCollapsed ? 'plus' : 'minus')}</button><button type="button" data-minimal="layout" aria-label="Close layout tools">${minimalIcon('close')}</button></div></header><div class="minimal-layout-body"><div class="minimal-layout-row"><label>Seat<select data-layout-select aria-label="Layout seat">${sceneSeatSlots().map(s=>`<option value="${s.seat_id}" ${s.seat_id===minimalUi.seat?'selected':''}>${s.seat_id}</option>`).join('')}</select></label><div class="segmented"><button type="button" data-layout-kind="avatar" aria-pressed="${minimalUi.target==='avatar'}">Avatar</button><button type="button" data-layout-kind="button" aria-pressed="${minimalUi.target==='button'}">Seat button</button></div><label>X<input type="number" data-layout-x step=".1" min="0" max="100" aria-label="Horizontal position"></label><label>Y<input type="number" data-layout-y step=".1" min="0" max="100" aria-label="Vertical position"></label></div><div class="minimal-layout-row"><button type="button" data-minimal="save-layout">Save layout</button><button type="button" data-minimal="export-layout">Export layout</button><button type="button" data-minimal="reset-layout">Reset layout</button></div><small>Drag this panel to move it. Drag markers or use arrow keys. Save applies on this browser. Café and library avatars and seat buttons move together. Forest keeps separate desktop and compact layouts.</small></div></section>`;}
 
 function minimalPositionLayoutPanel(position = minimalUi.panelPosition) {
   const panel = document.querySelector('.minimal-layout-tools');
@@ -276,7 +276,7 @@ function minimalMoveMarker(x,y){
   const slot=sceneSeatSlots().find(s=>s.seat_id===minimalUi.seat);
   const current=minimalUi.layout[slot.seat_id]||{avatar:[...minimalSeatPosition(slot,'avatar')],button:[...minimalSeatPosition(slot,'button')]};
   current[minimalUi.target]=[Math.round(Math.max(0,Math.min(100,x))*10)/10,Math.round(Math.max(0,Math.min(100,y))*10)/10];minimalUi.layout[slot.seat_id]=current;
-  if (state.sceneId === 'cafe') current.avatar = current.button = [...current[minimalUi.target]];
+  if (state.sceneId === 'cafe' || state.sceneId === 'library') current.avatar = current.button = [...current[minimalUi.target]];
   const n=document.querySelector(`[data-layout-target="${minimalUi.target}"][data-layout-seat="${slot.seat_id}"]`);if(n){n.style.left=current[minimalUi.target][0]+'%';n.style.top=current[minimalUi.target][1]+'%';}minimalUpdateLayoutFields();
 }
 

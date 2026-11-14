@@ -11,7 +11,7 @@ function context(extra={}){return vm.createContext({PUBLIC_CONFIG:{minimalMvp:tr
 test('per-scene seat defaults and remembered views never leak across places',()=>{
  const c=context();vm.runInContext(functions(['focusSceneDefinition','sceneDefaultFocusView','sceneUsesCompactLayout','sceneLayoutStorageKey']),c);
  assert.equal(c.sceneDefaultFocusView(1),'window');assert.equal(c.sceneDefaultFocusView(3),'reading');assert.equal(c.sceneDefaultFocusView(6),'alcove');
- c.preferences.sceneViews={cafe:'mist',library:'reading'};assert.equal(c.sceneDefaultFocusView(6),'reading');assert.equal(c.sceneLayoutStorageKey(),'layout:library');
+ c.preferences.sceneViews={cafe:'mist',library:'reading'};assert.equal(c.sceneDefaultFocusView(6),'reading');assert.equal(c.sceneLayoutStorageKey(),'layout:library:unified');
  c.state.sceneId='cafe';assert.equal(c.sceneDefaultFocusView(3),'mist');assert.equal(c.sceneLayoutStorageKey(),'layout:cafe:unified');
  c.preferences.sceneViews.cafe='alcove';assert.equal(c.sceneDefaultFocusView(1),'bar');
 });
@@ -133,8 +133,8 @@ test('forest and library custom ambience do not mix the cafe noise channel',asyn
  for(const id of ['library','forest','cafe']){c.state.sceneId=id;c.updateAudio();}assert.deepEqual(levels,[0,0,.045]);
 });
 
-test('forest and library layout keys stay isolated from the new unified café layout',()=>{
+test('forest keeps responsive layouts while café and library use isolated unified layouts',()=>{
  const c=context({state:{sceneId:'forest'},window:{innerWidth:1440}});vm.runInContext(functions(['focusSceneDefinition','sceneUsesCompactLayout','sceneLayoutStorageKey']),c);
- assert.equal(c.sceneLayoutStorageKey(),'layout:forest');c.window.innerWidth=844;c.window.innerHeight=300;assert.equal(c.sceneLayoutStorageKey(),'layout:forest:compact');c.window.innerWidth=390;assert.equal(c.sceneLayoutStorageKey(),'layout:forest:compact');c.state.sceneId='library';assert.equal(c.sceneLayoutStorageKey(),'layout:library');c.state.sceneId='cafe';assert.equal(c.sceneLayoutStorageKey(),'layout:cafe:unified');
+ assert.equal(c.sceneLayoutStorageKey(),'layout:forest');c.window.innerWidth=844;c.window.innerHeight=300;assert.equal(c.sceneLayoutStorageKey(),'layout:forest:compact');c.window.innerWidth=390;assert.equal(c.sceneLayoutStorageKey(),'layout:forest:compact');c.state.sceneId='library';assert.equal(c.sceneLayoutStorageKey(),'layout:library:unified');c.state.sceneId='cafe';assert.equal(c.sceneLayoutStorageKey(),'layout:cafe:unified');
 });
 
