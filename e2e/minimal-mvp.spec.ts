@@ -67,25 +67,25 @@ test('developer moves the café avatar and seat button together and persists the
  expect(shape.width).toBeGreaterThan(0);expect(shape.width).toBe(shape.height);
 });
 
-for (const viewport of [{width:1920,height:1080},{width:390,height:844},{width:844,height:390}]) {
- test(`café selection replaces the marker in place at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
+for (const sceneId of ['cafe','library'] as const) for (const viewport of [{width:1920,height:1080},{width:390,height:844},{width:844,height:390}]) {
+ test(`${sceneId} selection replaces the marker in place at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
   await page.setViewportSize(viewport);await mockRooms(page);
   // Legacy developer layouts must not split the new marker back into two positions.
-  await page.addInitScript(()=>localStorage.setItem('focusIslandMinimalSeatLayoutV1',JSON.stringify(Object.fromEntries([1,2,3,4,5,6].map(id=>[id,{avatar:[10,10],button:[90,90]}])))));
-  await page.goto('/');await page.locator('[data-place="cafe"]').click();
+  await page.addInitScript(id=>{const key=id==='cafe'?'focusIslandMinimalSeatLayoutV1':'focusIslandMinimalSeatLayoutV1:library';localStorage.setItem(key,JSON.stringify(Object.fromEntries([1,2,3,4,5,6].map(seat=>[seat,{avatar:[10,10],button:[90,90]}]))));},sceneId);
+  await page.goto('/');await page.locator(`[data-place="${sceneId}"]`).click();
   const markers=page.locator('.seat-button');await expect(markers).toHaveCount(6);
   for (const marker of await markers.all()) {
    const geometry=await marker.evaluate(el=>{const r=el.getBoundingClientRect(),stem=getComputedStyle(el.querySelector('.seat-stem')!);return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')===el,stemWidth:stem.width,stemColor:stem.backgroundColor};});
    expect(geometry.hit).toBe(true);expect(geometry.x).toBeGreaterThanOrEqual(0);expect(geometry.y).toBeGreaterThanOrEqual(0);expect(geometry.right).toBeLessThanOrEqual(viewport.width);expect(geometry.bottom).toBeLessThanOrEqual(viewport.height);
    expect(geometry.stemWidth).toBe('1px');expect(geometry.stemColor).toBe('rgba(248, 253, 255, 0.38)');
   }
-  await page.screenshot({path:testInfo.outputPath('cafe-empty-markers.png')});
+  await page.screenshot({path:testInfo.outputPath(`${sceneId}-empty-markers.png`)});
   const button=page.locator('.seat-button[data-seat-id="3"]'),before=(await button.boundingBox())!;
   await button.click();const avatar=page.locator('.avatar-marker.is-mine[data-seat-id="3"]');await expect(avatar).toBeVisible();
   const after=(await avatar.boundingBox())!;
   for (const key of ['x','y','width','height'] as const) expect(Math.abs(after[key]-before[key])).toBeLessThan(.6);
   await expect(button).toHaveCount(0);await expect(avatar.locator('.seat-stem')).toHaveCount(1);
-  await page.screenshot({path:testInfo.outputPath('cafe-selected-marker.png')});
+  await page.screenshot({path:testInfo.outputPath(`${sceneId}-selected-marker.png`)});
   await expect(page.locator('[data-session-clock]')).toHaveText('25:00');
  });
 }

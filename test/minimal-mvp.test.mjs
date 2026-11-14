@@ -27,13 +27,13 @@ test('new timer shows exactly start, restart and end with native English and no 
  assert.equal((html.match(/<nav/g)||[]).length,1);
 });
 
-test('café uses a shared anchor through empty, occupied and developer-moved states',()=>{
+for(const sceneId of ['cafe','library'])test(`${sceneId} uses a shared anchor through empty, occupied and developer-moved states`,()=>{
  const slots=Array.from({length:6},(_,i)=>({seat_id:i+1,avatar_anchor:[20+i*10,30],hit_area:[20+i*10,70]}));
  let occupied=false;
- const c=vm.createContext({minimalUi:{layout:{},layoutScene:'cafe',layoutKey:'unified',seat:1,target:'button',editing:false},state:{sceneId:'cafe',isDeveloper:false,localRoom:true},identity:{sessionId:'me',displayName:'Test'},sceneSeatSlots:()=>slots,sceneLayoutStorageKey:()=> 'unified',sceneUsesCompactLayout:()=>false,minimalUpdateLayoutFields(){},document:{querySelector(){return null;}},localStorage:{getItem(){return null;}},leaseForSeat:()=>occupied?{sessionId:'me',memberType:'human'}:null,AVATAR_OPTIONS:[{id:0}],accountAvatar:()=>'/avatar.png',escapeHtml:x=>x,minimalIcon:()=>'<svg></svg>'});
+ const c=vm.createContext({minimalUi:{layout:{},layoutScene:sceneId,layoutKey:'unified',seat:1,target:'button',editing:false},state:{sceneId,isDeveloper:false,localRoom:true},identity:{sessionId:'me',displayName:'Test'},sceneSeatSlots:()=>slots,sceneLayoutStorageKey:()=> 'unified',sceneUsesCompactLayout:()=>false,minimalUpdateLayoutFields(){},document:{querySelector(){return null;}},localStorage:{getItem(){return null;}},leaseForSeat:()=>occupied?{sessionId:'me',memberType:'human'}:null,AVATAR_OPTIONS:[{id:0}],accountAvatar:()=>'/avatar.png',escapeHtml:x=>x,minimalIcon:()=>'<svg></svg>'});
  vm.runInContext(['minimalSeatPosition','minimalMoveMarker','minimalAvatarMarkup','minimalButtonMarkup'].map(fn).join('\n'),c);
  const positions=html=>[...html.matchAll(/style="left:([^"]+)"/g)].map(m=>m[1]);
- const empty=c.minimalButtonMarkup();assert.equal(c.minimalAvatarMarkup(),'');
+ const empty=c.minimalButtonMarkup();assert.equal(c.minimalAvatarMarkup(),'');assert.equal((empty.match(/seat-stem/g)||[]).length,6);
  occupied=true;assert.equal(c.minimalButtonMarkup(),'');assert.deepEqual(positions(c.minimalAvatarMarkup()),positions(empty));
  c.state.isDeveloper=true;c.minimalUi.editing=true;c.minimalMoveMarker(45,50);
  assert.deepEqual(Array.from(c.minimalUi.layout[1].avatar),[45,50]);assert.deepEqual(Array.from(c.minimalUi.layout[1].button),[45,50]);

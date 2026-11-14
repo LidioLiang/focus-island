@@ -209,20 +209,20 @@ body.minimal-mvp:not(.landing-mode) #app { filter: none; pointer-events: auto; }
 .minimal-root .room-stage{width:min(100%,calc(100dvh * var(--scene-width,1672) / var(--scene-height,941)));aspect-ratio:var(--scene-width,1672)/var(--scene-height,941)}
 
 /* Forest controls remain distinct on narrow screens while the full six-seat art stays visible. */
-/* Café selection becomes the portrait in place; the stem stays quiet beneath it. */
-.minimal-root[data-view=cafe] .avatar-marker,
-.minimal-root[data-view=cafe] .seat-button { width:44px; height:44px; box-sizing:border-box; }
-.minimal-root[data-view=cafe] .seat-stem {
+/* Café and library selection become the portrait in place; the stem stays quiet beneath it. */
+.minimal-root:is([data-view=cafe],[data-view=library]) .avatar-marker,
+.minimal-root:is([data-view=cafe],[data-view=library]) .seat-button { width:44px; height:44px; box-sizing:border-box; }
+.minimal-root:is([data-view=cafe],[data-view=library]) .seat-stem {
  position:absolute; left:50%; top:calc(100% + 2px); width:1px; height:14px;
  transform:translateX(-50%); background:rgba(248,253,255,.38);
  pointer-events:none;
 }
-.minimal-root[data-view=cafe] .seat-caption {
+.minimal-root:is([data-view=cafe],[data-view=library]) .seat-caption {
  top:50%; left:calc(100% + 9px); transform:translateY(-50%);
 }
 @media(max-width:650px) {
- .minimal-root[data-view=cafe] .seat-stem { height:9px; }
- .minimal-root[data-view=cafe] .seat-caption {
+ .minimal-root:is([data-view=cafe],[data-view=library]) .seat-stem { height:9px; }
+ .minimal-root:is([data-view=cafe],[data-view=library]) .seat-caption {
   top:auto; bottom:calc(100% + 5px); left:50%; transform:translateX(-50%);
  }
 }
