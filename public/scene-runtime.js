@@ -57,6 +57,7 @@ async function enterMinimalScene(sceneId) {
   const definition=PUBLIC_CONFIG.sceneCatalog?.[sceneId];
   if (!definition?.enabled || state.isAllocatingRoom || state.isTransitioning) return;
   if (hasActiveSeatSession()) {showToast('End your session before changing places.');return;}
+  if(typeof captureProductEvent==='function')captureProductEvent('scene_selected',{scene_id:sceneId});
   stopRoomPresence();suspendAudio();resetTimerState();
   state.sceneId=sceneId;state.roomId=null;state.selectedSeat=null;state.currentSeatId=null;state.offlineFocus=false;state.localRoom=false;
   state.roomPresence={leases:[],serverNow:Date.now()};state.localNpcRoster=[];state.presenceFetchedAt=0;
