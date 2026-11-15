@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
+import { RELEASE_INFO } from "@/lib/release";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -34,6 +35,12 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const analyticsConfig = {
+    projectToken: process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN || "",
+    apiHost: process.env.NEXT_PUBLIC_POSTHOG_HOST || "",
+    appVersion: RELEASE_INFO.version,
+    environment: RELEASE_INFO.environment,
+  };
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -44,12 +51,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         {children}
+        <Script id="focus-analytics-config" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `window.__FOCUS_ANALYTICS_CONFIG__=${JSON.stringify(analyticsConfig).replace(/</g, "\\u003c")}` }} />
+        <Script src="/analytics.js?v=1" strategy="beforeInteractive" />
         <Script src="/vendor/i18next.min.js?v=26.4.2" strategy="beforeInteractive" />
         <Script src="/locales/en.js?v=13" strategy="beforeInteractive" />
         <Script src="/focus-history.js?v=1" strategy="beforeInteractive" />
         <Script src="/account-center.js?v=3" strategy="beforeInteractive" />
-        <Script src="/scene-runtime.js?v=2" strategy="beforeInteractive" />
-        <Script src="/minimal-mvp.js?v=11" strategy="beforeInteractive" />
+        <Script src="/scene-runtime.js?v=3" strategy="beforeInteractive" />
+        <Script src="/minimal-mvp.js?v=12" strategy="beforeInteractive" />
         <Script src="/i18n.js?v=12" strategy="afterInteractive" />
       </body>
     </html>
