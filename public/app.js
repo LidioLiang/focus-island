@@ -27,6 +27,50 @@ const ROOM_3D_EVENT_TYPES = new Set([
 ]);
 const DEFAULT_REST_MINUTES = 5;
 const REST_PRESET_MINUTES = [5, 10, 15];
+const analyticsFinishedSessions = new Set();
+let analyticsFocusStartKey = null;
+
+function captureProductEvent(eventName, properties = {}) {
+  return window.FocusAnalytics?.capture(eventName, properties) || false;
+}
+
+function identifyProductAnalytics(session) {
+  if (!session?.authenticated || !session.userId) return false;
+  return window.FocusAnalytics?.identify(session.userId, {
+    is_anonymous: session.anonymous !== false,
+    is_developer: session.developer === true,
+  }) || false;
+}
+
+function analyticsFocusProperties() {
+  return {
+    scene_id: state.sceneId || "unknown",
+    seat_id: state.selectedSeat === null ? 0 : state.selectedSeat + 1,
+    room_type: state.localRoom ? "local" : "online",
+    timer_mode: Number(state.timerMode),
+  };
+}
+
+function trackFocusStarted() {
+  if (!state.sessionStartedAt) return;
+  const key = state.cloudFocusClientId || `${state.sessionStartedAt}:${state.sceneId}:${state.selectedSeat}`;
+  if (analyticsFocusStartKey === key) return;
+  analyticsFocusStartKey = key;
+  captureProductEvent("focus_started", analyticsFocusProperties());
+}
+
+function trackFocusFinished(status) {
+  if (!state.sessionStartedAt) return;
+  const key = state.cloudFocusClientId || `${state.sessionStartedAt}:${state.sceneId}:${state.selectedSeat}`;
+  if (analyticsFinishedSessions.has(key)) return;
+  analyticsFinishedSessions.add(key);
+  const result = status === "completed" || status === "free_completed" ? "completed" : status === "ended_early" ? "ended_early" : "interrupted";
+  captureProductEvent("focus_finished", {
+    ...analyticsFocusProperties(),
+    actual_seconds: Math.max(0, Math.floor(Number(state.elapsedSeconds) || 0)),
+    result,
+  });
+}
 const scenes = {
   cafe: {
     id: "cafe",
@@ -367,6 +411,7 @@ function clearSignedInHistory() {
   historyNextOffset = 0; historyHasMore = true;
   sessionStorage.removeItem('focusHistoryMergeSource');
   localStorage.setItem('focusIdentityChangedV2', crypto.randomUUID());
+  globalThis.FocusAnalytics?.reset();
   render();
 }
 
@@ -401,6 +446,7 @@ async function initializeHistoryIdentity() {
     const session = await api('/api/auth/session');
     if (historyRevision !== revision) return;
     setHistoryIdentity(session);
+    if (typeof identifyProductAnalytics === "function") identifyProductAnalytics(session);
     // A server-confirmed OAuth merge is the only source eligible for transfer.
     const mergeSource = sessionStorage.getItem('focusHistoryMergeSource');
     if (!session.anonymous && session.authenticated && confirmedMergeSource === mergeSource) {
@@ -670,7 +716,7 @@ async function ensureOnlineIdentity() {
       if(epoch!==historyIdentityEpoch || (revision!==historyRevision && !(session.authenticated && onlineUserId===session.userId)))throw new Error('identity_changed');
       if (session.authenticated) {
         applyAccountProfile(session.profile);setHistoryIdentity(session);
-        state.isDeveloper=session.developer===true;return session;
+        state.isDeveloper=session.developer===true;if(typeof identifyProductAnalytics==="function")identifyProductAnalytics(session);return session;
       }
       const captchaToken=await turnstileToken();
       if(revision!==historyRevision)throw new Error('identity_changed');
@@ -679,6 +725,7 @@ async function ensureOnlineIdentity() {
       applyAccountProfile(guest.profile);
       setHistoryIdentity({...guest,authenticated:true},{sourceOwner:guest.anonymous && sourceOwner.startsWith('local:')?sourceOwner:null});
       state.isDeveloper=guest.developer===true;
+      if(typeof identifyProductAnalytics==="function")identifyProductAnalytics({authenticated:true,anonymous:guest.anonymous,userId:guest.userId,developer:state.isDeveloper});
       if(guest.access){state.accessStatus=guest.access;accessStatusFetchedAt=Date.now();}
       return {authenticated:true,anonymous:guest.anonymous,userId:guest.userId,developer:state.isDeveloper};
     })();
@@ -906,6 +953,7 @@ async function completeAuthenticatedFlow(result) {
   setHistoryIdentity({authenticated:true,anonymous:false,userId:result.userId}, {sourceOwner:result.mergedFrom || null});
   localStorage.setItem('focusIdentityChangedV2', crypto.randomUUID());
   state.isDeveloper = result.developer === true;
+  if(typeof identifyProductAnalytics==="function")identifyProductAnalytics({authenticated:true,anonymous:false,userId:result.userId,developer:state.isDeveloper});
   onlineIdentityPromise = Promise.resolve({ authenticated: true, anonymous: false, userId: result.userId, developer: state.isDeveloper });
   state.accessStatus = result.access || null;
   accessStatusFetchedAt = result.access ? Date.now() : 0;
@@ -1219,6 +1267,7 @@ async function startFocusFromSeat() {
   startTicker();
   updateAudio();
   persistActiveSession(true);
+  if (typeof trackFocusStarted === "function") trackFocusStarted();
   return true;
 }
 
@@ -4124,6 +4173,11 @@ async function occupySelectedSeat() {
     }
     state.currentSeatId = targetSeatId;
     state.switchingFromSeatId = null;
+    if (typeof captureProductEvent === "function") captureProductEvent("seat_confirmed", {
+      scene_id: state.sceneId,
+      seat_id: targetSeatId,
+      room_type: state.localRoom ? "local" : "online",
+    });
     if (!fromSeatId) {
       stopTicker();
       state.timerMode = preferences.defaultTimerMode;
@@ -4520,6 +4574,7 @@ async function toggleTimer() {
     startTicker();
     updateAudio();
     persistActiveSession(true);
+    if (!timerHadStarted && typeof trackFocusStarted === "function") trackFocusStarted();
     if (timerHadStarted && state.cloudFocusClientId) { queueFocusUpdate(state.cloudFocusClientId, { status: "running", actualSeconds: state.elapsedSeconds, pausedSeconds: currentPausedSeconds() }); void flushPendingFocusUpdates(); }
     sendHeartbeat();
   }
@@ -4655,6 +4710,7 @@ async function finishSessionOnce(forcedStatus = null) {
   stopAudio();
   const status = forcedStatus || (state.elapsedSeconds === 0 ? "not_started" : state.timerMode <= 0 ? "free_completed" : "ended_early");
   state.sessionResult = buildSessionResult(status);
+  if (typeof trackFocusFinished === "function") trackFocusFinished(status);
   if (state.elapsedSeconds > 0) saveSessionResult(state.sessionResult);
   if (state.cloudFocusClientId) {
     const cloudStatus = status === "completed" || status === "free_completed" ? "completed" : status === "not_started" ? "interrupted" : "ended_early";
@@ -4927,6 +4983,7 @@ function restoreActiveSession() {
             queueFocusUpdate(state.cloudFocusClientId, { status: "completed", actualSeconds: state.elapsedSeconds, pausedSeconds: currentPausedSeconds() });
           }
           state.sessionResult = buildSessionResult("completed");
+          if (typeof trackFocusFinished === "function") trackFocusFinished("completed");
           saveSessionResult(state.sessionResult);
           state.sessionPhase = PUBLIC_CONFIG.minimalMvp ? "focus" : "rest";
           if (PUBLIC_CONFIG.minimalMvp) { state.view = "summary"; localStorage.removeItem(STORAGE_KEYS.activeSession); void releaseSeat(); }

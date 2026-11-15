@@ -33,7 +33,7 @@ test('a late library ambience decode cannot play after mute or scene change',asy
 
 test('shared runtime is loaded before minimal UI and app boot',async()=>{
  const layout=await readFile(new URL('../app/layout.tsx',import.meta.url),'utf8');
- assert.match(layout,/<Script src="\/scene-runtime.js\?v=2" strategy="beforeInteractive"/);
+ assert.match(layout,/<Script src="\/scene-runtime.js\?v=3" strategy="beforeInteractive"/);
  assert.ok(layout.indexOf('/scene-runtime.js')<layout.indexOf('/minimal-mvp.js'));
 });
 test('late recovery is drained before release and cannot restore the ended seat',async()=>{
