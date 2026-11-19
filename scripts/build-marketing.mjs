@@ -36,3 +36,7 @@ for(const name of ['robots.txt','sitemap.xml'])fs.writeFileSync(path.join(output
 const client=path.join(root,'public/website-assets/site.js');
 fs.writeFileSync(client,adapt(fs.readFileSync(client,'utf8')));
 console.log('Website ready: 12 pages, same-origin /app, support@nisoniy.com');
+
+// Keep secondary pages generated above; publish the approved homepage separately.
+fs.cpSync(path.join(root,'marketing/home/assets'),path.join(root,'public/website-assets/home'),{recursive:true});
+fs.copyFileSync(path.join(root,'marketing/home/index.html'),path.join(output,'index.html'));
