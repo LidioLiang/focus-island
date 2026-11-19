@@ -1,6 +1,6 @@
 export const metadata = { title: "Privacy Policy · Focus Isle" };
 export default function PrivacyPage() {
- const support=process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
+ const support=process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@nisoniy.com';
  return <main className="legal-page"><article>
   <a href="/">← Back to Focus Isle</a><h1>Privacy Policy</h1><p className="legal-meta">Effective November 15, 2026</p>
   <p>Focus Isle uses an anonymous user ID, display name, avatar choice, room and seat state, heartbeat timestamps, focus session records, IP-based abuse signals and necessary request logs to operate online rooms. Browser storage keeps local preferences and focus history. Optional accounts also process the email and account information you provide.</p>

@@ -24,7 +24,7 @@ test("leaving an active room requires confirmation and closes its cloud session"
     updates.push(route.request().postDataJSON());
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
-  await page.goto("/");
+  await page.goto("/app");
   await page.locator(".immersive-timer").hover();
   await page.locator('[data-minimal="back-room"]').first().click();
   await expect(page.locator(".static-seat-room")).toBeVisible();
@@ -61,7 +61,7 @@ test("a previous-session conflict offers recovery and can end the old session be
     ended = true;
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
-  await page.goto("/");
+  await page.goto("/app");
   await page.locator(".immersive-timer").hover();
   await page.locator('[data-action="toggle-timer"]').click();
   await expect(page.locator("#focus-recovery-title")).toBeVisible();
