@@ -145,14 +145,21 @@ test("public assets and API routes never trigger proxy Auth refresh, signed-in d
   let refreshes = 0;
   const context = vm.createContext({
     Headers, crypto: { randomUUID }, process: { env: { NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "public" } },
+    websiteDestination: (await import('../lib/marketing-routes.ts')).websiteDestination,
     createServerClient: () => ({ auth: { getClaims: async () => { refreshes++; } } }),
-    NextResponse: { next: () => ({ headers: new Headers(), cookies: { set() {} } }) },
+    NextResponse: { next: () => ({ headers: new Headers(), cookies: { set() {} } }), rewrite: () => ({ headers: new Headers(), cookies: { set() {} } }) },
   });
   vm.runInContext(module, context);
-  const request = (pathname) => ({ nextUrl: { pathname }, headers: new Headers(), cookies: { getAll: () => [{ name: "sb-example-auth-token", value: "cookie" }] } });
+  const request = (pathname) => {
+    const nextUrl = new URL(pathname, 'https://focusisle.online');
+    nextUrl.clone = () => new URL(nextUrl);
+    return { nextUrl, headers: new Headers(), cookies: { getAll: () => [{ name: "sb-example-auth-token", value: "cookie" }] } };
+  };
   for (const path of ["/assets/room.webp", "/assets/music.mp3", "/app.js", "/styles.css", "/api/auth/sign-in", "/api/access/status"]) await context.proxy(request(path));
   assert.equal(refreshes, 0);
   await context.proxy(request("/"));
+  assert.equal(refreshes, 0);
+  await context.proxy(request("/app"));
   assert.equal(refreshes, 1);
 });
 

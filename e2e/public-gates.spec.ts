@@ -21,7 +21,7 @@ test("landing page loads without requesting retired Godot runtime assets", async
     if (/godot-room|\.wasm(?:\?|$)|\.pck(?:\?|$)/i.test(request.url())) retiredRuntimeRequests.push(request.url());
   });
 
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page).toHaveTitle(/Focus Isle — Immersive Focus Spaces for Deep Work/);
   await expect(page.locator('[data-place]')).toHaveCount(6);
   await expect(page.locator('[data-auth-form]')).toHaveCount(0);
@@ -31,7 +31,7 @@ test("landing page loads without requesting retired Godot runtime assets", async
 
 test("sign-in is optional and available only inside Settings", async ({ page }) => {
   await page.route("**/api/auth/session", route => route.fulfill({json:{authenticated:false}}));
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page.locator('[data-place]')).toHaveCount(6);
   await expect(page.locator('[data-auth-form]')).toHaveCount(0);
   await page.locator('[data-panel="settings"]').click();
@@ -74,7 +74,7 @@ test("successful sign-up skips email verification and resumes the first focus ac
     });
   });
 
-  await page.goto("/");
+  await page.goto("/app");
   await page.locator('[data-panel="settings"]').click();
   await page.locator('[data-minimal="sign-in"]').click();
   await page.locator('[data-center-action="email-mode"][data-mode="sign-up"]').click();

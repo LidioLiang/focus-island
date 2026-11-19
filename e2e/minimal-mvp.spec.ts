@@ -20,7 +20,7 @@ async function mockRooms(page:Page,developer=false){
 test('guest can focus twice with no account, no fake companions, and only three timer actions',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  const {starts,patches}=await mockRooms(page);
- await page.goto('/');await expect(page.locator('[data-place]')).toHaveCount(6);
+ await page.goto('/app');await expect(page.locator('[data-place]')).toHaveCount(6);
  await page.locator('[data-place="forest"]').focus();await expect(page.getByRole('tooltip')).toContainText('Forest · Open now');
  await page.locator('[data-place="cafe"]').click();await expect(page.locator('button.seat.available')).toHaveCount(6);
  await expect(page.locator('.avatar-marker')).toHaveCount(0);
@@ -37,7 +37,7 @@ test('guest can focus twice with no account, no fake companions, and only three 
 });
 
 test('confirmed seat pauses in the room before softly entering the immersive desk',async({page})=>{
- await mockRooms(page);await page.goto('/');await page.locator('[data-place="cafe"]').click();
+ await mockRooms(page);await page.goto('/app');await page.locator('[data-place="cafe"]').click();
  const started=Date.now();await page.locator('button.seat.available').first().click();
  await expect(page.locator('.avatar-marker.is-mine')).toBeVisible();
  await expect(page.getByRole('status').filter({hasText:'Seat 1 is ready. Settling in'})).toBeVisible();
@@ -50,7 +50,7 @@ test('confirmed seat pauses in the room before softly entering the immersive des
 });
 
 test('developer moves the café avatar and seat button together and persists the shared anchor',async({page})=>{
- await mockRooms(page,true);await page.goto('/');await page.locator('[data-panel="settings"]').click();
+ await mockRooms(page,true);await page.goto('/app');await page.locator('[data-panel="settings"]').click();
  await page.locator('[data-minimal="layout"]').click();await expect(page.getByRole('region',{name:'Developer seat layout'})).toBeVisible();
  const avatar=page.locator('[data-layout-target="avatar"][data-layout-seat="1"]');const seat=page.locator('[data-layout-target="button"][data-layout-seat="1"]');
  await expect(seat).toHaveCount(0);await avatar.focus();await avatar.press('ArrowRight');
@@ -72,7 +72,7 @@ for (const sceneId of ['cafe','library'] as const) for (const viewport of [{widt
   await page.setViewportSize(viewport);await mockRooms(page);
   // Legacy developer layouts must not split the new marker back into two positions.
   await page.addInitScript(id=>{const key=id==='cafe'?'focusIslandMinimalSeatLayoutV1':'focusIslandMinimalSeatLayoutV1:library';localStorage.setItem(key,JSON.stringify(Object.fromEntries([1,2,3,4,5,6].map(seat=>[seat,{avatar:[10,10],button:[90,90]}]))));},sceneId);
-  await page.goto('/');await page.locator(`[data-place="${sceneId}"]`).click();
+  await page.goto('/app');await page.locator(`[data-place="${sceneId}"]`).click();
   const markers=page.locator('.seat-button');await expect(markers).toHaveCount(6);
   for (const marker of await markers.all()) {
    const geometry=await marker.evaluate(el=>{const r=el.getBoundingClientRect(),stem=getComputedStyle(el.querySelector('.seat-stem')!);return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,hit:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button')===el,stemWidth:stem.width,stemColor:stem.backgroundColor};});
@@ -91,7 +91,7 @@ for (const sceneId of ['cafe','library'] as const) for (const viewport of [{widt
 }
 
 test('island settings work before a room and reduce motion disables marker animation',async({page})=>{
- await mockRooms(page);await page.goto('/');await page.locator('[data-panel="settings"]').click();
+ await mockRooms(page);await page.goto('/app');await page.locator('[data-panel="settings"]').click();
  await page.locator('[data-minimal-mode="50"]').click();await expect(page.locator('[data-place]')).toHaveCount(6);
  await page.locator('[data-minimal-motion]').check();await expect(page.locator('[data-minimal="layout"]')).toHaveCount(0);
  await page.locator('[data-minimal="close-panel"]').click();await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();
@@ -101,7 +101,7 @@ test('island settings work before a room and reduce motion disables marker anima
 
 
 test('all three scenes fit narrow and desktop screens with four focus tools',async({page},testInfo)=>{
- await mockRooms(page);await page.goto('/');
+ await mockRooms(page);await page.goto('/app');
  await page.screenshot({path:testInfo.outputPath('island-desktop.png')});
  for(const width of [390,1280,1920]){
   await page.setViewportSize({width,height:820});
@@ -121,7 +121,7 @@ test('all three scenes fit narrow and desktop screens with four focus tools',asy
 });
 
 test('requested controls stay centered, ordered and on one row with actions below the clock', async ({page},testInfo)=>{
- await mockRooms(page);await page.goto('/');
+ await mockRooms(page);await page.goto('/app');
  await expect(page.locator('.map-pin .pin-outline')).toHaveCount(6);
  await expect(page.locator('.map-pin .pin-center')).toHaveCount(6);
  await page.screenshot({path:testInfo.outputPath('mist-teardrop-map-pins.png')});
@@ -169,7 +169,7 @@ test('requested controls stay centered, ordered and on one row with actions belo
 });
 
 test('developer panel can move and collapse while seat six remains draggable',async({page},testInfo)=>{
- await page.setViewportSize({width:2048,height:1017});await mockRooms(page,true);await page.goto('/');
+ await page.setViewportSize({width:2048,height:1017});await mockRooms(page,true);await page.goto('/app');
  await page.locator('[data-panel="settings"]').click();await page.locator('[data-minimal="layout"]').click();
  await page.getByLabel('Layout seat',{exact:true}).selectOption('6');await page.locator('[data-layout-kind="button"]').click();
  const marker=page.locator('[data-layout-target="button"][data-layout-seat="6"]');
@@ -187,7 +187,7 @@ test('developer panel can move and collapse while seat six remains draggable',as
 });
 
 test('native focus controls respond to the first click without rebuilding the panel', async ({page}) => {
- await mockRooms(page);await page.goto('/');
+ await mockRooms(page);await page.goto('/app');
  await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();
  await page.locator('[data-panel="settings"]').click();
  const control=page.locator('[data-minimal-motion]');
@@ -208,7 +208,7 @@ test('a pressed seat survives the first snapshot and atomic entry does not wait 
  await page.route('**/api/rooms/cafe-01/state',r=>{snapshot=r;});
  await page.route('**/api/rooms/cafe-01/seats/*/reserve',r=>{claims++;claim=r;});
  await page.route('**/api/sessions/*/occupy',r=>{occupies++;return r.fulfill({json:{ok:true}});});
- await page.goto('/');await page.locator('[data-place="cafe"]').click();
+ await page.goto('/app');await page.locator('[data-place="cafe"]').click();
  const seat=page.locator('[data-seat="0"]');await expect(seat).toBeVisible();
  await expect.poll(()=>Boolean(snapshot)).toBe(true);
  const box=await seat.boundingBox();if(!box)throw new Error('seat missing');
@@ -232,7 +232,7 @@ test('a rejected atomic seat claim stays in the room and allows another seat', a
  await page.route('**/api/rooms/cafe-01/seats/*/reserve',r=>{
   calls++;return calls===1?r.fulfill({status:409,json:{error:'seat_taken'}}):r.fulfill({json:{ok:true,state:'occupied',roomId:'cafe-01',seatId:2}});
  });
- await page.goto('/');await page.locator('[data-place="cafe"]').click();await page.locator('[data-seat="0"]').click();
+ await page.goto('/app');await page.locator('[data-place="cafe"]').click();await page.locator('[data-seat="0"]').click();
  await expect(page.locator('[data-session-clock]')).toHaveCount(0);await expect(page.locator('[data-seat="1"]')).toBeEnabled();
  await page.locator('[data-seat="1"]').click();await expect(page.locator('[data-session-clock]')).toHaveText('25:00');expect(calls).toBe(2);
 });
@@ -240,7 +240,7 @@ test('a rejected atomic seat claim stays in the room and allows another seat', a
 test('slow start gives immediate feedback and ignores repeat clicks and navigation', async ({page}) => {
  await mockRooms(page);let start:import('@playwright/test').Route|undefined;let starts=0;
  await page.route('**/api/focus/sessions/start',r=>{starts++;start=r;});
- await page.goto('/');await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();
+ await page.goto('/app');await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();
  const button=page.getByRole('button',{name:'Start',exact:true});await button.click();
  await expect.poll(()=>starts).toBe(1);await expect(button).toBeDisabled();
  await expect(page.getByRole('status').filter({hasText:'Starting your focus session'})).toBeVisible();
@@ -251,7 +251,7 @@ test('slow start gives immediate feedback and ignores repeat clicks and navigati
 });
 
 test('island artwork fills portrait, desktop and ultrawide screens without blur or clipped entry controls',async({page},testInfo)=>{
- await mockRooms(page);await page.goto('/');
+ await mockRooms(page);await page.goto('/app');
  for(const [width,height] of [[390,844],[360,800],[768,1024],[1280,800],[1920,1080],[3440,1440],[844,390]]){
   await page.setViewportSize({width,height});
   const art=page.locator('.island-panorama');
@@ -283,7 +283,7 @@ test('island artwork fills portrait, desktop and ultrawide screens without blur 
 test('a failed online start offers local focus and preserves the ambiguous session ID',async({page})=>{
  await mockRooms(page);let attempted='';
  await page.route('**/api/focus/sessions/start',r=>{attempted=r.request().postDataJSON().clientSessionId;return r.fulfill({status:503,json:{error:'focus_start_failed'}});});
- await page.goto('/');await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();await page.getByRole('button',{name:'Start',exact:true}).click();
+ await page.goto('/app');await page.locator('[data-place="cafe"]').click();await page.locator('button.seat.available').first().click();await page.getByRole('button',{name:'Start',exact:true}).click();
  await page.getByRole('button',{name:'Continue locally'}).click();await expect(page.getByRole('button',{name:'Pause',exact:true})).toBeVisible();
  const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('focusIslandActiveSessionV1') || 'null'));
  expect(saved.offlineFocus).toBe(true);expect(saved.ownerUserId).toBe('guest-test');expect(saved.cloudFocusClientId).toBe(attempted);expect(saved.roomId).toBe('cafe-local');

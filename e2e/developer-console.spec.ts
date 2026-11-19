@@ -7,7 +7,7 @@ async function openDeveloper(page: Page, developer = true) {
     authenticated: true, emailVerified: true, accountType: "permanent", canEnterProduct: true, canStartFocus: true, entitlementType: "admin", developer,
   }) }));
   await page.route("**/api/auth/session", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true, anonymous: false, userId: "developer-test", developer }) }));
-  await page.goto("/?roomRenderer=godot3d");
+  await page.goto("/app?roomRenderer=godot3d");
   await expect(page.locator('[data-place="cafe"]')).toBeVisible();
   await page.locator('[data-panel="settings"]').click();
   if (developer) await page.locator('[data-minimal="developer"]').click();

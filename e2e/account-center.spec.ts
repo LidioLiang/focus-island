@@ -8,7 +8,7 @@ async function setup(page:Page){
  await page.route('**/api/auth/merge/prepare',r=>r.fulfill({json:{mergeToken:'test-only-merge-token'}}));
  await page.route('**/api/auth/merge/complete',r=>r.fulfill({json:{ok:true}}));
  await page.route('**/api/auth/sign-in',r=>{signedIn=true;return r.fulfill({json:{ok:true,userId:'guest-account',developer:false,access:{authenticated:true,canEnterProduct:true,canStartFocus:true,accountType:'permanent'}}});});
- await page.goto('/');await page.locator('[data-panel="settings"]').click();await page.locator('[data-minimal="account"]').click();await expect(page.getByRole('heading',{name:'Profile',exact:true})).toBeVisible();await expect(page.getByLabel('Display name',{exact:true})).toHaveValue('Quiet Oak');return {saves};
+ await page.goto('/app');await page.locator('[data-panel="settings"]').click();await page.locator('[data-minimal="account"]').click();await expect(page.getByRole('heading',{name:'Profile',exact:true})).toBeVisible();await expect(page.getByLabel('Display name',{exact:true})).toHaveValue('Quiet Oak');return {saves};
 }
 test('profile is English, readable and responsive, and persists nickname plus avatar',async({page},testInfo)=>{
  const {saves}=await setup(page);

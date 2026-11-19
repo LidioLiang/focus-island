@@ -68,7 +68,7 @@ test("the cafe opens with only real occupants and an upright portrait appears ab
     body: "{}",
   }));
 
-  await page.goto("/");
+  await page.goto("/app");
   await expect(page.locator('[data-place="cafe"]')).toBeVisible();
   await page.locator('[data-place="cafe"]').click();
 
@@ -166,7 +166,7 @@ test("an expired background lease silently recovers or moves seats without reset
     }),
   }));
 
-  await page.goto("/");
+  await page.goto("/app");
   await expect.poll(() => resumePayload).not.toBeNull();
   expect(resumePayload).toMatchObject({
     preferredRoomId: "cafe-01",
