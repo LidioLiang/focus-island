@@ -2,7 +2,7 @@
 const escapeHtml = value => String(value).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
 const readingTime = article => Math.max(1, Math.ceil(article.sections.flat().join(' ').split(/\s+/).length / 180));
 const imageAlt = { cafe: 'A warm café window seat overlooking the water', forest: 'A quiet desk surrounded by a green forest', library: 'A sunlit library desk beside an arched window' };
-const brand = `<a class="brand" href="/"><img src="/assets/home/1974e52515d7574f.png" width="40" height="40" alt="">Focus Isle</a>`;
+const brand = `<a class="brand" href="/"><img src="/assets/brand-20261120/icon-256.png" style="border-radius:22%" width="40" height="40" alt="">Focus Isle</a>`;
 
 export function journalHeader() {
   return `<header class="site-nav"><div class="container nav-inner">${brand}<nav class="navlinks" id="navigation" aria-label="Main navigation"><a href="/#features">Features</a><a href="/#how">How it works</a><a href="/blog/" aria-current="page">Journal</a></nav><a class="btn nav-cta" href="https://focusisle.online/app" target="_blank" rel="noopener" data-app-link>Start focusing</a><button class="menu" aria-label="Open navigation" aria-controls="navigation" aria-expanded="false"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div></header>`;
