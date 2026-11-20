@@ -1,0 +1,11 @@
+{
+  "appId": "online.focusisle.app",
+  "appName": "Focus Isle",
+  "webDir": "dist",
+  "loggingBehavior": "debug",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#f4f8fb",
+    "preferredContentMode": "mobile"
+  }
+}

@@ -2,6 +2,9 @@ import { FOCUS_ROOM_IDS } from "@/lib/scenes";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
+import { headers } from "next/headers";
+import { bearerToken } from "@/lib/bearer-auth";
 
 export const CAFE_SYSTEM_ROOM_IDS = ["cafe-01", "cafe-02", "cafe-03"] as const;
 export const ROOM_IDS = new Set<string>(FOCUS_ROOM_IDS);
@@ -37,6 +40,19 @@ export function parseIdentity(value: unknown): IdentityPayload | null {
 }
 
 export async function authenticatedSupabase() {
+  const authorization = (await headers()).get("authorization");
+  if (authorization !== null) {
+    let token: string;
+    try { token = bearerToken(authorization)!; } catch { return null; }
+    // A request-scoped client preserves RLS. Never use service_role for mobile requests.
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) return null;
+    return { supabase, user };
+  }
   const supabase = await createServerSupabaseClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return null;

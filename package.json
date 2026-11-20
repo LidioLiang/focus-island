@@ -22,6 +22,7 @@
     "invite:create": "node scripts/create-lifetime-invite.mjs"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "3.1.0",
     "@base-ui/react": "^1.7.0",
     "@hookform/resolvers": "^5.7.1",
     "@shadcn/react": "^0.3.0",
@@ -44,12 +45,12 @@
     "react-hook-form": "^7.85.0",
     "react-resizable-panels": "^4.12.2",
     "recharts": "^3.8.0",
+    "sharp": "0.35.5",
     "sonner": "^2.0.8",
     "stripe": "^23.1.0",
     "tailwind-merge": "3.6.0",
     "vaul": "^1.1.2",
-    "zod": "4.6.7",
-    "sharp": "0.35.5"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

@@ -1,0 +1,21 @@
+{
+  "repository": "LidioLiang/focus-island",
+  "commit": "bf6244f6cb127cd734135c98633a581c6050e38d",
+  "version": "1.6.3",
+  "files": {
+    "public/app.js": "d97811a6c787eb288200bccb9206dfd03beabc97",
+    "public/account-center.js": "ef31f8de8f0a28ad3f7ae9c605e0dbfce96bc6ae",
+    "public/scene-runtime.js": "fb47ef0136fe3b86519285949837aff8dc9abf72",
+    "public/minimal-mvp.js": "847fbb121e6fbc1c0d8df0b2572a0f575c800231",
+    "public/i18n.js": "e989530bdf19d2c8ddcccce08c15b199795aa517",
+    "public/analytics.js": "5b84aa39ceac44a7b40e5b241783321bd55bfd1c",
+    "public/focus-history.js": "482299fe9bd20de06e362e0c495693f5e3a748be",
+    "public/styles.css": "15141978681d7d24d1cd51ff6da67de561ed0364",
+    "public/landing-final.css": "a6a50ef53cbe62c83def7dfae1132e0e7269265f",
+    "public/minimal-mvp.css": "8d0d0627df11b9e4845c17c71b1e2a542d7f7278",
+    "public/account-center.css": "f78426e25f5ddbc3904ce01afdfcd2bec3051730",
+    "public/locales/en.js": "8caaa92d50a878991744754f8bdb83bf11c8bac1",
+    "public/vendor/i18next.min.js": "5e0a0c652350011b60c2431881fb2dcda5700f16",
+    "lib/scene-catalog.json": "8c7336396ebbcba69048ac82e6682dc915dda00a"
+  }
+}

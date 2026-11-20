@@ -1,0 +1,117 @@
+html, body { margin: 0; padding: 0; overscroll-behavior: none; background: #f4f8fb; }
+body { -webkit-tap-highlight-color: transparent; }
+.minimal-root[data-view=focus] .world { touch-action: pan-y; }
+.minimal-root[data-view=focus] .minimal-focus-image { user-select: none; -webkit-user-drag: none; }
+.minimal-root .mobile-focus-widget .timer-actions {
+  position: static; transform: none!important; opacity: 1; pointer-events: auto;
+  display: flex; flex-wrap: nowrap; gap: 4px; padding: 5px; margin-top: 8px;
+  visibility: visible; transition: opacity .24s, visibility 0s;
+}
+body.hud-idle .minimal-root[data-view=focus] .mobile-focus-widget .timer-actions {
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .24s, visibility 0s .24s;
+}
+/* Keyboard navigation stays visible; a touch's persistent focus must not pin it. */
+body.hud-idle .minimal-root[data-view=focus] .mobile-focus-widget:has(button:focus-visible) .timer-actions {
+  opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s;
+}
+.minimal-root .mobile-focus-widget .timer-actions button {
+  width: 44px; height: 44px; min-height: 44px; padding: 11px; flex: 0 0 44px;
+}
+.minimal-root .mobile-focus-widget .timer-actions svg { width: 20px; height: 20px; }
+.minimal-root .mobile-focus-widget .timer-actions button[aria-expanded=true] { background: var(--fi-primary); }
+.minimal-root .mobile-focus-widget { bottom: max(32px, calc(env(safe-area-inset-bottom) + 12px)); }
+.minimal-root .mobile-auto-scene { margin-bottom: 8px; }
+.minimal-root .mobile-auto-scene small { display: block; font-size: 11px; margin-top: 4px; color: var(--fi-muted); }
+.minimal-mvp .scene-header { padding-top: max(16px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+.minimal-mvp .minimal-legal { bottom: max(38px, calc(env(safe-area-inset-bottom) + 30px)); }
+.minimal-mvp .focus-widget { margin-bottom: env(safe-area-inset-bottom); }
+/* Quiet 28px markers inside unchanged 44px touch targets. */
+.minimal-root.static-seat-room .seat-button,
+.minimal-root.static-seat-room .avatar-marker {
+  width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0;
+  border: 0; background: none; box-shadow: none; display: grid; place-items: center;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.minimal-root.static-seat-room .seat-button::before {
+  content: ''; position: absolute; inset: 8px; border-radius: 50%;
+  background: rgba(247,252,255,.72); border: 1px solid rgba(255,255,255,.8);
+  box-shadow: 0 1px 5px #223f5518; pointer-events: none;
+}
+.minimal-root.static-seat-room .seat-button:hover { background: none; }
+.minimal-root.static-seat-room .seat-button svg { width: 15px; height: 15px; position: relative; }
+.minimal-root.static-seat-room .avatar-marker img { width: 28px; height: 28px; border: 1px solid #ffffffdc; box-sizing: border-box; }
+.minimal-root.static-seat-room .avatar-marker.rippling::before,
+.minimal-root.static-seat-room .avatar-marker.rippling::after { inset: 6px; }
+.minimal-root.static-seat-room .seat-stem { top: 38px; height: 8px; opacity: .7; }
+.minimal-root.static-seat-room .seat-caption { font-size: 10px; padding: 2px 6px; }
+/* The room keeps its session controls away from the chairs. */
+.minimal-root.static-seat-room .mobile-focus-widget {
+  left: auto; right: max(16px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom)); transform: none;
+}
+.minimal-root.static-seat-room .mobile-focus-widget .time-readout { font-size: 36px; }
+.minimal-root[data-view=forest] .mobile-focus-widget { top: 88px; bottom: auto; }
+#mobile-notice { max-width: min(340px, calc(100vw - 64px)); padding: 24px; border: 1px solid #c5d2d8; border-radius: 20px; background: #f4f8fb; color: #233d46; font: 15px/1.6 system-ui, sans-serif; }
+#mobile-notice::backdrop { background: #132a4160; }
+#mobile-notice h2 { font-size: 20px; margin: 0; }
+#mobile-notice button { min-height: 44px; border: 0; border-radius: 22px; padding: 8px 20px; background: #315f70; color: white; font: inherit; }
+
+/* Phone landscape: use a single 8:3 outpaint, retaining its full vertical field.
+   Only the newly extended outer sides are trimmed to the device width.
+   Narrower iPad windows keep their original artwork and seat geometry. */
+@media (min-aspect-ratio: 1672/941) and (max-aspect-ratio: 8/3) {
+  .minimal-root:is([data-view=cafe], [data-view=library], [data-view=forest]) .scene-atmosphere { display: none; }
+  .minimal-root:is([data-view=cafe], [data-view=library], [data-view=forest]) .room-stage {
+    width: calc(100dvh * 8 / 3);
+    height: 100dvh;
+    aspect-ratio: 8 / 3;
+  }
+  .minimal-root[data-view=cafe] .room-stage > .scene-image {
+    content: url("./assets/landscape/cafe-room.png");
+    object-fit: contain;
+  }
+  .minimal-root[data-view=library] .room-stage > .scene-image {
+    content: url("./assets/landscape/library-room.png");
+    object-fit: contain;
+  }
+  .minimal-root[data-view=forest] .room-stage > .scene-image {
+    content: url("./assets/landscape/forest-room.png");
+    object-fit: contain;
+  }
+  .minimal-root[data-view=forest] .room-hint { top: 88px; }
+  /* Calibrated against the full panorama; button and occupied avatar share
+     each anchor. Original saved web layouts do not apply to this wider art. */
+  .minimal-root[data-view=cafe] .seat-layer [data-seat-id="1"] { left: 34.2%!important; top: 33.7%!important; }
+  .minimal-root[data-view=cafe] .seat-layer [data-seat-id="2"] { left: 41.2%!important; top: 30%!important; }
+  .minimal-root[data-view=cafe] .seat-layer [data-seat-id="3"] { left: 58.9%!important; top: 29.5%!important; }
+  .minimal-root[data-view=cafe] .seat-layer [data-seat-id="4"] { left: 69.1%!important; top: 37.4%!important; }
+  .minimal-root[data-view=cafe] .seat-layer [data-seat-id="5"] { left: 25.5%!important; top: 47.4%!important; }
+  .minimal-root[data-view=cafe] .seat-layer [data-seat-id="6"] { left: 56.8%!important; top: 56.2%!important; }
+  .minimal-root[data-view=library] .seat-layer [data-seat-id="1"] { left: 26.3%!important; top: 41%!important; }
+  .minimal-root[data-view=library] .seat-layer [data-seat-id="2"] { left: 40.8%!important; top: 40%!important; }
+  .minimal-root[data-view=library] .seat-layer [data-seat-id="3"] { left: 41.5%!important; top: 56%!important; }
+  .minimal-root[data-view=library] .seat-layer [data-seat-id="4"] { left: 52.4%!important; top: 56%!important; }
+  .minimal-root[data-view=library] .seat-layer [data-seat-id="5"] { left: 69.5%!important; top: 48%!important; }
+  .minimal-root[data-view=library] .seat-layer [data-seat-id="6"] { left: 77.8%!important; top: 51%!important; }
+  .minimal-root[data-view=forest] .seat-layer [data-seat-id="1"] { left: 33%!important; top: 74%!important; }
+  .minimal-root[data-view=forest] .seat-layer [data-seat-id="2"] { left: 38.1%!important; top: 74%!important; }
+  .minimal-root[data-view=forest] .seat-layer [data-seat-id="3"] { left: 47%!important; top: 74%!important; }
+  .minimal-root[data-view=forest] .seat-layer [data-seat-id="4"] { left: 52.6%!important; top: 74%!important; }
+  .minimal-root[data-view=forest] .seat-layer [data-seat-id="5"] { left: 62.1%!important; top: 74%!important; }
+  .minimal-root[data-view=forest] .seat-layer [data-seat-id="6"] { left: 67.6%!important; top: 74%!important; }
+  .minimal-root .minimal-focus-image[src$="20261013-cafe-window-real-focus-view.webp"] { content: url("./assets/landscape/cafe-window.png"); }
+  .minimal-root .minimal-focus-image[src$="20261013-cafe-bar-real-focus-view.webp"] { content: url("./assets/landscape/cafe-bar.png"); }
+  .minimal-root .minimal-focus-image[src$="20261013-cafe-sofa-real-focus-view.webp"] { content: url("./assets/landscape/cafe-lounge.png"); }
+  .minimal-root .minimal-focus-image[src$="20261110-cafe-misty-morning-focus-view.webp"] { content: url("./assets/landscape/cafe-mist.png"); }
+  .minimal-root .minimal-focus-image[src$="20261110-cafe-first-snow-focus-view.webp"] { content: url("./assets/landscape/cafe-snow.png"); }
+  .minimal-root .minimal-focus-image[src$="20261028-cafe-rain-clearing-focus-view.webp"] { content: url("./assets/landscape/cafe-clearing.png"); }
+  .minimal-root .minimal-focus-image[src$="20261110-library-window-focus.webp"] { content: url("./assets/landscape/library-window.png"); }
+  .minimal-root .minimal-focus-image[src$="20261110-library-reading-focus.webp"] { content: url("./assets/landscape/library-reading.png"); }
+  .minimal-root .minimal-focus-image[src$="20261110-library-alcove-focus.webp"] { content: url("./assets/landscape/library-alcove.png"); }
+  .minimal-root .minimal-focus-image[src$="20261111-forest-root-focus.webp"] { content: url("./assets/landscape/forest-root.png"); }
+  .minimal-root .minimal-focus-image[src$="20261111-forest-deep-focus.webp"] { content: url("./assets/landscape/forest-deep.png"); }
+  .minimal-root .minimal-focus-image[src$="20261111-forest-fern-focus.webp"] { content: url("./assets/landscape/forest-fern.png"); }
+  .minimal-root .minimal-focus-image[src$="20261111-forest-sun-focus.webp"] { content: url("./assets/landscape/forest-sun.png"); }
+  .minimal-root .minimal-focus-image[src$="20261111-forest-mist-focus.webp"] { content: url("./assets/landscape/forest-mist.png"); }
+}
