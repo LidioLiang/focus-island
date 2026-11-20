@@ -19,4 +19,4 @@ try { await access(path.join(mobileRoot, 'ios/App/App.xcodeproj/project.pbxproj'
 if (!nativeExists) cap(['add', 'ios']);
 cap(['sync', 'ios']);
 await import('./sync-app-icons.mjs');
-console.log('Native project prepared. Open with npm run ios:open. Choose your Apple team, then verify on a real iPhone. Offline alpha only; do not submit to App Store.');
+console.log('Native project prepared. Open with npm run ios:open. Choose your Apple team, then verify on a real iPhone. Internal candidate only; complete device and StoreKit validation before App Store submission.');

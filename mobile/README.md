@@ -2,7 +2,7 @@
 
 当前正式工作副本已迁入 `web-icon-release/mobile/`，分支 `feat/ios-online-release`。
 首发包含在线专注、用户系统、云同步、试用后整体订阅；实施与未关闭事项见 [完整在线版方案](../docs/20261120-iOS首发完整在线版实施方案.md)。
-新增原生 Keychain/网络桥与 StoreKit 接入代码。默认构建仍为 `offline-alpha`；`FOCUS_IOS_CHANNEL=online-beta npm run ios:prepare` 仅供联调，不能提审。服务端对应开关尚未启用，真实登录/付款闭环仍待配置与验收。
+已补充原生 Keychain/网络桥、StoreKit 会员界面、云偏好、邮箱恢复、头像上传、账号删除、后台音频和完成提醒；正式数据库新增结构已应用，收费仍关闭。默认构建仍为 `offline-alpha`；`FOCUS_IOS_CHANNEL=online-beta npm run ios:prepare` 仅供联调，不能提审。服务端对应开关尚未启用，真实登录/付款闭环仍待配置与验收。
 
 # Focus Isle iOS · Stage A
 

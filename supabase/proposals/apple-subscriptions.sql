@@ -1,3 +1,4 @@
+-- ARCHIVED proposal. Canonical applied SQL: ../migrations/20261120042853_ios_release_access_preferences.sql
 -- Release candidate, NOT applied. Promote using `supabase migration new` after a disposable database test.
 -- Keep Sandbox purchase tests out of production/web entitlements.
 create table public.apple_subscriptions (

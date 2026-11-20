@@ -9,6 +9,8 @@ export type TrialStatus = "available" | "in_progress" | "consumed" | "unavailabl
 export type EntitlementType = "none" | "subscription" | "lifetime" | "admin" | "offline_grace";
 
 export type AccessStatus = {
+  trialGateEnabled?: boolean;
+  trialMinutes?: number;
   authenticated: boolean;
   emailVerified: boolean;
   accountType?: "anonymous" | "permanent";
@@ -24,6 +26,8 @@ export type AccessStatus = {
 
 export function normalizeAccessStatus(value: Record<string, unknown>, developer: boolean): AccessStatus {
   return {
+    trialGateEnabled: value.trialGateEnabled === true,
+    trialMinutes: typeof value.trialMinutes === "number" ? value.trialMinutes : undefined,
     authenticated: value.authenticated === true,
     emailVerified: value.emailVerified === true,
     accountType: value.accountType === "permanent" ? "permanent" : "anonymous",

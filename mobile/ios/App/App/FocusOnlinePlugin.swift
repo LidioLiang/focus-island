@@ -1,7 +1,8 @@
 import Foundation
 import Security
-import Capacitor
+@preconcurrency import Capacitor
 import StoreKit
+import WebKit
 
 private struct IslandSession: Codable {
     let accessToken: String
@@ -28,11 +29,11 @@ private actor IslandAPI {
     private let transport = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
 
     // Serialize refresh, sign-in, sign-out and requests to prevent a late refresh from restoring an old account.
-    func request(path: String, method: String, body: String?, owner: String?) async throws -> [String: Any] {
+    func request(path: String, method: String, body: String?, owner: String?, binary: Data? = nil, contentType: String? = nil) async throws -> [String: Any] {
         let previous = tail
         let task = Task { () throws -> [String: Any] in
             await previous?.value
-            return try await self.perform(path: path, method: method, body: body, owner: owner)
+            return try await self.perform(path: path, method: method, body: body, owner: owner, binary: binary, contentType: contentType)
         }
         tail = Task { _ = try? await task.value }
         return try await task.value
@@ -64,7 +65,7 @@ private actor IslandAPI {
         } else if status != errSecSuccess { throw IslandNetworkError.keychain(status) }
     }
 
-    private func send(path: String, method: String, body: String?, session: IslandSession?, owner: String?) async throws -> (Int, [String: Any]) {
+    private func send(path: String, method: String, body: String?, session: IslandSession?, owner: String?, binary: Data? = nil, contentType: String? = nil) async throws -> (Int, [String: Any]) {
         guard path.hasPrefix("/api/"), !path.contains(".."), !path.contains("%"), !path.contains("\\"),
               let url = URL(string: origin + path), url.host == "focusisle.online", url.scheme == "https" else {
             throw IslandNetworkError.invalidRequest
@@ -72,11 +73,11 @@ private actor IslandAPI {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         request.httpMethod = method
         request.httpShouldHandleCookies = false
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(contentType ?? "application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let session { request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization") }
         if let owner { request.setValue(owner, forHTTPHeaderField: "X-Focus-User") }
-        if let body { request.httpBody = body.data(using: .utf8) }
+        request.httpBody = binary ?? body?.data(using: .utf8)
         let (data, response) = try await transport.data(for: request)
         guard let response = response as? HTTPURLResponse, data.count < 8_000_000,
               let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw IslandNetworkError.invalidResponse }
@@ -87,13 +88,18 @@ private actor IslandAPI {
         String(decoding: try JSONSerialization.data(withJSONObject: value), as: UTF8.self)
     }
 
-    private func perform(path: String, method: String, body: String?, owner: String?) async throws -> [String: Any] {
+    private func perform(path: String, method: String, body: String?, owner: String?, binary: Data?, contentType: String?) async throws -> [String: Any] {
         let route = path.components(separatedBy: "?")[0]
         let allowed = ["/api/auth/session", "/api/auth/merge/prepare", "/api/auth/merge/complete", "/api/account"]
         let prefixes = ["/api/rooms/", "/api/sessions/", "/api/focus/", "/api/profile", "/api/access/", "/api/scenes", "/api/mobile/"]
         guard allowed.contains(route) || prefixes.contains(where: { route.hasPrefix($0) }),
-              ["GET", "POST", "PATCH", "DELETE"].contains(method), (body?.utf8.count ?? 0) <= 1_000_000,
+              ["GET", "POST", "PUT", "PATCH", "DELETE"].contains(method), (body?.utf8.count ?? 0) <= 1_000_000,
               route != "/api/mobile/auth/refresh" else { throw IslandNetworkError.invalidRequest }
+        if binary != nil || contentType != nil {
+            guard route == "/api/profile/avatar", method == "POST", body == nil,
+                  let binary, binary.count <= 4_300_000, let contentType,
+                  contentType.range(of: #"^multipart/form-data; boundary=[A-Za-z0-9_-]{1,100}$"#, options: .regularExpression) != nil else { throw IslandNetworkError.invalidRequest }
+        }
         var session = try readSession()
         if let owner, owner != session?.userId { return ["status": 409, "body": ["error": "identity_changed"]] }
         if let old = session, old.expiresAt <= Date().timeIntervalSince1970 + 60 {
@@ -113,7 +119,7 @@ private actor IslandAPI {
             guard let session else { return ["status": 200, "body": ["ok": true]] }
             requestBody = try jsonString(["accessToken": session.accessToken, "refreshToken": session.refreshToken])
         }
-        let (status, received) = try await send(path: path, method: method, body: requestBody, session: session, owner: owner)
+        let (status, received) = try await send(path: path, method: method, body: requestBody, session: session, owner: owner, binary: binary, contentType: contentType)
         var payload = received
         if let value = payload.removeValue(forKey: "session"), status == 200, route.hasPrefix("/api/mobile/auth/") {
             let newSession = try JSONDecoder().decode(IslandSession.self, from: JSONSerialization.data(withJSONObject: value))
@@ -130,6 +136,7 @@ public class FocusOnlinePlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "FocusOnline"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "request", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "securityCheck", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "products", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "purchase", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "restore", returnType: CAPPluginReturnPromise)
@@ -137,6 +144,7 @@ public class FocusOnlinePlugin: CAPPlugin, CAPBridgedPlugin {
     private let productIds = ["online.focusisle.plus.monthly", "online.focusisle.plus.annual"]
     private var transactionUpdates: Task<Void, Never>?
     private var purchaseInProgress = false
+    private var securityInProgress = false
 
     public override func load() {
         transactionUpdates = Task { [weak self] in
@@ -149,6 +157,27 @@ public class FocusOnlinePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     deinit { transactionUpdates?.cancel() }
+
+    @objc func securityCheck(_ call: CAPPluginCall) {
+        Task {
+            do {
+                let response = try await IslandAPI.shared.request(path: "/api/mobile/auth/config", method: "GET", body: nil, owner: nil)
+                guard response["status"] as? Int == 200, let config = response["body"] as? [String: Any], config["enabled"] as? Bool == true else { call.reject("mobile_auth_unavailable"); return }
+                if config["captchaRequired"] as? Bool != true { call.resolve(["token": ""]); return }
+                await MainActor.run {
+                    guard !self.securityInProgress, let presenter = self.bridge?.viewController, presenter.presentedViewController == nil else { call.reject("security_check_busy"); return }
+                    self.securityInProgress = true
+                    let check = IslandSecurityCheck { [weak self] token in
+                        self?.securityInProgress = false
+                        if let token { call.resolve(["token": token]) } else { call.reject("captcha_required") }
+                    }
+                    let navigation = UINavigationController(rootViewController: check)
+                    navigation.modalPresentationStyle = .fullScreen
+                    presenter.present(navigation, animated: true)
+                }
+            } catch { call.reject("security_check_unavailable") }
+        }
+    }
 
     @objc func products(_ call: CAPPluginCall) {
         Task {
@@ -194,6 +223,14 @@ public class FocusOnlinePlugin: CAPPlugin, CAPBridgedPlugin {
                 guard access["status"] as? Int == 200, let status = access["body"] as? [String: Any],
                       let entitlement = status["entitlementType"] as? String else { call.reject("access_service_unavailable"); return }
                 guard entitlement == "none" else { call.reject("already_subscribed"); return }
+                // Retry delivery of an already paid transaction before presenting another purchase sheet.
+                for await pending in Transaction.unfinished {
+                    guard case .verified(let transaction) = pending, productIds.contains(transaction.productID),
+                          transaction.appAccountToken?.uuidString.lowercased() == owner else { continue }
+                    do { try await deliver(pending); call.resolve(["status": "verified"]) }
+                    catch { call.resolve(["status": "sync_pending"]) }
+                    return
+                }
                 guard let product = try await Product.products(for: [productId]).first, product.type == .autoRenewable,
                       let token = UUID(uuidString: owner) else { call.reject("products_unavailable"); return }
                 switch try await product.purchase(options: [.appAccountToken(token)]) {
@@ -228,7 +265,8 @@ public class FocusOnlinePlugin: CAPPlugin, CAPBridgedPlugin {
         Task {
             do {
                 let result = try await IslandAPI.shared.request(path: path, method: call.getString("method") ?? "GET",
-                    body: call.getString("body"), owner: call.getString("owner"))
+                    body: call.getString("body"), owner: call.getString("owner"),
+                    binary: call.getString("bodyBase64").flatMap { Data(base64Encoded: $0) }, contentType: call.getString("contentType"))
                 call.resolve(result)
             } catch { call.reject("network_unavailable") }
         }
@@ -238,5 +276,47 @@ public class FocusOnlinePlugin: CAPPlugin, CAPBridgedPlugin {
 class FocusBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(FocusOnlinePlugin())
+        bridge?.registerPluginInstance(FocusSessionPlugin())
     }
+}
+
+/// A separate ephemeral web view receives only the anti-abuse challenge, never account credentials.
+private final class IslandSecurityCheck: UIViewController, WKScriptMessageHandler, WKNavigationDelegate {
+    private var webView: WKWebView!
+    private var completed = false
+    private let done: (String?) -> Void
+    init(done: @escaping (String?) -> Void) { self.done = done; super.init(nibName: nil, bundle: nil) }
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+    override func viewDidLoad() {
+        super.viewDidLoad(); title = "Security check"
+        navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
+        let config = WKWebViewConfiguration(); config.websiteDataStore = .nonPersistent()
+        config.userContentController.add(self, name: "focusSecurity")
+        webView = WKWebView(frame: .zero, configuration: config); webView.navigationDelegate = self
+        view = webView
+        webView.load(URLRequest(url: URL(string: "https://focusisle.online/mobile/security")!))
+    }
+    @objc private func cancel() { finish(nil) }
+    private func finish(_ token: String?) {
+        guard !completed else { return }; completed = true
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "focusSecurity")
+        dismiss(animated: true) { self.done(token) }
+    }
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame, message.frameInfo.request.url?.absoluteString == "https://focusisle.online/mobile/security",
+              message.webView === webView, let body = message.body as? [String: Any], let token = body["token"] as? String,
+              !token.isEmpty, token.utf8.count <= 4096 else { return }
+        finish(token)
+    }
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
+        if navigationAction.targetFrame?.isMainFrame == true {
+            decisionHandler(url.absoluteString == "https://focusisle.online/mobile/security" ? .allow : .cancel)
+        } else {
+            decisionHandler(url.scheme == "https" && url.host == "challenges.cloudflare.com" || url.absoluteString == "about:blank" ? .allow : .cancel)
+        }
+    }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { finish(nil) }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { finish(nil) }
 }

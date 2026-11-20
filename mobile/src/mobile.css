@@ -115,3 +115,10 @@ body.hud-idle .minimal-root[data-view=focus] .mobile-focus-widget:has(button:foc
   .minimal-root .minimal-focus-image[src$="20261111-forest-sun-focus.webp"] { content: url("./assets/landscape/forest-sun.png"); }
   .minimal-root .minimal-focus-image[src$="20261111-forest-mist-focus.webp"] { content: url("./assets/landscape/forest-mist.png"); }
 }
+
+/* Landscape account and purchase sheets keep controls within the safe area. */
+.mobile-membership{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding: max(16px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));background:rgba(12,30,47,.58);color:#203e54;font-family:system-ui,sans-serif}
+.mobile-member-card{position:relative;width:min(700px,100%);max-height:100%;overflow:auto;padding:24px 32px;border-radius:24px;background:#f4f8fb;box-shadow:0 24px 80px #102b3f40}
+.mobile-member-card>.ac-close{position:absolute;right:12px;top:12px}.mobile-member-card h2{font-size:27px;margin:8px 40px 12px 0}.mobile-member-card p{font-size:14px;line-height:1.5}.mobile-member-card .ac-caption{font-size:12px;color:#526b7a}
+.mobile-plans,.mobile-member-actions,.mobile-legal{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0}.mobile-plans>button{flex:1;min-width:170px;display:flex;flex-direction:column;align-items:start;gap:6px;padding:16px}.mobile-legal>button{border:0;background:none;color:#315d78;text-decoration:underline;min-height:44px;padding:8px;font:inherit;font-size:13px}.mobile-member-actions>.ac-button{min-height:44px}
+@media(max-height:450px){.mobile-member-card{padding:16px 24px}.mobile-member-card h2{font-size:23px}.mobile-member-card p{margin:8px 0}.mobile-plans{margin:8px 0}}

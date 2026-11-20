@@ -72,7 +72,8 @@ export async function build() {
       if (hash(await readFile(source)) !== expected) throw new Error(`Music hash mismatch: ${name}`);
       await cp(source, path.join(staging, 'assets/audio', name));
     }
-    for (const name of ['mobile.css', 'mobile-runtime.js', 'mobile-online.js', 'scene-rotation.js', 'mobile-experience.js']) await cp(path.join(mobileRoot, 'src', name), path.join(staging, name));
+    for (const name of ['mobile.css', 'mobile-runtime.js', 'mobile-online.js', 'scene-rotation.js', 'mobile-experience.js', 'native-session.js', 'preference-sync.js', 'cloud-preferences.js', 'mobile-membership.js']) await cp(path.join(mobileRoot, 'src', name), path.join(staging, name));
+    for (const name of ['native-white.wav', 'native-cafe.wav']) await cp(path.join(mobileRoot, 'src/audio', name), path.join(staging, 'assets/audio', name));
     // One continuous panorama per scene; never overlay the old central image.
     await mkdir(path.join(staging, 'assets/landscape'), { recursive: true });
     const panoramas = [
@@ -85,10 +86,10 @@ export async function build() {
     }
     const config = {
       minimalMvp: true,
-      appVersion: `${baseline.version}-ios-alpha.8`,
+      appVersion: `${baseline.version}-ios-${channel === 'online-beta' ? 'beta.1' : 'alpha.8'}`,
       sceneCatalog: catalog,
-      supabaseUrl: '', audioBaseUrl: '', turnstileSiteKey: '',
-      release: { version: baseline.version, environment: 'ios-offline-alpha', commit: baseline.commit },
+      supabaseUrl: channel === 'online-beta' ? 'https://igerdrlvmfrytvsoetuw.supabase.co' : '', audioBaseUrl: '', turnstileSiteKey: '',
+      release: { version: baseline.version, environment: `ios-${channel}`, commit: baseline.commit },
       mobile: { channel, networkEnabled: channel === 'online-beta' }
     };
     // Require all scene images/audio to be present before replacing an existing successful build.
@@ -99,13 +100,13 @@ export async function build() {
         if (!(await lstat(path.join(staging, asset.slice(1)))).isFile()) throw new Error(`Missing scene asset: ${asset}`);
       }
     }
-    await writeFile(path.join(staging, 'mobile-config.js'), `window.__FOCUS_ISLAND_CONFIG__=${JSON.stringify(config).replace(/</g, '\\u003c')};\nwindow.__FOCUS_ANALYTICS_CONFIG__={projectToken:'',apiHost:'',environment:'ios-offline-alpha'};\n`);
-    const scripts = ['mobile-config.js', 'mobile-runtime.js', 'mobile-online.js', 'analytics.js', 'vendor/i18next.min.js', 'locales/en.js', 'focus-history.js', 'account-center.js', 'scene-runtime.js', 'minimal-mvp.js', 'app.js', 'scene-rotation.js', 'mobile-experience.js', 'i18n.js'];
+    await writeFile(path.join(staging, 'mobile-config.js'), `window.__FOCUS_ISLAND_CONFIG__=${JSON.stringify(config).replace(/</g, '\\u003c')};\nwindow.__FOCUS_ANALYTICS_CONFIG__={projectToken:'',apiHost:'',environment:'ios-${channel}'};\n`);
+    const scripts = ['mobile-config.js', 'mobile-runtime.js', 'mobile-online.js', 'analytics.js', 'vendor/i18next.min.js', 'locales/en.js', 'focus-history.js', 'account-center.js', 'scene-runtime.js', 'minimal-mvp.js', 'app.js', 'scene-rotation.js', 'mobile-experience.js', 'native-session.js', 'preference-sync.js', 'cloud-preferences.js', 'mobile-membership.js', 'i18n.js'];
     const styles = ['styles.css', 'landing-final.css', 'minimal-mvp.css', 'account-center.css', 'mobile.css'];
     await writeFile(path.join(staging, 'index.html'), `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:${channel === 'online-beta' ? ' https://igerdrlvmfrytvsoetuw.supabase.co/storage/v1/object/public/profile-avatars/ https://*.googleusercontent.com https://avatars.githubusercontent.com' : ''}; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="theme-color" content="#f4f8fb"><title>Focus Isle</title>
 ${styles.map(name => `<link rel="stylesheet" href="./${name}">`).join('\n')}
 </head><body><main id="app" aria-live="polite"></main>
@@ -127,7 +128,7 @@ ${scripts.map(name => `<script src="./${name}"></script>`).join('\n')}
     }, null, 2) + '\n');
     await rm(output, { recursive: true, force: true });
     await rename(staging, output);
-    console.log(`Built offline alpha: ${Object.keys(files).length} files, ${(bytes / 1024 / 1024).toFixed(1)} MiB. NOT an App Store build.`);
+    console.log(`Built ${channel}: ${Object.keys(files).length} files, ${(bytes / 1024 / 1024).toFixed(1)} MiB. NOT an App Store build.`);
     return { output, bytes, files };
   } catch (error) { await rm(staging, { recursive: true, force: true }); throw error; }
 }

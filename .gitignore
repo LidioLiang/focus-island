@@ -57,3 +57,6 @@ next-env.d.ts
 /20261027-1-1号位人物图重叠检查.html
 /scripts/local-room3d-proxy.mjs
 /public/.assetsignore
+
+# Supabase CLI local runtime metadata
+supabase/.temp/
